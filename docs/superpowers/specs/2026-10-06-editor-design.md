@@ -18,7 +18,7 @@ Carpetas con identificadores estables y padre opcional se guardan en SQLite. La 
 
 ## Comentarios
 
-Cada comentario pertenece a una página y tiene posición, texto y una grabación opcional. Marcadores en la hoja y una lista permiten consultar, editar y eliminar. La grabación empieza sólo al pulsar el botón de micrófono, muestra duración y controles de guardar/cancelar. Se detiene al cerrar la pantalla o suspender la app; nunca se graba en segundo plano. Android solicita permiso de micrófono y usa MediaRecorder/MediaPlayer. Linux usa pw-record/pw-play ya instalados, con fallback arecord/aplay. No se instalan herramientas con sudo. Los archivos temporales se eliminan al cancelar y el audio confirmado se guarda por hash en el almacén local. Reproducción y grabación son mutuamente excluyentes. Lectura permite escuchar, sin editar.
+Cada comentario pertenece a una página y tiene posición, texto y una grabación opcional. Marcadores en la hoja y una lista permiten consultar, editar y eliminar. La grabación empieza sólo al pulsar el botón de micrófono, muestra duración y controles de guardar/cancelar. Se detiene al cerrar la pantalla o suspender la app; nunca se graba en segundo plano. Android solicita permiso de micrófono y usa AudioRecord/MediaPlayer. Linux usa pw-record/pw-play ya instalados, con fallback arecord/aplay. No se instalan herramientas con sudo. Los archivos temporales se eliminan al cancelar y el audio confirmado se guarda por hash en el almacén local. Reproducción y grabación son mutuamente excluyentes. Lectura permite escuchar, sin editar.
 
 ## PDF y entrega
 

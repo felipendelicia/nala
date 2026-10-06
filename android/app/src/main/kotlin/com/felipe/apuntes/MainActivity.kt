@@ -8,6 +8,7 @@ import android.content.Intent
 import java.util.concurrent.Executors
 
 class MainActivity : FlutterActivity() {
+    private lateinit var audio: AudioBridge
     private data class PendingPdf(val bytes: ByteArray, val result: MethodChannel.Result)
     private var pending: PendingPdf? = null
     private val writer = Executors.newSingleThreadExecutor()
@@ -15,6 +16,8 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        audio = AudioBridge(this)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nala/audio").setMethodCallHandler(audio)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nala/files").setMethodCallHandler { call, result ->
             if (call.method != "savePdf") {
                 result.notImplemented()
@@ -72,9 +75,16 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        if (::audio.isInitialized) audio.close()
         pending?.result?.error("ACTIVITY_CLOSED", "Se cerró el selector de archivos.", null)
         pending = null
         writer.shutdown()
         super.onDestroy()
+    }
+    override fun onStart() { super.onStart(); if (::audio.isInitialized) audio.onForeground() }
+    override fun onStop() { if (::audio.isInitialized) audio.onBackground(); super.onStop() }
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        if (::audio.isInitialized && audio.permissionsResult(requestCode, grantResults)) return
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
     }
 }

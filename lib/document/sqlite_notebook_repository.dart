@@ -223,26 +223,30 @@ void _databaseWorker((SendPort, String) config) {
             final f = NoteFolder.fromJson(
               jsonDecode(request['payload'] as String) as Map<String, dynamic>,
             );
-            if (f.id.trim().isEmpty || f.name.trim().isEmpty || f.deleted)
+            if (f.id.trim().isEmpty || f.name.trim().isEmpty || f.deleted) {
               throw StateError('Carpeta inválida');
+            }
             var parent = f.parentId;
             final visited = <String>{f.id};
             while (parent != null) {
-              if (!visited.add(parent))
+              if (!visited.add(parent)) {
                 throw StateError('Una carpeta no puede contenerse a sí misma');
+              }
               final rows = db.select(
                 'SELECT parent_id FROM folders WHERE id=? AND deleted=0',
                 [parent],
               );
-              if (rows.isEmpty)
+              if (rows.isEmpty) {
                 throw StateError('La carpeta de destino no existe');
+              }
               parent = rows.single['parent_id'] as String?;
             }
             if (db.select(
               'SELECT id FROM folders WHERE parent_id IS ? AND name=? COLLATE NOCASE AND id<>? AND deleted=0',
               [f.parentId, f.name.trim(), f.id],
-            ).isNotEmpty)
+            ).isNotEmpty) {
               throw StateError('Ya hay una carpeta con ese nombre');
+            }
             db.execute(
               'INSERT INTO folders(id,name,parent_id,updated_at,deleted) VALUES (?,?,?,?,0) ON CONFLICT(id) DO UPDATE SET name=excluded.name,parent_id=excluded.parent_id,updated_at=excluded.updated_at,deleted=0',
               [
@@ -263,10 +267,11 @@ void _databaseWorker((SendPort, String) config) {
                 db.select(
                   r"SELECT r.id FROM revisions r WHERE json_extract(r.payload,'$.notebook.folderId')=? AND NOT EXISTS (SELECT 1 FROM revisions c WHERE c.parent_id=r.id AND c.document_id=r.document_id)",
                   [id],
-                ).isNotEmpty)
+                ).isNotEmpty) {
               throw StateError(
                 'La carpeta todavía contiene apuntes o subcarpetas',
               );
+            }
             db.execute('UPDATE folders SET deleted=1,updated_at=? WHERE id=?', [
               DateTime.now().toUtc().toIso8601String(),
               id,

@@ -40,6 +40,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
           controller: editor,
           pdf: widget.services.pdf,
           files: widget.services.files,
+          assets: widget.services.assets,
+          audio: widget.services.audio,
+          audioDirectory: '${widget.services.root}/audio-temp',
         ),
       ),
     );
@@ -181,11 +184,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
             value: entry.notebook.title,
           ),
         );
-        if (name != null)
+        if (name != null) {
           await library.updateNotebook(
             entry,
             entry.notebook.copyWith(title: name),
           );
+        }
       }
     } catch (error) {
       _error(error);

@@ -5,6 +5,12 @@ import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 import 'package:pdfrx_engine/pdfrx_engine.dart' show PdfPasswordException;
 import '../document/notebook.dart';
+import '../document/page_comment.dart';
+import '../document/asset_store.dart';
+import '../audio/audio_service.dart';
+import '../audio/comment_audio_player.dart';
+import 'comment_dialog.dart';
+import 'comments_panel.dart';
 import '../ui/app_theme.dart';
 import 'editor_controller.dart';
 import 'editor_toolbar.dart';
@@ -28,10 +34,16 @@ class EditorScreen extends StatefulWidget {
     required this.controller,
     this.pdf,
     this.files,
+    this.assets,
+    this.audio,
+    this.audioDirectory,
   });
   final EditorController controller;
   final PdfService? pdf;
   final DocumentFiles? files;
+  final AssetStore? assets;
+  final AudioDevice? audio;
+  final String? audioDirectory;
   @override
   State<EditorScreen> createState() => _EditorScreenState();
 }
@@ -40,6 +52,17 @@ class _EditorScreenState extends State<EditorScreen> {
   bool allowPop = false, closing = false, showPages = false;
   bool disposing = false, reading = false;
   bool exporting = false;
+  bool showComments = false, placingComment = false, commentOpen = false;
+  late final CommentAudioPlayer? audioPlayer =
+      widget.audio != null &&
+          widget.assets != null &&
+          widget.audioDirectory != null
+      ? CommentAudioPlayer(
+          device: widget.audio!,
+          assets: widget.assets!,
+          directory: widget.audioDirectory!,
+        )
+      : null;
   Object? pdfError;
   int pdfRenderVersion = 0;
   String? neighborKey;
@@ -264,7 +287,9 @@ class _EditorScreenState extends State<EditorScreen> {
 
   void changePage(int index) {
     router.reset();
+    audioPlayer?.stop();
     setState(() {
+      placingComment = false;
       pageIndex = index;
       selected = {};
       fittedPage = null;
@@ -313,6 +338,7 @@ class _EditorScreenState extends State<EditorScreen> {
     router.reset();
     closing = true;
     try {
+      await audioPlayer?.stop();
       await widget.controller.flush();
       if (!mounted) return;
       setState(() => allowPop = true);
@@ -332,6 +358,106 @@ class _EditorScreenState extends State<EditorScreen> {
     } finally {
       closing = false;
     }
+  }
+
+  void placeComment() {
+    if (reading) return;
+    router.reset();
+    setState(() => placingComment = true);
+  }
+
+  Future<void> openComment(PageComment comment, {bool creating = false}) async {
+    if (commentOpen) return;
+    router.reset();
+    final pageId = page.id;
+    commentOpen = true;
+    try {
+      await audioPlayer?.stop();
+      if (!mounted) return;
+      final result = await showDialog<PageComment>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => CommentDialog(
+          comment: comment,
+          readOnly: reading,
+          assets: widget.assets,
+          audio: widget.audio,
+          directory: widget.audioDirectory,
+          player: audioPlayer,
+        ),
+      );
+      if (result != null && mounted && !reading) {
+        widget.controller.apply(
+          (book) => book.copyWith(
+            pages: book.pages
+                .map(
+                  (p) => p.id != pageId
+                      ? p
+                      : p.copyWith(
+                          comments: creating
+                              ? [...p.comments, result]
+                              : p.comments
+                                    .map((c) => c.id == result.id ? result : c)
+                                    .toList(),
+                        ),
+                )
+                .toList(),
+          ),
+        );
+      }
+    } finally {
+      commentOpen = false;
+    }
+  }
+
+  void pointerDown(PointerDownEvent event) {
+    if (commentOpen) return;
+    final position = view.pagePoint(
+      math.Point(event.localPosition.dx, event.localPosition.dy),
+    );
+    if (placingComment && !reading) {
+      if (position.x < 0 ||
+          position.y < 0 ||
+          position.x > page.width ||
+          position.y > page.height) {
+        return;
+      }
+      setState(() => placingComment = false);
+      openComment(
+        PageComment(
+          id: const Uuid().v4(),
+          x: position.x,
+          y: position.y,
+          text: '',
+          createdAt: DateTime.now().toUtc(),
+        ),
+        creating: true,
+      );
+      return;
+    }
+    if (!router.isWriting) {
+      for (final comment in page.comments.reversed) {
+        if (math.sqrt(
+              math.pow(position.x - comment.x, 2) +
+                  math.pow(position.y - comment.y, 2),
+            ) <=
+            15 / view.scale) {
+          openComment(comment);
+          return;
+        }
+      }
+    }
+    router.down(sample(event));
+  }
+
+  void deleteComment(PageComment comment) {
+    if (reading) return;
+    audioPlayer?.stop();
+    editPage(
+      (p) => p.copyWith(
+        comments: p.comments.where((c) => c.id != comment.id).toList(),
+      ),
+    );
   }
 
   Future<void> rename() async {
@@ -454,6 +580,7 @@ class _EditorScreenState extends State<EditorScreen> {
     }
     router.reset();
     draft.dispose();
+    audioPlayer?.dispose();
     super.dispose();
   }
 
@@ -515,6 +642,7 @@ class _EditorScreenState extends State<EditorScreen> {
                       router.reset();
                       setState(() {
                         reading = !reading;
+                        placingComment = false;
                         router.readOnly = reading;
                         selected = {};
                       });
@@ -541,6 +669,13 @@ class _EditorScreenState extends State<EditorScreen> {
                       showPages = !showPages;
                     }),
                     icon: const Icon(Icons.view_sidebar_outlined),
+                  ),
+                  IconButton(
+                    tooltip: 'Comentarios',
+                    isSelected: showComments,
+                    onPressed: () =>
+                        setState(() => showComments = !showComments),
+                    icon: const Icon(Icons.chat_bubble_outline),
                   ),
                   IconButton(
                     tooltip: 'Hoja anterior',
@@ -623,6 +758,19 @@ class _EditorScreenState extends State<EditorScreen> {
                             },
                     ),
                   if (exporting) const LinearProgressIndicator(minHeight: 2),
+                  if (placingComment)
+                    MaterialBanner(
+                      content: const Text(
+                        'Elegí un lugar de la hoja para tu comentario.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () =>
+                              setState(() => placingComment = false),
+                          child: const Text('Cancelar'),
+                        ),
+                      ],
+                    ),
                   if (exporting)
                     const Padding(
                       padding: EdgeInsets.all(6),
@@ -719,7 +867,7 @@ class _EditorScreenState extends State<EditorScreen> {
                               return ClipRect(
                                 child: Listener(
                                   behavior: HitTestBehavior.opaque,
-                                  onPointerDown: (e) => router.down(sample(e)),
+                                  onPointerDown: pointerDown,
                                   onPointerMove: (e) => router.move(sample(e)),
                                   onPointerUp: (e) => router.up(sample(e)),
                                   onPointerCancel: (e) =>
@@ -800,6 +948,12 @@ class _EditorScreenState extends State<EditorScreen> {
                                                     ),
                                                   ),
                                                   CustomPaint(
+                                                    painter: CommentPinsPainter(
+                                                      currentPage.comments,
+                                                      view.scale,
+                                                    ),
+                                                  ),
+                                                  CustomPaint(
                                                     painter: _SelectionPainter(
                                                       displayPage,
                                                       selected,
@@ -830,6 +984,15 @@ class _EditorScreenState extends State<EditorScreen> {
                             },
                           ),
                         ),
+                        if (showComments)
+                          CommentsPanel(
+                            comments: currentPage.comments,
+                            onOpen: openComment,
+                            onClose: () => setState(() => showComments = false),
+                            onAdd: reading ? null : placeComment,
+                            onDelete: reading ? null : deleteComment,
+                            player: audioPlayer,
+                          ),
                       ],
                     ),
                   ),
@@ -861,7 +1024,7 @@ class _EditorScreenState extends State<EditorScreen> {
                             locked: view.zoomLocked,
                             onZoom: zoom,
                             onScale: (value) {
-                              if (viewSize != null && !router.isWriting)
+                              if (viewSize != null && !router.isWriting) {
                                 setState(
                                   () => view.setScale(
                                     value,
@@ -871,10 +1034,11 @@ class _EditorScreenState extends State<EditorScreen> {
                                     ),
                                   ),
                                 );
+                              }
                             },
                             onFit: () => setState(() => fittedPage = null),
                             onFitWidth: () {
-                              if (viewSize != null && !router.isWriting)
+                              if (viewSize != null && !router.isWriting) {
                                 setState(
                                   () => view.fitWidth(
                                     viewSize!.width,
@@ -883,6 +1047,7 @@ class _EditorScreenState extends State<EditorScreen> {
                                     page.height,
                                   ),
                                 );
+                              }
                             },
                             onLock: () {
                               router.reset();

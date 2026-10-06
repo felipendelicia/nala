@@ -45,9 +45,19 @@ class NotebookCodec {
     if (pages.isEmpty) throw const FormatException('Cuaderno sin páginas');
     final pageIds = <String>{};
     final strokeIds = <String>{};
+    final commentIds = <String>{};
     for (final page in pages) {
       if (!pageIds.add(page.id)) {
         throw const FormatException('Página duplicada');
+      }
+      for (final comment in page.comments) {
+        if (!commentIds.add(comment.id) ||
+            comment.x > page.width ||
+            comment.y > page.height) {
+          throw const FormatException(
+            'Comentario duplicado o fuera de la hoja',
+          );
+        }
       }
       for (final stroke in page.strokes) {
         if (!strokeIds.add(stroke.id)) {

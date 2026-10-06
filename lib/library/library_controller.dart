@@ -35,8 +35,9 @@ class LibraryController extends ChangeNotifier {
   }
 
   void openFolder(String? id) {
-    if (id != null && !folders.any((f) => f.id == id))
+    if (id != null && !folders.any((f) => f.id == id)) {
       throw StateError('La carpeta no existe');
+    }
     currentFolderId = id;
     notifyListeners();
   }
@@ -74,8 +75,9 @@ class LibraryController extends ChangeNotifier {
   }
 
   Future<void> moveNotebook(DocumentEntry entry, String? folderId) async {
-    if (folderId != null && !folders.any((f) => f.id == folderId))
+    if (folderId != null && !folders.any((f) => f.id == folderId)) {
       throw StateError('La carpeta de destino no existe');
+    }
     await updateNotebook(entry, entry.notebook.copyWith(folderId: folderId));
   }
 
@@ -98,8 +100,10 @@ class LibraryController extends ChangeNotifier {
   Future<void> refresh() async {
     entries = await repository.list();
     folders = await folderRepository?.listFolders() ?? [];
-    if (currentFolderId != null && !folders.any((f) => f.id == currentFolderId))
+    if (currentFolderId != null &&
+        !folders.any((f) => f.id == currentFolderId)) {
       currentFolderId = null;
+    }
     notifyListeners();
   }
 

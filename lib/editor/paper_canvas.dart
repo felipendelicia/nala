@@ -44,13 +44,15 @@ class _PaperCanvasState extends State<PaperCanvas> {
   void down(PointerDownEvent event) {
     if (pointer != null ||
         (widget.tool != EditorTool.pen &&
-            widget.tool != EditorTool.highlighter))
+            widget.tool != EditorTool.highlighter)) {
       return;
+    }
     if (event.kind != PointerDeviceKind.stylus &&
         event.kind != PointerDeviceKind.invertedStylus &&
         !(event.kind == PointerDeviceKind.mouse &&
-            event.buttons == kPrimaryButton))
+            event.buttons == kPrimaryButton)) {
       return;
+    }
     pointer = event.pointer;
     ink.begin(
       point(event),

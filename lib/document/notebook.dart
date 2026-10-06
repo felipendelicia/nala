@@ -1,3 +1,5 @@
+import 'page_comment.dart';
+
 enum PaperPattern { blank, ruled, grid, dots }
 
 enum InkTool { pen, highlighter }
@@ -117,20 +119,25 @@ class NotebookPage {
     required this.height,
     required this.background,
     List<InkStroke> strokes = const [],
-  }) : strokes = List.unmodifiable(strokes);
+    List<PageComment> comments = const [],
+  }) : strokes = List.unmodifiable(strokes),
+       comments = List.unmodifiable(comments);
   final String id;
   final double width, height;
   final PageBackground background;
   final List<InkStroke> strokes;
+  final List<PageComment> comments;
   NotebookPage copyWith({
     PageBackground? background,
     List<InkStroke>? strokes,
+    List<PageComment>? comments,
   }) => NotebookPage(
     id: id,
     width: width,
     height: height,
     background: background ?? this.background,
     strokes: strokes ?? this.strokes,
+    comments: comments ?? this.comments,
   );
   Map<String, Object> toJson() => {
     'id': id,
@@ -138,8 +145,13 @@ class NotebookPage {
     'height': height,
     'background': background.toJson(),
     'strokes': strokes.map((s) => s.toJson()).toList(),
+    if (comments.isNotEmpty)
+      'comments': comments.map((c) => c.toJson()).toList(),
   };
   factory NotebookPage.fromJson(Map<String, dynamic> json) => NotebookPage(
+    comments: (json['comments'] as List? ?? [])
+        .map((c) => PageComment.fromJson(c as Map<String, dynamic>))
+        .toList(),
     id: nonEmpty(json['id']),
     width: finiteNumber(json['width'], positive: true),
     height: finiteNumber(json['height'], positive: true),
