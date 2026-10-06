@@ -1,32 +1,26 @@
 # Estado de Nala — 2026-10-06
 
-Nala se desarrolla para tomar apuntes universitarios con S Pen en Samsung Tab S10 y continuar en Linux. El nombre y el icono fueron elegidos a partir de la perrita de Felipe.
+Nala se desarrolla para tomar apuntes universitarios con S Pen en Samsung Tab S10 y continuar en Linux. El nombre y el icono se basan en la perrita de Felipe.
 
-## Disponible en la primera versión de prueba
+## Editor incorporado al código 0.2.0
 
-- Cuadernos con guardado local automático y recuperación al reabrir.
-- Hojas blancas, rayadas, cuadriculadas y punteadas.
-- Lápiz con presión, resaltador, borrador y selección para mover o eliminar trazos.
-- Deshacer, rehacer, agregar hojas y navegación con dedos o mouse.
-- Biblioteca con búsqueda y organización por materia.
-- Versiones para Android y Linux. Felipe confirmó que la versión inicial funciona en la tablet.
+- Tinta activa incremental en su propia capa, sin reconstruir la interfaz por cada muestra del lápiz. Presión expresiva y suavizado ajustables; los trazos anteriores mantienen su aspecto.
+- Modo lectura: lápiz, dedos y mouse permiten navegar; las acciones de edición quedan deshabilitadas.
+- Ajuste a hoja y ancho, porcentajes de zoom, bloqueo de escala conservando desplazamiento.
+- Comentarios anclados a la hoja, texto editable y grabaciones de voz con guardar, escuchar y descartar. Captura sólo por acción explícita; se detiene al suspender o cerrar.
+- Carpetas y subcarpetas, rutas, renombrado y movimientos. Se rechazan ciclos y borrado de carpetas no vacías.
+- PDF original preservado, importación de páginas rotadas/protegidas, hojas intercaladas y exportación con tinta vectorial y fondos a 200 dpi.
 
-## Trabajo de PDF incorporado al código
+El recorrido completo de PDF en Linux pasó, incluido continuar navegando durante la exportación y cancelar el selector. Se corrigió la segunda inicialización del motor PDF durante exportación. Las pruebas de comentarios, guardado/reapertura y lectura en la aplicación Linux también pasaron. La interfaz fue comprobada en tamaños de escritorio y tablet, incluido texto ampliado.
 
-Importación del archivo original, fondos de página con caché limitada, páginas rotadas o protegidas, hojas de apuntes intercaladas y exportación con tinta vectorial sobre fondos a 200 dpi. La preparación de imágenes y la exportación usan workers. El guardado en Android usa el selector nativo de documentos.
+## Verificación física pendiente
 
-Las pruebas unitarias de este trabajo pasaron; la comprobación completa del flujo en Linux y el selector físico en Android siguen en verificación. La primera versión descargable todavía corresponde al editor anterior a estos cambios.
+Felipe confirmó que la primera versión funciona en la tablet. Esta mejora de presión/latencia, el micrófono y altavoz reales y el selector Android necesitan probarse allí con el nuevo APK. Las pruebas de escritorio no demuestran una sensación equivalente a Notewise.
 
-## Orden de las próximas mejoras
+## Etapa final
 
-1. Fluidez de escritura: reducir el trabajo por muestra del lápiz y mejorar la respuesta a la presión. Referencia de experiencia solicitada: Notewise.
-2. Modo lectura, ajuste de hoja y ancho, porcentajes de zoom y bloqueo del zoom.
-3. Comentarios de texto y grabaciones de voz. Se prevén marcadores vinculados a la hoja y una lista de comentarios.
-4. Carpetas y subcarpetas con jerarquías de apuntes.
-5. Sincronización automática con Google Drive, después de mejorar los flujos locales.
-
-Estas mejoras son requisitos pendientes, no funciones ya entregadas. La sensación y la latencia real del lápiz requieren validación en la Tab S10; las pruebas de escritorio no las demuestran.
+La sincronización automática con Drive se implementa después de las mejoras locales. La conexión real exige configurar OAuth de la app en Google Cloud. Hasta conectarla, los apuntes permanecen en el dispositivo.
 
 ## Publicación
 
-Repositorio público: [felipendelicia/nala](https://github.com/felipendelicia/nala). Incluye código, recursos, pruebas, documentación y el historial de desarrollo. Los compilados se distribuyen como versiones de prueba en Releases. Los cuadernos personales, bases locales, caches, SDK, tokens y claves de firma quedan fuera del repositorio.
+Repositorio público: [felipendelicia/nala](https://github.com/felipendelicia/nala). La primera [v0.1.0](https://github.com/felipendelicia/nala/releases/tag/v0.1.0) corresponde al editor anterior a PDF y a estas mejoras. La siguiente versión descargable está en preparación. No se publican cuadernos personales, bases, caches, SDK, tokens ni claves de firma.

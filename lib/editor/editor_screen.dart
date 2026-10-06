@@ -542,20 +542,17 @@ class _EditorScreenState extends State<EditorScreen> {
     try {
       await widget.controller.flush();
       final snapshot = widget.controller.notebook;
-      final bytes = await PdfExportService(widget.pdf!).export(snapshot);
-      if (!mounted) return;
+      final bytes = await PdfExportService(widget.pdf!).exportWithUnlock(
+        snapshot,
+        (assetId) =>
+            mounted ? unlockPdf(assetId: assetId) : Future.value(false),
+      );
+      if (!mounted || bytes == null) return;
       final saved = await widget.files!.savePdf(bytes, name: snapshot.title);
       if (mounted && saved) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('PDF guardado.')));
-      }
-    } on PdfPasswordException {
-      if (mounted) {
-        final assets = widget.controller.notebook.pages
-            .map((p) => p.background.assetId)
-            .whereType<String>();
-        if (assets.isNotEmpty) await unlockPdf(assetId: assets.first);
       }
     } catch (_) {
       if (mounted) {

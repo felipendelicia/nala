@@ -10,6 +10,69 @@ import '../support/pdf_fixtures.dart';
 
 void main() {
   test(
+    'exportar desbloquea el recurso correcto y reintenta la misma instantánea',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('nala-export-locked-');
+      final assets = FileAssetStore('${dir.path}/assets');
+      final pdf = PdfService(
+        assets: assets,
+        initialize: () => initializePdfForTest(dir.path),
+      );
+      addTearDown(() async {
+        pdf.dispose();
+        await dir.delete(recursive: true);
+      });
+      var id = 0;
+      final ordinary = await pdf.importDocument(
+        bytes: await makeFixturePdf(),
+        title: 'Guía',
+        documentId: 'guide',
+        newId: () => 'p${++id}',
+        now: DateTime.utc(2026),
+      );
+      final protected = await pdf.importDocument(
+        bytes: await File('test/support/pdf/protected.pdf').readAsBytes(),
+        password: 'nala-test',
+        title: 'Protegido',
+        documentId: 'protected',
+        newId: () => 'p${++id}',
+        now: DateTime.utc(2026),
+      );
+      final reopened = PdfService(
+        assets: assets,
+        initialize: () => initializePdfForTest(dir.path),
+      );
+      addTearDown(reopened.dispose);
+      final snapshot = ordinary.copyWith(
+        pages: [ordinary.pages.first, protected.pages.first],
+      );
+      final asked = <String>[];
+      final output = await PdfExportService(reopened).exportWithUnlock(
+        snapshot,
+        (assetId) async {
+          asked.add(assetId);
+          await reopened.unlock(assetId, 'nala-test');
+          return true;
+        },
+      );
+      expect(asked, [protected.pages.first.background.assetId]);
+      final document = await PdfDocument.openData(output!);
+      expect(document.pages, hasLength(2));
+      await document.dispose();
+      final cancelled = PdfService(
+        assets: assets,
+        initialize: () => initializePdfForTest(dir.path),
+      );
+      addTearDown(cancelled.dispose);
+      expect(
+        await PdfExportService(
+          cancelled,
+        ).exportWithUnlock(snapshot, (_) async => false),
+        isNull,
+      );
+    },
+  );
+  test(
     'exportar páginas mixtas conserva orden, tamaño, tinta y transparencia',
     () async {
       final dir = await Directory.systemTemp.createTemp('nala-export-');

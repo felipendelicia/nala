@@ -6,6 +6,7 @@ import 'package:apuntes/app.dart';
 import 'package:apuntes/bootstrap.dart';
 import 'package:apuntes/editor/editor_screen.dart';
 import 'package:apuntes/editor/paper_canvas.dart';
+import 'support/capture.dart';
 
 Future<void> until(WidgetTester tester, bool Function() ready) async {
   final timer = Stopwatch()..start();
@@ -25,7 +26,13 @@ void main() {
     (tester) async {
       final root = await Directory.systemTemp.createTemp('nala-organize-');
       final services = await AppServices.open(root.path);
-      await tester.pumpWidget(NalaApp(services: services));
+      const previewKey = ValueKey('organization-preview');
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: previewKey,
+          child: NalaApp(services: services),
+        ),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('Nueva carpeta'));
       await tester.pumpAndSettle();
@@ -84,6 +91,7 @@ void main() {
       await tester.tap(find.byTooltip('Volver a mis apuntes'));
       await until(tester, () => find.byType(EditorScreen).evaluate().isEmpty);
       expect(find.text('Clase 1'), findsOneWidget);
+      await captureUi(tester, find.byKey(previewKey), 'library-folders');
       expect(
         (await services.repository.list())
             .single
@@ -105,6 +113,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Revisar demostración'), findsOneWidget);
       expect(find.text('Agregar comentario'), findsNothing);
+      await captureUi(tester, find.byKey(previewKey), 'reading-comments');
       await tester.pumpWidget(const SizedBox.shrink());
       await services.close();
       await root.delete(recursive: true);

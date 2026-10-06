@@ -11,6 +11,7 @@ import 'package:apuntes/editor/paper_canvas.dart';
 import 'package:apuntes/editor/editor_screen.dart';
 import 'package:apuntes/pdf/document_files.dart';
 import '../test/support/pdf_fixtures.dart';
+import 'support/capture.dart';
 
 class TestDocumentFiles implements DocumentFiles {
   TestDocumentFiles(this.bytes);
@@ -54,15 +55,23 @@ void main() {
       final dir = await Directory.systemTemp.createTemp('nala-pdf-flow-');
       final files = TestDocumentFiles(await makeFixturePdf());
       final services = await AppServices.open(dir.path, files: files);
-      await tester.pumpWidget(NalaApp(services: services));
+      const previewKey = ValueKey('pdf-preview');
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: previewKey,
+          child: NalaApp(services: services),
+        ),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('Abrir PDF'));
+      debugPrint('pdf-flow: waiting for import');
       await pumpUntil(
         tester,
         () => find.byType(EditorScreen).evaluate().isNotEmpty,
         'el editor del PDF',
       );
       await tester.pumpAndSettle();
+      debugPrint('pdf-flow: editor ready');
       expect(
         find.text('Guía'),
         findsOneWidget,
@@ -80,22 +89,27 @@ void main() {
       await gesture.moveBy(const Offset(20, 20));
       await gesture.up();
       await tester.pumpAndSettle();
+      debugPrint('pdf-flow: stroke drawn');
+      await captureUi(tester, find.byKey(previewKey), 'pdf-editor');
       await tester.tap(find.byTooltip('Agregar hoja').first);
       await tester.pumpAndSettle();
       expect(find.text('2/3'), findsOneWidget);
       await tester.tap(find.byTooltip('Exportar PDF'));
+      debugPrint('pdf-flow: export requested');
       // The editor must remain usable while the worker prepares PDF pixels.
       await tester.pump();
       await tester.tap(find.byTooltip('Hoja siguiente'));
       await tester.pump();
       expect(find.text('3/3'), findsOneWidget);
       await pumpUntil(tester, () => files.saved != null, 'el PDF exportado');
+      debugPrint('pdf-flow: export received');
       await tester.pumpAndSettle(
         const Duration(milliseconds: 100),
         EnginePhase.sendSemanticsUpdate,
         const Duration(seconds: 60),
       );
       expect(files.saved, isNotNull);
+      await captureUi(tester, find.byKey(previewKey), 'pdf-navigation');
       final output = await PdfDocument.openData(files.saved!);
       expect(output.pages.length, 3);
       await output.dispose();
@@ -116,6 +130,7 @@ void main() {
       expect(saved.pages[2].background.pageNumber, 2);
       await tester.pumpWidget(const SizedBox.shrink());
       await services.close();
+      debugPrint('pdf-flow: services closed');
       await dir.delete(recursive: true);
     },
   );

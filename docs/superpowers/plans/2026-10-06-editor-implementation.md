@@ -31,61 +31,61 @@
 **Files:** lib/editor/draft_ink.dart, stroke_geometry.dart, paper_canvas.dart, editor_screen.dart, lib/document/notebook.dart; test/editor/fluency_test.dart.
 **Interfaces:** PressureCurve {legacy, expressive, uniform}; InkStroke optional pressureCurve=legacy, sensitivity=1; StrokeGeometry.strokeWidth(stroke, pressure); DraftInk begin/add/finish/cancel, path, points, ChangeNotifier.
 
-- [ ] RED: crear tests que verifiquen curva expresiva, codec compatible y miles de muestras sin reconstruir PaperCanvas/EditorToolbar. Run tool/flutter-safe test --no-pub --concurrency=1 test/editor/fluency_test.dart. Expected: missing interfaces or active painter changes on every sample.
+- [x] RED: crear tests que verifiquen curva expresiva, codec compatible y miles de muestras sin reconstruir PaperCanvas/EditorToolbar. Run tool/flutter-safe test --no-pub --concurrency=1 test/editor/fluency_test.dart. Expected: missing interfaces or active painter changes on every sample.
 ```dart
 expect(StrokeGeometry.strokeWidth(stroke, .8), greaterThan(StrokeGeometry.strokeWidth(stroke, .1) * 2));
 expect(identical(beforePainter, afterPainter), isTrue);
 ```
-- [ ] GREEN: añadir enum y metadatos opcionales; incremental Path.addOval/addPolygon usando la fórmula compartida; CustomPainter(repaint: draft); finish copia una vez, cancel limpia; SVG se construye sólo al exportar. Presión mouse/resaltador constante.
+- [x] GREEN: añadir enum y metadatos opcionales; incremental Path.addOval/addPolygon usando la fórmula compartida; CustomPainter(repaint: draft); finish copia una vez, cancel limpia; SVG se construye sólo al exportar. Presión mouse/resaltador constante.
 ```dart
 void updateInk(InkPoint point) { draft.add(point); }
 ```
-- [ ] Verificar tests y suite completa; commit de la etapa.
+- [x] Verificar tests y suite completa; commit de la etapa.
 
 ### Task 2: Lectura y zoom
 
 **Files:** editor_screen.dart, input_router.dart, viewport.dart, editor_toolbar.dart; test/editor/reading_zoom_test.dart.
 **Interfaces:** InputRouter.readOnly bool; Viewport.zoomLocked, setScale, fitWidth; controles de lectura/escala no mutan Notebook.
 
-- [ ] RED: lectura con stylus/mouse navega sin trazos; atajos no modifican; zoom bloqueado conserva escala tras pinch/rueda/página; pan funciona; presets y ancho cambian escala al desbloquear.
+- [x] RED: lectura con stylus/mouse navega sin trazos; atajos no modifican; zoom bloqueado conserva escala tras pinch/rueda/página; pan funciona; presets y ancho cambian escala al desbloquear.
 ```dart
 view.zoomLocked = true;
 view.zoom(2, const Point(100.0, 100.0));
 expect(view.scale, oldScale);
 ```
-- [ ] GREEN: router de lectura navega; desactivar acciones/atajos de edición; controles adaptados; cambios de layout actualizan tamaño sin refit automático salvo primera apertura/ajuste explícito. Run tests y suite. Commit.
+- [x] GREEN: router de lectura navega; desactivar acciones/atajos de edición; controles adaptados; cambios de layout actualizan tamaño sin refit automático salvo primera apertura/ajuste explícito. Run tests y suite. Commit.
 
 ### Task 3: Jerarquías
 
 **Files:** document/folders.dart, sqlite_notebook_repository.dart, notebook.dart, notebook_codec.dart; library_controller.dart, library_screen.dart, folder_dialog.dart; test/library/folders_test.dart.
 **Interfaces:** Notebook.folderId opcional; NoteFolder(id,name,parentId); FolderRepository.listFolders/saveFolder/deleteFolder; LibraryController.currentFolderId, childFolders, breadcrumbs, createFolder/moveNotebook/moveFolder/renameFolder.
 
-- [ ] RED: crear raíz→materia→unidad y cuaderno, mover y reabrir SQLite; rechazar ciclo y borrar carpeta no vacía; antiguos cuadernos raíz; búsqueda y UI de ruta.
+- [x] RED: crear raíz→materia→unidad y cuaderno, mover y reabrir SQLite; rechazar ciclo y borrar carpeta no vacía; antiguos cuadernos raíz; búsqueda y UI de ruta.
 ```dart
 await library.createFolder('Unidad 1', parentId: materia.id);
 expect(library.breadcrumbs.last.name, 'Unidad 1');
 ```
-- [ ] GREEN: tabla folders y validación de ancestros en worker; ubicación optional en codec; revisiones para movimientos; navegación por carpeta, breadcrumbs, menú de mover/renombrar. Run tests y suite. Commit.
+- [x] GREEN: tabla folders y validación de ancestros en worker; ubicación optional en codec; revisiones para movimientos; navegación por carpeta, breadcrumbs, menú de mover/renombrar. Run tests y suite. Commit.
 
 ### Task 4: Comentarios de texto y voz
 
 **Files:** document/page_comment.dart, notebook.dart/codec; audio/audio_service.dart, audio_comment_session.dart; editor/comments_panel.dart; MainActivity.kt/manifest; test/editor/comments_test.dart y test/audio/audio_session_test.dart.
 **Interfaces:** PageComment(id,x,y,text,createdAt,audioAssetId?,audioDurationMs?); NotebookPage.comments; AudioDevice.start/stop/cancel/play/stopPlayback/dispose; AudioCommentSession.commit almacena bytes por hash y borra temporales.
 
-- [ ] RED: comentarios codec/reabrir, editar/eliminar y consulta lectura; permiso denegado y cancelación no crean comentario; audio guardado por hash; dispose/suspensión cierra captura; máximo una grabación/reproducción.
+- [x] RED: comentarios codec/reabrir, editar/eliminar y consulta lectura; permiso denegado y cancelación no crean comentario; audio guardado por hash; dispose/suspensión cierra captura; máximo una grabación/reproducción.
 ```dart
 await session.cancel();
 expect(await assets.contains(hash), isFalse);
 ```
-- [ ] GREEN: adaptadores Android con permiso/MediaRecorder/MediaPlayer y Linux pw-record/pw-play; estados explícitos y temporales; pins y lista por página; diálogo de texto/grabación con guardar/cancelar. Run tests y suite. Commit.
+- [x] GREEN: adaptadores Android con permiso/AudioRecord/MediaPlayer y Linux pw-record/pw-play; estados explícitos y temporales; pins y lista por página; diálogo de texto/grabación con guardar/cancelar. Run tests y suite. Commit.
 
 ### Task 5: PDF y entrega local
 
 **Files:** integration_test/pdf_round_trip_test.dart, pdf/*.dart según causa; docs/verification.md/status.md/README, pubspec.yaml, dist ignorado.
 
-- [ ] Investigar fallo nativo con log verbose y condiciones reales; corregir la causa con reproducción antes del cambio.
-- [ ] Verificar crear/reabrir y flujo PDF Linux. Inspeccionar exportación y escenas de lectura/carpeta/comentarios; pruebas sin activar micrófono real.
-- [ ] Suite completa y analyze limpios; build Android release y Linux release de a uno. Version 0.2.0+2, actualizar entregables y documentar límites de prueba física.
+- [x] Investigar fallo nativo con log verbose y condiciones reales; corregir la causa con reproducción antes del cambio.
+- [x] Verificar crear/reabrir y flujo PDF Linux. Inspeccionar exportación y escenas de lectura/carpeta/comentarios; pruebas sin activar micrófono real.
+- [x] Suite completa y analyze limpios; build Android release y Linux release de a uno. Version 0.2.0+2, actualizar entregables y documentar límites de prueba física.
 
 ### Task 6: Drive al final
 
