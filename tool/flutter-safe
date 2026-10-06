@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Local Linux builds/tests with a budget for the whole process tree.
+set -euo pipefail
+repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+mkdir -p .dart_tool
+exec 9>.dart_tool/nala-build.lock
+if ! flock --nonblock 9; then
+  echo 'Otra tarea de Nala está en ejecución. Esperá a que termine.' >&2
+  exit 1
+fi
+if [[ -x "$repo_root/../flutterw" ]]; then
+  flutter_command="$repo_root/../flutterw"
+else
+  flutter_command="$(command -v flutter)"
+fi
+display_environment=()
+if [[ -n "${DISPLAY:-}" ]]; then display_environment+=(--setenv=DISPLAY); fi
+if [[ -n "${XAUTHORITY:-}" ]]; then display_environment+=(--setenv=XAUTHORITY); fi
+systemd-run --user --wait --pipe --collect \
+  --unit="nala-build-${BASHPID}" \
+  --working-directory="$repo_root" \
+  --property=MemoryMax=2300M --property=MemoryHigh=1800M \
+  --property=MemorySwapMax=256M --property=CPUQuota=200% \
+  --property=Nice=10 --property=OOMPolicy=stop \
+  --setenv="PATH=$repo_root/tool/serial-bin:$PATH" \
+  "${display_environment[@]}" "$flutter_command" "$@"
