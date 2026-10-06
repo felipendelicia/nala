@@ -3,11 +3,29 @@ import 'dart:ui';
 import '../document/notebook.dart';
 
 class StrokeOutline {
-  StrokeOutline(this.circles, this.polygons, this.svgPath);
+  StrokeOutline(this.circles, this.polygons);
   final List<Rect> circles;
   final List<List<Offset>> polygons;
   late final Path path = _canvasPath();
-  final String svgPath;
+  late final String svgPath = _svgPath();
+  String _svgPath() {
+    final svg = StringBuffer();
+    for (final circle in circles) {
+      final p = circle.center, r = circle.width / 2;
+      svg.write(
+        'M ${p.dx + r} ${p.dy} a $r $r 0 1 1 ${-2 * r} 0 a $r $r 0 1 1 ${2 * r} 0 Z ',
+      );
+    }
+    for (final corners in polygons) {
+      svg.write('M ${corners[0].dx} ${corners[0].dy} ');
+      for (final c in corners.skip(1)) {
+        svg.write('L ${c.dx} ${c.dy} ');
+      }
+      svg.write('Z ');
+    }
+    return svg.toString();
+  }
+
   Path _canvasPath() {
     final result = Path();
     for (final circle in circles) {
@@ -34,8 +52,8 @@ class StrokeGeometry {
       if (distance <=
           radius +
               max(
-                    widthFor(stroke.width, previous.pressure),
-                    widthFor(stroke.width, p.pressure),
+                    strokeWidth(stroke, previous.pressure),
+                    strokeWidth(stroke, p.pressure),
                   ) /
                   2) {
         return true;
@@ -81,6 +99,34 @@ class StrokeGeometry {
   static final Expando<StrokeOutline> _cache = Expando();
   static double widthFor(double base, double pressure) =>
       base * (.35 + .65 * pressure.clamp(0, 1));
+  static double strokeWidth(InkStroke stroke, double pressure) =>
+      switch (stroke.pressureCurve) {
+        PressureCurve.legacy => widthFor(stroke.width, pressure),
+        PressureCurve.uniform => stroke.width,
+        PressureCurve.expressive =>
+          stroke.width *
+              (1 -
+                  stroke.sensitivity +
+                  stroke.sensitivity *
+                      (.15 + 1.35 * pow(pressure.clamp(0, 1), .65))),
+      };
+  static List<Offset>? segmentCorners(
+    InkPoint a,
+    InkPoint p,
+    double ar,
+    double r,
+  ) {
+    final length = sqrt(pow(p.x - a.x, 2) + pow(p.y - a.y, 2));
+    if (length == 0) return null;
+    final nx = -(p.y - a.y) / length, ny = (p.x - a.x) / length;
+    return [
+      Offset(a.x - nx * ar, a.y - ny * ar),
+      Offset(p.x - nx * r, p.y - ny * r),
+      Offset(p.x + nx * r, p.y + ny * r),
+      Offset(a.x + nx * ar, a.y + ny * ar),
+    ];
+  }
+
   static bool hitTest(InkStroke stroke, Point<double> point, double radius) {
     for (var i = 0; i < stroke.points.length; i++) {
       final p = stroke.points[i];
@@ -95,8 +141,8 @@ class StrokeGeometry {
         start.x + t * dx,
         start.y + t * dy,
       ).distanceTo(point);
-      final width = widthFor(
-        stroke.width,
+      final width = strokeWidth(
+        stroke,
         start.pressure + t * (p.pressure - start.pressure),
       );
       if (distance <= radius + width / 2) return true;
@@ -118,7 +164,7 @@ class StrokeGeometry {
         right = double.negativeInfinity,
         bottom = double.negativeInfinity;
     for (final p in stroke.points) {
-      final r = widthFor(stroke.width, p.pressure) / 2;
+      final r = strokeWidth(stroke, p.pressure) / 2;
       left = min(left, p.x - r);
       top = min(top, p.y - r);
       right = max(right, p.x + r);
@@ -132,35 +178,22 @@ class StrokeGeometry {
   static StrokeOutline _build(InkStroke stroke) {
     final circles = <Rect>[];
     final polygons = <List<Offset>>[];
-    final svg = StringBuffer();
     for (var i = 0; i < stroke.points.length; i++) {
       final p = stroke.points[i],
-          r = widthFor(stroke.width, stroke.points[i].pressure) / 2;
+          r = strokeWidth(stroke, stroke.points[i].pressure) / 2;
       circles.add(Rect.fromCircle(center: Offset(p.x, p.y), radius: r));
-      svg.write(
-        'M ${p.x + r} ${p.y} a $r $r 0 1 1 ${-2 * r} 0 a $r $r 0 1 1 ${2 * r} 0 Z ',
-      );
-      if (i == 0) continue;
-      final a = stroke.points[i - 1];
-      final length = sqrt(pow(p.x - a.x, 2) + pow(p.y - a.y, 2));
-      if (length == 0) continue;
-      final nx = -(p.y - a.y) / length,
-          ny = (p.x - a.x) / length,
-          ar = widthFor(stroke.width, a.pressure) / 2;
-      final corners = [
-        Offset(a.x - nx * ar, a.y - ny * ar),
-        Offset(p.x - nx * r, p.y - ny * r),
-        Offset(p.x + nx * r, p.y + ny * r),
-        Offset(a.x + nx * ar, a.y + ny * ar),
-      ];
-      polygons.add(corners);
-      svg.write('M ${corners[0].dx} ${corners[0].dy} ');
-      for (final c in corners.skip(1)) {
-        svg.write('L ${c.dx} ${c.dy} ');
+      if (i > 0) {
+        final a = stroke.points[i - 1];
+        final corners = segmentCorners(
+          a,
+          p,
+          strokeWidth(stroke, a.pressure) / 2,
+          r,
+        );
+        if (corners != null) polygons.add(corners);
       }
-      svg.write('Z ');
     }
-    return StrokeOutline(circles, polygons, svg.toString());
+    return StrokeOutline(circles, polygons);
   }
 
   static String svg(NotebookPage page) {

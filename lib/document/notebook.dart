@@ -2,6 +2,8 @@ enum PaperPattern { blank, ruled, grid, dots }
 
 enum InkTool { pen, highlighter }
 
+enum PressureCurve { legacy, expressive, uniform }
+
 enum EditorTool { pen, highlighter, eraser, selection }
 
 class InkPoint {
@@ -22,11 +24,15 @@ class InkStroke {
     required this.argb,
     required this.width,
     required List<InkPoint> points,
+    this.pressureCurve = PressureCurve.legacy,
+    this.sensitivity = 1,
   }) : points = List.unmodifiable(points);
   final String id;
   final InkTool tool;
   final int argb;
   final double width;
+  final PressureCurve pressureCurve;
+  final double sensitivity;
   final List<InkPoint> points;
   InkStroke copyWith({List<InkPoint>? points}) => InkStroke(
     id: id,
@@ -34,6 +40,8 @@ class InkStroke {
     argb: argb,
     width: width,
     points: points ?? this.points,
+    pressureCurve: pressureCurve,
+    sensitivity: sensitivity,
   );
   Map<String, Object> toJson() => {
     'id': id,
@@ -41,6 +49,9 @@ class InkStroke {
     'argb': argb,
     'width': width,
     'points': points.map((p) => p.toJson()).toList(),
+    if (pressureCurve != PressureCurve.legacy)
+      'pressureCurve': pressureCurve.name,
+    if (sensitivity != 1) 'sensitivity': sensitivity,
   };
   factory InkStroke.fromJson(Map<String, dynamic> json) {
     final points = (json['points'] as List)
@@ -57,6 +68,10 @@ class InkStroke {
       argb: color,
       width: finiteNumber(json['width'], positive: true),
       points: points,
+      pressureCurve: json['pressureCurve'] == null
+          ? PressureCurve.legacy
+          : PressureCurve.values.byName(json['pressureCurve'] as String),
+      sensitivity: finiteNumber(json['sensitivity'] ?? 1, min: 0, max: 1),
     );
   }
 }

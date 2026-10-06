@@ -8,6 +8,8 @@ import '../document/notebook.dart';
 import '../ui/app_theme.dart';
 import 'editor_controller.dart';
 import 'editor_toolbar.dart';
+import 'draft_ink.dart';
+import 'pen_settings_dialog.dart';
 import 'input_router.dart';
 import 'page_panel.dart';
 import 'paper_canvas.dart';
@@ -48,7 +50,8 @@ class _EditorScreenState extends State<EditorScreen> {
   final view = paper.Viewport();
   Size? viewSize;
   String? fittedPage;
-  List<InkPoint> draft = [];
+  final draft = DraftInk();
+  double pressureSensitivity = 1, stabilization = .08;
   final erased = <String>{};
   Set<String> selected = {};
   Offset? start, latest;
@@ -105,7 +108,19 @@ class _EditorScreenState extends State<EditorScreen> {
       return;
     }
     if (tool == EditorTool.pen || tool == EditorTool.highlighter) {
-      draft = [p];
+      draft.begin(
+        p,
+        tool: tool == EditorTool.highlighter
+            ? InkTool.highlighter
+            : InkTool.pen,
+        argb: argb,
+        width: width,
+        sensitivity: pressureSensitivity,
+        stabilization: stabilization,
+        pressureCurve: event.device == InputDevice.mouse
+            ? PressureCurve.uniform
+            : PressureCurve.expressive,
+      );
     }
     if (tool == EditorTool.eraser) eraseAt(p);
     if (tool == EditorTool.selection) {
@@ -127,6 +142,7 @@ class _EditorScreenState extends State<EditorScreen> {
     if (gestureTool == EditorTool.pen ||
         gestureTool == EditorTool.highlighter) {
       draft.add(p);
+      return;
     }
     if (gestureTool == EditorTool.eraser) eraseAt(p, from: previous);
     setState(() {});
@@ -159,16 +175,8 @@ class _EditorScreenState extends State<EditorScreen> {
       cancel();
       return;
     }
-    if (draft.isNotEmpty) {
-      final stroke = InkStroke(
-        id: const Uuid().v4(),
-        tool: gestureTool == EditorTool.highlighter
-            ? InkTool.highlighter
-            : InkTool.pen,
-        argb: argb,
-        width: width,
-        points: draft,
-      );
+    final stroke = draft.finish(const Uuid().v4(), endpoint: inkPoint(event));
+    if (stroke != null) {
       editPage((p) => p.copyWith(strokes: [...p.strokes, stroke]));
     } else if (gestureTool == EditorTool.eraser && erased.isNotEmpty) {
       final ids = Set<String>.of(erased);
@@ -207,7 +215,7 @@ class _EditorScreenState extends State<EditorScreen> {
   void cancel() {
     if (mounted && !disposing) {
       setState(() {
-        draft = [];
+        draft.cancel();
         erased.clear();
         start = latest = null;
         movingSelection = false;
@@ -221,6 +229,22 @@ class _EditorScreenState extends State<EditorScreen> {
       tool = selectedTool;
       selected = {};
     });
+  }
+
+  Future<void> penSettings() async {
+    router.reset();
+    final result = await showDialog<PenSettings>(
+      context: context,
+      builder: (_) => PenSettingsDialog(
+        settings: (pressure: pressureSensitivity, stabilization: stabilization),
+      ),
+    );
+    if (result != null && mounted) {
+      setState(() {
+        pressureSensitivity = result.pressure;
+        stabilization = result.stabilization;
+      });
+    }
   }
 
   void deleteSelection() {
@@ -424,6 +448,7 @@ class _EditorScreenState extends State<EditorScreen> {
       token.cancel();
     }
     router.reset();
+    draft.dispose();
     super.dispose();
   }
 
@@ -523,6 +548,7 @@ class _EditorScreenState extends State<EditorScreen> {
                   EditorToolbar(
                     tool: tool,
                     onTool: chooseTool,
+                    onPenSettings: penSettings,
                     argb: argb,
                     onColor: (c) => setState(() => argb = c),
                     width: width,
@@ -663,18 +689,6 @@ class _EditorScreenState extends State<EditorScreen> {
                                       .toList(),
                                 );
                               }
-                              final draftStroke = draft.isEmpty
-                                  ? null
-                                  : InkStroke(
-                                      id: 'draft',
-                                      tool:
-                                          gestureTool == EditorTool.highlighter
-                                          ? InkTool.highlighter
-                                          : InkTool.pen,
-                                      argb: argb,
-                                      width: width,
-                                      points: draft,
-                                    );
                               return ClipRect(
                                 child: Listener(
                                   behavior: HitTestBehavior.opaque,
@@ -717,6 +731,7 @@ class _EditorScreenState extends State<EditorScreen> {
                                                 children: [
                                                   PaperCanvas(
                                                     page: displayPage,
+                                                    externalInput: true,
                                                     tool: tool,
                                                     onStroke: (_) {},
                                                     background:
@@ -750,12 +765,13 @@ class _EditorScreenState extends State<EditorScreen> {
                                                                 preloadNeighbors,
                                                           ),
                                                   ),
-                                                  if (draftStroke != null)
-                                                    CustomPaint(
-                                                      painter: InkPainter([
-                                                        draftStroke,
-                                                      ]),
+                                                  RepaintBoundary(
+                                                    child: CustomPaint(
+                                                      painter: DraftInkPainter(
+                                                        draft,
+                                                      ),
                                                     ),
+                                                  ),
                                                   CustomPaint(
                                                     painter: _SelectionPainter(
                                                       displayPage,

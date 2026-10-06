@@ -19,6 +19,7 @@ class EditorToolbar extends StatelessWidget {
     required this.pattern,
     required this.onPattern,
     required this.onApplyPattern,
+    this.onPenSettings,
   });
   final EditorTool tool;
   final ValueChanged<EditorTool> onTool;
@@ -32,6 +33,7 @@ class EditorToolbar extends StatelessWidget {
   final PaperPattern? pattern;
   final ValueChanged<PaperPattern> onPattern;
   final VoidCallback? onApplyPattern;
+  final VoidCallback? onPenSettings;
   @override
   Widget build(BuildContext context) => Material(
     color: Theme.of(context).colorScheme.surface,
@@ -114,6 +116,11 @@ class EditorToolbar extends StatelessWidget {
             itemBuilder: (_) => [1.5, 2.5, 4.0, 8.0, 14.0]
                 .map((w) => PopupMenuItem(value: w, child: Text('$w pt')))
                 .toList(),
+          ),
+          IconButton(
+            tooltip: 'Ajustes del lápiz',
+            onPressed: onPenSettings,
+            icon: const Icon(Icons.tune),
           ),
           IconButton(
             tooltip: 'Deshacer',

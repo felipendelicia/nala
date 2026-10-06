@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import '../document/notebook.dart';
 import 'paper_background.dart';
 import 'stroke_geometry.dart';
+import 'draft_ink.dart';
 
 class PaperCanvas extends StatefulWidget {
   const PaperCanvas({
@@ -14,6 +15,7 @@ class PaperCanvas extends StatefulWidget {
     this.argb = 0xff202020,
     this.width = 2,
     this.background,
+    this.externalInput = false,
   });
   final NotebookPage page;
   final ValueChanged<InkStroke> onStroke;
@@ -21,64 +23,72 @@ class PaperCanvas extends StatefulWidget {
   final int argb;
   final double width;
   final Widget? background;
+  final bool externalInput;
   @override
   State<PaperCanvas> createState() => _PaperCanvasState();
 }
 
 class _PaperCanvasState extends State<PaperCanvas> {
   int? pointer;
-  List<InkPoint> points = [];
+  final ink = DraftInk();
   InkPoint point(PointerEvent event) {
     final range = event.pressureMax - event.pressureMin;
-    final pressure = range > 0
-        ? (event.pressure - event.pressureMin) / range
-        : 1.0;
     return InkPoint(
       x: event.localPosition.dx,
       y: event.localPosition.dy,
-      pressure: pressure.clamp(0, 1),
+      pressure: (range > 0 ? (event.pressure - event.pressureMin) / range : 1.0)
+          .clamp(0, 1),
     );
   }
 
   void down(PointerDownEvent event) {
     if (pointer != null ||
         (widget.tool != EditorTool.pen &&
-            widget.tool != EditorTool.highlighter)) {
+            widget.tool != EditorTool.highlighter))
       return;
-    }
     if (event.kind != PointerDeviceKind.stylus &&
         event.kind != PointerDeviceKind.invertedStylus &&
         !(event.kind == PointerDeviceKind.mouse &&
-            event.buttons == kPrimaryButton)) {
+            event.buttons == kPrimaryButton))
       return;
-    }
-    setState(() {
-      pointer = event.pointer;
-      points = [point(event)];
-    });
-  }
-
-  void move(PointerMoveEvent event) {
-    if (pointer != event.pointer) return;
-    setState(() => points = [...points, point(event)]);
-  }
-
-  void up(PointerUpEvent event) {
-    if (pointer != event.pointer) return;
-    final stroke = InkStroke(
-      id: const Uuid().v4(),
+    pointer = event.pointer;
+    ink.begin(
+      point(event),
       tool: widget.tool == EditorTool.highlighter
           ? InkTool.highlighter
           : InkTool.pen,
       argb: widget.argb,
       width: widget.width,
-      points: points,
+      pressureCurve: event.kind == PointerDeviceKind.mouse
+          ? PressureCurve.uniform
+          : PressureCurve.expressive,
     );
-    setState(() {
+  }
+
+  void move(PointerMoveEvent event) {
+    if (pointer == event.pointer) ink.add(point(event));
+  }
+
+  void up(PointerUpEvent event) {
+    if (pointer != event.pointer) return;
+    pointer = null;
+    final stroke = ink.finish(const Uuid().v4(), endpoint: point(event));
+    if (stroke != null) widget.onStroke(stroke);
+  }
+
+  @override
+  void didUpdateWidget(PaperCanvas oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.page.id != widget.page.id || oldWidget.tool != widget.tool) {
       pointer = null;
-      points = [];
-    });
-    widget.onStroke(stroke);
+      ink.cancel();
+    }
+  }
+
+  @override
+  void dispose() {
+    ink.dispose();
+    super.dispose();
   }
 
   @override
@@ -87,17 +97,17 @@ class _PaperCanvasState extends State<PaperCanvas> {
     height: widget.page.height,
     child: Listener(
       behavior: HitTestBehavior.opaque,
-      onPointerDown: down,
-      onPointerMove: move,
-      onPointerUp: up,
-      onPointerCancel: (event) {
-        if (event.pointer == pointer) {
-          setState(() {
-            pointer = null;
-            points = [];
-          });
-        }
-      },
+      onPointerDown: widget.externalInput ? null : down,
+      onPointerMove: widget.externalInput ? null : move,
+      onPointerUp: widget.externalInput ? null : up,
+      onPointerCancel: widget.externalInput
+          ? null
+          : (event) {
+              if (event.pointer == pointer) {
+                pointer = null;
+                ink.cancel();
+              }
+            },
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -113,23 +123,8 @@ class _PaperCanvasState extends State<PaperCanvas> {
           RepaintBoundary(
             child: CustomPaint(painter: InkPainter(widget.page.strokes)),
           ),
-          CustomPaint(
-            painter: InkPainter(
-              points.isEmpty
-                  ? []
-                  : [
-                      InkStroke(
-                        id: 'draft',
-                        tool: widget.tool == EditorTool.highlighter
-                            ? InkTool.highlighter
-                            : InkTool.pen,
-                        argb: widget.argb,
-                        width: widget.width,
-                        points: points,
-                      ),
-                    ],
-            ),
-          ),
+          if (!widget.externalInput)
+            RepaintBoundary(child: CustomPaint(painter: DraftInkPainter(ink))),
         ],
       ),
     ),
