@@ -49,6 +49,7 @@ migrate_working_dir/
 key.properties
 credentials.json
 token.json
+config.local.json
 
 # Symbolication related
 app.*.symbols

@@ -91,9 +91,9 @@ expect(await assets.contains(hash), isFalse);
 
 **Files:** contratos, motor, auth y UI de las tareas 5–6 del plan inicial; docs/drive-setup.md.
 
-- [ ] Leer briefs del plan inicial y ejecutar RED→GREEN del motor con dos repositorios y remoto de prueba: ramas, reintento perdido, assets PDF/audio, paginación y carpetas.
-- [ ] Implementar adaptadores Drive/OAuth configurables sin credenciales inventadas; preservar notas y colas ante revocación/cambio de cuenta; mostrar conexión/configuración y estados reales.
-- [ ] Verificar las pruebas y documentar qué comprobación exige OAuth externo; no afirmar sincronización real sin cuenta configurada.
+- [x] Leer briefs del plan inicial y ejecutar RED→GREEN del motor con dos repositorios y remoto de prueba: ramas, reintento perdido, assets PDF/audio, paginación y carpetas.
+- [x] Implementar adaptadores Drive/OAuth configurables sin credenciales inventadas; preservar notas y colas ante revocación/cambio de cuenta; mostrar conexión/configuración y estados reales.
+- [x] Verificar las pruebas y documentar qué comprobación exige OAuth externo; no afirmar sincronización real sin cuenta configurada.
 
 ### Final
 

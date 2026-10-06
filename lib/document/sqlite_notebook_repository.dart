@@ -22,6 +22,7 @@ class SqliteNotebookRepository implements NotebookRepository, FolderRepository {
   final Map<int, Completer<Object?>> _responses;
   int _requestId = 0;
   bool _closed = false;
+  void Function()? onLocalChange;
   static Future<SqliteNotebookRepository> open(String path) async {
     await File(path).parent.create(recursive: true);
     final receive = ReceivePort();
@@ -76,10 +77,7 @@ class SqliteNotebookRepository implements NotebookRepository, FolderRepository {
   Future<List<Revision>> _revisions(
     String op, [
     Map<String, Object?> args = const {},
-  ]) async => ((await _call(op, args)) as List)
-      .cast<String>()
-      .map(NotebookCodec.decodeRevision)
-      .toList();
+  ]) async => ((await _call(op, args)) as List).cast<Revision>();
   @override
   Future<List<DocumentEntry>> list() async {
     final heads = await _revisions('list');
@@ -107,9 +105,7 @@ class SqliteNotebookRepository implements NotebookRepository, FolderRepository {
         'documentId': documentId,
         'headId': headId,
       });
-      return json == null
-          ? null
-          : NotebookCodec.decodeRevision(json as String).notebook;
+      return json == null ? null : (json as Revision).notebook;
     }
     final entries = await list();
     for (final entry in entries) {
@@ -120,9 +116,8 @@ class SqliteNotebookRepository implements NotebookRepository, FolderRepository {
 
   @override
   Future<void> commit(Revision revision) async {
-    final payload = NotebookCodec.encodeRevision(revision);
-    NotebookCodec.decodeRevision(payload);
-    await _call('commit', {'payload': payload});
+    await _call('commit', {'revision': revision});
+    onLocalChange?.call();
   }
 
   @override
@@ -137,9 +132,13 @@ class SqliteNotebookRepository implements NotebookRepository, FolderRepository {
 
   @override
   Future<void> acceptRemote(Revision revision) async {
-    final payload = NotebookCodec.encodeRevision(revision);
-    NotebookCodec.decodeRevision(payload);
-    await _call('remote', {'payload': payload});
+    await _call('remote', {'revision': revision});
+  }
+
+  // First account adoption retains immutable history and queues it for upload.
+  Future<void> queueAllForUpload() async {
+    await _call('queueAll');
+    onLocalChange?.call();
   }
 
   @override
@@ -153,11 +152,20 @@ class SqliteNotebookRepository implements NotebookRepository, FolderRepository {
   @override
   Future<void> saveFolder(NoteFolder folder) async {
     await _call('saveFolder', {'payload': jsonEncode(folder.toJson())});
+    onLocalChange?.call();
+  }
+
+  @override
+  Future<void> mergeFolders(List<NoteFolder> folders) async {
+    await _call('mergeFolders', {
+      'payload': folders.map((f) => jsonEncode(f.toJson())).toList(),
+    });
   }
 
   @override
   Future<void> deleteFolder(String id) async {
     await _call('deleteFolder', {'folderId': id});
+    onLocalChange?.call();
   }
 
   @override
@@ -200,8 +208,83 @@ void _databaseWorker((SendPort, String) config) {
   requests.listen((message) {
     final request = message as Map;
     try {
+      if (request['revision'] is Revision) {
+        request['payload'] = NotebookCodec.encodeRevision(
+          request['revision'] as Revision,
+        );
+        NotebookCodec.decodeRevision(request['payload'] as String);
+      }
       Object? result;
       switch (request['op']) {
+        case 'mergeFolders':
+          _transaction(db, () {
+            final catalog = <String, NoteFolder>{
+              for (final row in db.select('SELECT * FROM folders'))
+                row['id'] as String: NoteFolder(
+                  id: row['id'] as String,
+                  name: row['name'] as String,
+                  parentId: row['parent_id'] as String?,
+                  updatedAt: DateTime.parse(row['updated_at'] as String),
+                  deleted: row['deleted'] == 1,
+                ),
+            };
+            for (final encoded in request['payload'] as List) {
+              final folder = NoteFolder.fromJson(
+                jsonDecode(encoded as String) as Map<String, dynamic>,
+              );
+              if (folder.id.isEmpty ||
+                  folder.name.trim().isEmpty ||
+                  folder.parentId == folder.id) {
+                throw const FormatException('Carpeta remota inválida');
+              }
+              final old = catalog[folder.id];
+              if (old == null ||
+                  folder.updatedAt.isAfter(old.updatedAt) ||
+                  (folder.updatedAt == old.updatedAt &&
+                      jsonEncode(
+                            folder.toJson(),
+                          ).compareTo(jsonEncode(old.toJson())) >
+                          0)) {
+                catalog[folder.id] = folder;
+              }
+            }
+            // Concurrent valid moves can form a cycle. Deterministically return
+            // its smallest id to root, keeping every folder and notebook.
+            for (final id in catalog.keys.toList()..sort()) {
+              final path = <String>[];
+              String? cursor = id;
+              while (cursor != null &&
+                  catalog[cursor] != null &&
+                  !catalog[cursor]!.deleted) {
+                final cycleStart = path.indexOf(cursor);
+                if (cycleStart >= 0) {
+                  final root = (path.sublist(cycleStart)..sort()).first;
+                  catalog[root] = catalog[root]!.copyWith(parentId: null);
+                  break;
+                }
+                path.add(cursor);
+                final parent = catalog[cursor]!.parentId;
+                if (parent != null &&
+                    (catalog[parent] == null || catalog[parent]!.deleted)) {
+                  catalog[cursor] = catalog[cursor]!.copyWith(parentId: null);
+                  break;
+                }
+                cursor = parent;
+              }
+            }
+            for (final folder in catalog.values) {
+              db.execute(
+                'INSERT INTO folders(id,name,parent_id,updated_at,deleted) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,parent_id=excluded.parent_id,updated_at=excluded.updated_at,deleted=excluded.deleted',
+                [
+                  folder.id,
+                  folder.name,
+                  folder.parentId,
+                  folder.updatedAt.toUtc().toIso8601String(),
+                  folder.deleted ? 1 : 0,
+                ],
+              );
+            }
+          });
         case 'folders':
           result = db
               .select(
@@ -277,6 +360,10 @@ void _databaseWorker((SendPort, String) config) {
               id,
             ]);
           });
+        case 'queueAll':
+          db.execute(
+            'INSERT OR IGNORE INTO upload_queue(revision_id) SELECT id FROM revisions',
+          );
         case 'list':
           result = db
               .select(
@@ -379,6 +466,15 @@ void _databaseWorker((SendPort, String) config) {
           requests.close();
         default:
           throw StateError('Operación desconocida');
+      }
+      if (result is List &&
+          const {'list', 'history', 'pending'}.contains(request['op'])) {
+        result = result
+            .cast<String>()
+            .map(NotebookCodec.decodeRevision)
+            .toList();
+      } else if (request['op'] == 'load' && result != null) {
+        result = NotebookCodec.decodeRevision(result as String);
       }
       reply.send({'id': request['id'], 'result': result});
     } catch (error) {

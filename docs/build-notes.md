@@ -6,7 +6,7 @@ El repositorio se compila con un SDK de Flutter instalado por separado. `tool/fl
 
 En Linux se necesitan CMake, Clang, Ninja, pkg-config, GTK 3 de desarrollo, libsecret de desarrollo y las herramientas estándar de C++. Android necesita Android SDK, sus licencias aceptadas y un JDK compatible con la configuración de Gradle. Las pruebas Flutter requieren acceso a localhost.
 
-Resolver dependencias con `tool/flutter-safe pub get` y usar `--no-pub` en las siguientes pruebas y compilaciones. Antes de las pruebas de PDF, ejecutar `tool/flutter-safe build linux --release --no-pub`: el harness usa `build/native_assets/linux/libpdfium.so` producido por la compilación, sin reemplazar el motor PDF por un mock.
+Resolver dependencias con `tool/flutter-safe pub get` y usar `--no-pub` en las siguientes pruebas. Antes de las pruebas de PDF, ejecutar `tool/flutter-safe build linux --release`: el harness usa `build/native_assets/linux/libpdfium.so` producido por la compilación, sin reemplazar el motor PDF por un mock.
 
 Las compilaciones y pruebas se ejecutan de a una mediante `tool/flutter-safe`, que requiere una sesión systemd de usuario y limita el consumo de recursos del árbol completo de procesos. La compilación Android usa un worker y Linux usa un trabajo de Ninja.
 

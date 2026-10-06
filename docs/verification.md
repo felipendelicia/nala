@@ -41,3 +41,14 @@ La suite local completa terminó con 56/56 pruebas y analyze no encontró proble
 Las pruebas de audio usan el dispositivo externo simulado y almacenamiento real de archivos/hash; ninguna automatización encendió el micrófono real. La presión, latencia física, captura/reproducción y selector Android quedan pendientes de validación en la Tab S10.
 
 La compilación Linux x64 release de esta etapa terminó correctamente. Los instaladores de checkpoint están en dist/editor-checkpoint; los entregables finales se regenerarán después de Drive/revisión. El editor nuevo conserva la base y recursos de las versiones previas.
+
+
+## Drive y cuentas
+
+Se implementó un motor con dos repositorios SQLite reales y recursos PDF/audio por hash. Los tests de red simulada cubren ediciones concurrentes, reintento de confirmación perdida, descarga dañada, hijo recibido antes del padre, carpetas borradas y movimientos cruzados. El planificador agrupa guardados, suspende sondeos al pasar la app al fondo y respeta el backoff del servidor.
+
+El adaptador HTTP cubre paginación, multipart idempotente, 401/revocación, Retry-After, subidas de recursos en bloques reanudables, consulta de rango 308 y sesiones expiradas. OAuth Linux se prueba con un callback HTTP real en loopback, PKCE, state incorrecto, cancelación y almacenamiento de credenciales simulado. Se reprodujo una renovación tardía que devolvía el token de otra sesión; ahora se rechaza. También se reprodujo una superposición de desconexión y nueva conexión; ambas operaciones quedaron serializadas.
+
+Las pruebas de cuenta usan particiones SQLite y directorios reales: primera adopción, copia de recursos y carpetas, datos offline después de salir, cambio A/B, reinicio y cancelación de peticiones antiguas. El editor aplica sólo un avance remoto descendiente de su versión guardada, después de soltar el lápiz; conserva la edición actual cuando existen dos ramas. El panel no muestra una conexión ficticia si faltan clientes OAuth.
+
+No se conectó una cuenta Google real. La compilación pública no contiene clientes OAuth; requiere los pasos de docs/drive-setup.md para habilitar Drive. Los tests del SDK Android, los permisos de micrófono y el S Pen necesitan comprobación física.

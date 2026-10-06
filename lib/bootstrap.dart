@@ -8,6 +8,9 @@ import 'library/library_controller.dart';
 import 'pdf/pdf_service.dart';
 import 'pdf/document_files.dart';
 import 'audio/audio_service.dart';
+import 'sync/remote_store.dart';
+import 'sync/sync_engine.dart';
+import 'sync/sync_coordinator.dart';
 
 class AppServices {
   AppServices({
@@ -29,6 +32,35 @@ class AppServices {
   final PdfService pdf;
   final DocumentFiles files;
   final AudioDevice audio;
+  SyncEngine? sync;
+  SyncCoordinator? coordinator;
+  bool _closed = false;
+  void attachSync(RemoteStore remote, {bool autoStart = true}) {
+    final engine = sync = SyncEngine(
+      repository: repository,
+      assets: assets,
+      remote: remote,
+    );
+    coordinator = SyncCoordinator(engine);
+    if (repository is SqliteNotebookRepository) {
+      (repository as SqliteNotebookRepository).onLocalChange =
+          coordinator!.notifyLocalChange;
+    }
+    if (autoStart) coordinator!.start();
+  }
+
+  Future<void> stopSync() async {
+    if (repository is SqliteNotebookRepository) {
+      (repository as SqliteNotebookRepository).onLocalChange = null;
+    }
+    coordinator?.dispose();
+    coordinator = null;
+    final old = sync;
+    sync = null;
+    old?.dispose();
+    await old?.idle;
+  }
+
   static Future<AppServices> open(String root, {DocumentFiles? files}) async {
     await Directory(root).create(recursive: true);
     final device = File(p.join(root, 'device-id.txt'));
@@ -52,6 +84,9 @@ class AppServices {
   }
 
   Future<void> close() async {
+    if (_closed) return;
+    _closed = true;
+    await stopSync();
     await audio.dispose();
     pdf.dispose();
     library.dispose();

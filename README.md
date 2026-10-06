@@ -8,7 +8,7 @@ El código actual incorpora importación de PDF, anotaciones sobre sus páginas,
 
 El editor incluye modo lectura, ajuste a hoja y ancho, porcentajes de zoom y bloqueo del zoom. Se pueden anclar comentarios de texto y notas de voz a la hoja. El audio comienza únicamente al pulsar Grabar, se puede escuchar o descartar y se detiene al pasar la app al fondo. Android usa su micrófono y Linux necesita PipeWire (pw-record/pw-play) o ALSA (arecord/aplay); los recursos se guardan como WAV mono de 16 kHz. Los comentarios permanecen editables en Nala; el PDF exportado contiene las hojas y tinta, sin adjuntar las notas de voz.
 
-El guardado todavía es local: cada dispositivo conserva sus propios apuntes. La sincronización con Drive es la etapa final, en implementación. Ver [estado y prioridades](docs/status.md).
+La sincronización automática con Drive está incorporada al código: carpetas, revisiones, PDF y voz, con reintentos y bibliotecas separadas por cuenta. La versión pública conserva el guardado local porque todavía necesita registrar los clientes OAuth en Google Cloud. Ver [configuración de Drive](docs/drive-setup.md) y [estado](docs/status.md).
 
 Las versiones de prueba disponibles se publican en [Releases](https://github.com/felipendelicia/nala/releases). La primera corresponde al editor local previo al trabajo de PDF; su APK fue probado en la tablet. Los archivos compilados se distribuyen allí y no se incluyen en el historial de código.
 

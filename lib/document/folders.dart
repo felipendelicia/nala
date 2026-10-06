@@ -46,4 +46,5 @@ abstract interface class FolderRepository {
   Future<List<NoteFolder>> listFolders({bool includeDeleted = false});
   Future<void> saveFolder(NoteFolder folder);
   Future<void> deleteFolder(String id);
+  Future<void> mergeFolders(List<NoteFolder> folders);
 }

@@ -19,7 +19,9 @@ Felipe confirmó que la primera versión funciona en la tablet. Esta mejora de p
 
 ## Etapa final
 
-La sincronización automática con Drive se implementa después de las mejoras locales. La conexión real exige configurar OAuth de la app en Google Cloud. Hasta conectarla, los apuntes permanecen en el dispositivo.
+La sincronización automática con Drive está implementada después de las mejoras locales. Incluye reintentos, transferencia de PDF/voz, carpetas y preservación de versiones concurrentes. Conectar por primera vez adopta la biblioteca local y conserva el original; otras cuentas mantienen sus propias bases, recursos y colas. La autenticación Linux usa navegador/PKCE y llavero; Android usa Google Sign-In.
+
+La versión pública todavía requiere registrar los clientes OAuth de Nala en Google Cloud y compilar con esos identificadores. La conexión real entre tablet y PC no se ha probado. Instrucciones en [Drive](drive-setup.md); hasta configurarlo los apuntes permanecen en el dispositivo.
 
 ## Publicación
 

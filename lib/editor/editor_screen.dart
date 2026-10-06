@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -27,6 +28,9 @@ import '../pdf/pdf_service.dart';
 import '../pdf/pdf_export_service.dart';
 import '../pdf/pdf_page_background.dart';
 import '../pdf/password_dialog.dart';
+import '../account/cloud_controller.dart';
+import '../account/cloud_panel.dart';
+import '../sync/sync_state.dart';
 
 class EditorScreen extends StatefulWidget {
   const EditorScreen({
@@ -37,6 +41,7 @@ class EditorScreen extends StatefulWidget {
     this.assets,
     this.audio,
     this.audioDirectory,
+    this.cloud,
   });
   final EditorController controller;
   final PdfService? pdf;
@@ -44,6 +49,7 @@ class EditorScreen extends StatefulWidget {
   final AssetStore? assets;
   final AudioDevice? audio;
   final String? audioDirectory;
+  final CloudController? cloud;
   @override
   State<EditorScreen> createState() => _EditorScreenState();
 }
@@ -53,6 +59,60 @@ class _EditorScreenState extends State<EditorScreen> {
   bool disposing = false, reading = false;
   bool exporting = false;
   bool showComments = false, placingComment = false, commentOpen = false;
+  bool remoteDirty = false, refreshingRemote = false;
+  bool get canReceiveRemote =>
+      mounted &&
+      !disposing &&
+      !closing &&
+      !exporting &&
+      !commentOpen &&
+      !router.isWriting &&
+      start == null &&
+      !widget.controller.saving;
+  @override
+  void initState() {
+    super.initState();
+    widget.cloud?.addListener(syncChanged);
+    widget.controller.addListener(localSettled);
+  }
+
+  void syncChanged() {
+    if (widget.cloud?.status.phase == SyncPhase.synced) {
+      remoteDirty = true;
+      unawaited(refreshRemote());
+    }
+  }
+
+  void localSettled() {
+    if (!widget.controller.saving) unawaited(refreshRemote());
+  }
+
+  Future<void> refreshRemote() async {
+    if (!remoteDirty || refreshingRemote || !canReceiveRemote) return;
+    refreshingRemote = true;
+    final previousPage = page.id;
+    try {
+      final applied = await widget.controller.refreshRemote(
+        canApply: () => canReceiveRemote,
+      );
+      if (canReceiveRemote) remoteDirty = false;
+      if (applied && mounted) {
+        setState(() {
+          final index = widget.controller.notebook.pages.indexWhere(
+            (p) => p.id == previousPage,
+          );
+          pageIndex = index < 0 ? 0 : index;
+          selected = {};
+        });
+      }
+    } catch (_) {
+      remoteDirty = false; // Keep local state; a later sync can retry.
+    } finally {
+      refreshingRemote = false;
+      if (remoteDirty && canReceiveRemote) unawaited(refreshRemote());
+    }
+  }
+
   late final CommentAudioPlayer? audioPlayer =
       widget.audio != null &&
           widget.assets != null &&
@@ -245,6 +305,7 @@ class _EditorScreenState extends State<EditorScreen> {
         start = latest = null;
         movingSelection = false;
       });
+      unawaited(refreshRemote());
     }
   }
 
@@ -407,6 +468,7 @@ class _EditorScreenState extends State<EditorScreen> {
       }
     } finally {
       commentOpen = false;
+      unawaited(refreshRemote());
     }
   }
 
@@ -565,13 +627,18 @@ class _EditorScreenState extends State<EditorScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => exporting = false);
+      if (mounted) {
+        setState(() => exporting = false);
+        unawaited(refreshRemote());
+      }
     }
   }
 
   @override
   void dispose() {
     disposing = true;
+    widget.cloud?.removeListener(syncChanged);
+    widget.controller.removeListener(localSettled);
     for (final token in neighborTokens) {
       token.cancel();
     }
@@ -1006,15 +1073,19 @@ class _EditorScreenState extends State<EditorScreen> {
                           ),
                           const SizedBox(width: 8),
                           Expanded(
-                            child: Text(
-                              controller.saving
-                                  ? 'Guardando…'
-                                  : controller.savingError != null
-                                  ? 'Guardado pendiente'
-                                  : 'Guardado en este dispositivo',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                            child:
+                                controller.saving ||
+                                    controller.savingError != null
+                                ? Text(
+                                    controller.saving
+                                        ? 'Guardando…'
+                                        : controller.savingError != null
+                                        ? 'Guardado pendiente'
+                                        : 'Guardado en este dispositivo',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  )
+                                : CloudStatus(cloud: widget.cloud),
                           ),
                           ZoomControls(
                             scale: view.scale,

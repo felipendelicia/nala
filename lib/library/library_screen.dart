@@ -14,10 +14,13 @@ import 'notebook_dialog.dart';
 import '../pdf/password_dialog.dart';
 import '../pdf/pdf_page_background.dart';
 import '../pdf/pdf_service.dart';
+import '../account/cloud_controller.dart';
+import '../account/cloud_panel.dart';
 
 class LibraryScreen extends StatefulWidget {
-  const LibraryScreen({super.key, required this.services});
+  const LibraryScreen({super.key, required this.services, this.cloud});
   final AppServices services;
+  final CloudController? cloud;
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
 }
@@ -43,6 +46,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           assets: widget.services.assets,
           audio: widget.services.audio,
           audioDirectory: '${widget.services.root}/audio-temp',
+          cloud: widget.cloud,
         ),
       ),
     );
@@ -234,11 +238,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
               const Text('Nala', style: TextStyle(fontWeight: FontWeight.w600)),
             ],
           ),
-          actions: const [
-            Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('Guardado en este dispositivo'),
-            ),
+          actions: [
+            if (widget.cloud != null)
+              CloudControls(cloud: widget.cloud!)
+            else
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('Guardado en este dispositivo'),
+              ),
           ],
         ),
         body: LayoutBuilder(
