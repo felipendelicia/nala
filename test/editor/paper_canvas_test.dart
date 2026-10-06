@@ -6,13 +6,24 @@ import 'package:apuntes/editor/paper_canvas.dart';
 import '../support/fixtures.dart';
 
 void main() {
-  testWidgets('el lápiz confirma un trazo en coordenadas de hoja', (tester) async {
+  testWidgets('el lápiz confirma un trazo en coordenadas de hoja', (
+    tester,
+  ) async {
     await tester.binding.setSurfaceSize(const Size(700, 950));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final result = <InkStroke>[];
-    await tester.pumpWidget(MaterialApp(home: Align(alignment: Alignment.topLeft,
-      child: PaperCanvas(page: fixtureNotebook().pages.single,
-        tool: EditorTool.pen, onStroke: result.add))));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: PaperCanvas(
+            page: fixtureNotebook().pages.single,
+            tool: EditorTool.pen,
+            onStroke: result.add,
+          ),
+        ),
+      ),
+    );
     final origin = tester.getTopLeft(find.byType(PaperCanvas));
     final pen = await tester.createGesture(kind: PointerDeviceKind.stylus);
     await pen.down(origin + const Offset(20, 30));
@@ -24,8 +35,15 @@ void main() {
   });
   testWidgets('un dedo y un lápiz cancelado no dejan tinta', (tester) async {
     final result = <InkStroke>[];
-    await tester.pumpWidget(MaterialApp(home: PaperCanvas(
-      page: fixtureNotebook().pages.single, tool: EditorTool.pen, onStroke: result.add)));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PaperCanvas(
+          page: fixtureNotebook().pages.single,
+          tool: EditorTool.pen,
+          onStroke: result.add,
+        ),
+      ),
+    );
     final origin = tester.getTopLeft(find.byType(PaperCanvas));
     final finger = await tester.createGesture(kind: PointerDeviceKind.touch);
     await finger.down(origin + const Offset(20, 20));

@@ -1,13 +1,41 @@
 import 'package:flutter/material.dart';
-import 'document/notebook.dart';
-import 'editor/editor_screen.dart';
+import 'package:path_provider/path_provider.dart';
+import 'bootstrap.dart';
+import 'library/library_screen.dart';
+import 'ui/app_theme.dart';
 
-class NalaApp extends StatelessWidget {
-  const NalaApp({super.key});
+class NalaApp extends StatefulWidget {
+  const NalaApp({super.key, this.services});
+  final AppServices? services;
   @override
-  Widget build(BuildContext context) => MaterialApp(title: 'Nala', debugShowCheckedModeBanner: false,
-    theme: ThemeData(useMaterial3: true, colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff24584b)),
-      scaffoldBackgroundColor: const Color(0xfff5f3ed)),
-    home: EditorScreen(notebook: Notebook.blank(id: 'first', pageId: 'first-page',
-      title: 'Mi cuaderno', pattern: PaperPattern.grid, now: DateTime.now())));
+  State<NalaApp> createState() => _NalaAppState();
+}
+
+class _NalaAppState extends State<NalaApp> {
+  late final Future<AppServices> services = widget.services != null
+      ? Future.value(widget.services)
+      : _open();
+  Future<AppServices> _open() async =>
+      AppServices.open((await getApplicationSupportDirectory()).path);
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    title: 'Nala',
+    debugShowCheckedModeBanner: false,
+    theme: nalaTheme(),
+    home: FutureBuilder<AppServices>(
+      future: services,
+      builder: (context, snapshot) {
+        if (snapshot.hasData) return LibraryScreen(services: snapshot.data!);
+        if (snapshot.hasError)
+          return const Scaffold(
+            body: Center(
+              child: Text(
+                'No se pudieron abrir tus apuntes. Revisá el espacio del dispositivo y reiniciá Nala.',
+              ),
+            ),
+          );
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      },
+    ),
+  );
 }
