@@ -98,5 +98,5 @@ expect(await assets.contains(hash), isFalse);
 ### Final
 
 - [x] Una revisión de contexto fresco sobre todo el cambio. Corregir Important/Critical con tests RED→GREEN y suite.
-- [ ] Compilaciones finales si el código cambió tras las primeras builds; commits/push al repositorio público autorizado, prerelease con APK/Linux/checksums.
-- [ ] Informe conciso de funciones entregadas, verificación y requisitos externos restantes.
+- [x] Compilaciones finales si el código cambió tras las primeras builds; commits/push al repositorio público autorizado, prerelease con APK/Linux/checksums. Publicada v0.2.0; tamaños y digests remotos coinciden con los tres archivos locales.
+- [x] Informe conciso de funciones entregadas, verificación y requisitos externos restantes. Registrado en README, docs/status.md, docs/verification.md y docs/decisions.md; entrega con enlaces de descarga y límites de S Pen/OAuth.

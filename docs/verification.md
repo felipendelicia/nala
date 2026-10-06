@@ -77,11 +77,13 @@ Ambas compilaciones finales corresponden al código `a9c5cc7d13487843c8205058a8b
 - La versión Linux final abrió en una ventana real, creó su SQLite en un directorio temporal aislado y permaneció activa. `PRAGMA quick_check` devolvió `ok`. La prueba inicial omitió el directorio de trabajo del servicio de verificación; se corrigió ese comando y la apertura pasó. No se tocaron apuntes personales.
 - El control de cierre del proceso de audio volvió a pasar con el binario Linux release y un grabador sintético, sin abrir el micrófono.
 
-Las sumas coinciden con los archivos preparados para [v0.2.0](https://github.com/felipendelicia/nala/releases/tag/v0.2.0); el APK también coincide exactamente con la salida de Flutter:
+Se publicó la [prerelease v0.2.0](https://github.com/felipendelicia/nala/releases/tag/v0.2.0), con el tag en `e89c7122fa873a251a1a51646f1cc353e0e01e28` (código y documentación de entrega). La API de GitHub confirmó los tamaños y digests SHA-256 de los tres archivos: APK, paquete Linux y SHA256SUMS. Coinciden con los archivos locales; el APK también coincide exactamente con la salida de Flutter:
 
 ```text
 ab221f87861c09f055a9bae2cfdc38279593d238b32f086f118bb974f0747161  Nala.apk
 0f862e927450015f3bac7bf47fcd69f2737df3cbdb9fd813425f88e01edfadc6  Nala-Linux-x64.tar.gz
 ```
+
+Antes de publicar se revisaron 149 archivos y 264 blobs históricos: ninguna ruta privada prohibida ni patrón conocido de credenciales. El repositorio sigue público y main recibió los commits sin sobrescribir cambios remotos.
 
 La prueba física con S Pen, audio y selector Android, y una conexión Google real entre dos dispositivos, siguen pendientes. Las decisiones de alcance y sus costes están en [decisiones](decisions.md).
