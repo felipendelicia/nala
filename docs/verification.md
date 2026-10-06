@@ -56,14 +56,32 @@ No se conectó una cuenta Google real. La compilación pública no contiene clie
 
 ## Revisión final y correcciones
 
-Una revisión independiente de los seis commits detectó seis problemas importantes y ninguno crítico. Se reprodujeron todos antes de corregirlos: audio que seguía en hidden/inactive de Linux, copia local cancelada que ignoraba notas posteriores, restauración tras desconexión si fallaba el borrado del llavero, codec completo ejecutándose en el hilo de escritura, comentarios omitidos del PDF y salto de coordenadas al abrir paneles durante un trazo. Las pruebas específicas pasaron27/27 después de los cambios.
+Una revisión independiente de los seis commits detectó seis problemas importantes y ninguno crítico. Se reprodujeron todos antes de corregirlos: audio que seguía en hidden/inactive de Linux, copia local cancelada que ignoraba notas posteriores, restauración tras desconexión si fallaba el borrado del llavero, codec completo ejecutándose en el hilo de escritura, comentarios omitidos del PDF y salto de coordenadas al abrir paneles durante un trazo. Las pruebas específicas pasaron 27/27 después de los cambios.
 
 El trabajo real del codec y la composición se instrumentan mediante un puerto de diagnóstico que identifica el isolate; los tests comprueban que confirmación perdida, duplicados y exportación ocurren fuera del hilo principal, sin umbrales dependientes de la PC. Se conserva la prueba de repintado sin reconstrucción por muestra. Los avisos de exportación/error se muestran sobre el área de trabajo y no cambian su origen; cambiar paneles cancela un gesto incompleto.
 
-El PDF incluye marcas numeradas y un anexo con texto Unicode usando DejaVu Sans, distribuida con su licencia. El anexo identifica las notas de voz y su duración; el audio se escucha en Nala. Los originales PDF permanecen preservados y el fondo exportado es una imagen a200dpi.
+El PDF incluye marcas numeradas y un anexo con texto Unicode usando DejaVu Sans, distribuida con su licencia. El anexo identifica las notas de voz y su duración; el audio se escucha en Nala. Los originales PDF permanecen preservados y el fondo exportado es una imagen a 200 dpi.
 
 Linux detiene captura y reproducción al ocultarse o perder foco, y cancela un inicio pendiente. El proceso nativo de audio recibe SIGINT del kernel si termina Nala; la prueba usa un grabador sintético y nunca abre un micrófono real. La desconexión se guarda independientemente de la limpieza del llavero y no se restaura automáticamente al reiniciar. Una adopción interrumpida vuelve a copiar el último estado local antes de seleccionar una cuenta.
 
-Suite final:88/88 unitarias/widget; análisis estático sin problemas. La prueba nativa de organización/comentarios pasó otra vez después de las correcciones. El control de proceso de audio pasó con el binario Linux real y un grabador sintético. Se renderizaron e inspeccionaron ambas páginas del PDF con comentarios: marcadores1/2, anexo, acento, λ y duración0:03 correctos. La prueba nativa PDF también incorpora escritura durante la exportación y comprueba que su aviso no cambia el origen de la hoja.
+Suite final: 88/88 unitarias/widget; análisis estático sin problemas. La prueba nativa de organización/comentarios pasó otra vez después de las correcciones. El control de proceso de audio pasó con el binario Linux real y un grabador sintético. Se renderizaron e inspeccionaron ambas páginas del PDF con comentarios: marcadores 1/2, anexo, acento, λ y duración 0:03 correctos. La prueba nativa PDF también incorpora escritura durante la exportación y comprueba que su aviso no cambia el origen de la hoja.
 
-La prueba nativa PDF final pasó1/1 con el origen de la hoja estable durante el inicio y fin de exportación y con un segundo trazo guardado mientras se preparaba la salida. La simulación inicial reutilizaba un identificador entre lápiz y dedo; se corrigió el test antes de repetir exitosamente.
+La prueba nativa PDF final pasó 1/1 con el origen de la hoja estable durante el inicio y fin de exportación y con un segundo trazo guardado mientras se preparaba la salida. La simulación inicial reutilizaba un identificador entre lápiz y dedo; se corrigió el test antes de repetir exitosamente.
+
+## Entregables finales 0.2.0
+
+Ambas compilaciones finales corresponden al código `a9c5cc7d13487843c8205058a8b04aa5e0ccfba3`, después de corregir la revisión. Los commits posteriores sólo documentan la entrega. Se ejecutaron consecutivamente mediante `tool/flutter-safe`, con los límites de recursos descritos arriba: Android release ARM64 terminó en 63 segundos y Linux x64 release en 45 segundos. Los datos OAuth no están configurados en estos binarios.
+
+- APK: 31 164 727 bytes, versión 0.2.0+2, package `com.felipe.apuntes`, API mínima 24 y target 36. `apksigner verify` confirmó firma v2 válida; conserva el certificado de la primera versión y puede actualizarla. Es una firma de desarrollo para pruebas.
+- Linux: archivo completo de 18 021 201 bytes con bibliotecas, recursos, icono, fuente/licencia y lanzador ejecutable. Se verificaron 35 entradas del paquete, resolución de todas las bibliotecas, sintaxis del lanzador y acceso del menú. La versión anterior se conserva como respaldo local.
+- La versión Linux final abrió en una ventana real, creó su SQLite en un directorio temporal aislado y permaneció activa. `PRAGMA quick_check` devolvió `ok`. La prueba inicial omitió el directorio de trabajo del servicio de verificación; se corrigió ese comando y la apertura pasó. No se tocaron apuntes personales.
+- El control de cierre del proceso de audio volvió a pasar con el binario Linux release y un grabador sintético, sin abrir el micrófono.
+
+Las sumas coinciden con los archivos preparados para [v0.2.0](https://github.com/felipendelicia/nala/releases/tag/v0.2.0); el APK también coincide exactamente con la salida de Flutter:
+
+```text
+ab221f87861c09f055a9bae2cfdc38279593d238b32f086f118bb974f0747161  Nala.apk
+0f862e927450015f3bac7bf47fcd69f2737df3cbdb9fd813425f88e01edfadc6  Nala-Linux-x64.tar.gz
+```
+
+La prueba física con S Pen, audio y selector Android, y una conexión Google real entre dos dispositivos, siguen pendientes. Las decisiones de alcance y sus costes están en [decisiones](decisions.md).

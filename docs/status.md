@@ -2,7 +2,7 @@
 
 Nala se desarrolla para tomar apuntes universitarios con S Pen en Samsung Tab S10 y continuar en Linux. El nombre y el icono se basan en la perrita de Felipe.
 
-## Editor incorporado al código 0.2.0
+## Editor 0.2.0
 
 - Tinta activa incremental en su propia capa, sin reconstruir la interfaz por cada muestra del lápiz. Presión expresiva y suavizado ajustables; los trazos anteriores mantienen su aspecto.
 - Modo lectura: lápiz, dedos y mouse permiten navegar; las acciones de edición quedan deshabilitadas.
@@ -11,7 +11,7 @@ Nala se desarrolla para tomar apuntes universitarios con S Pen en Samsung Tab S1
 - Carpetas y subcarpetas, rutas, renombrado y movimientos. Se rechazan ciclos y borrado de carpetas no vacías.
 - PDF original preservado, importación de páginas rotadas/protegidas, hojas intercaladas y exportación con tinta vectorial, fondos a 200 dpi y anexo de comentarios.
 
-El recorrido completo de PDF en Linux pasó, incluido continuar navegando durante la exportación y cancelar el selector. Se corrigió la segunda inicialización del motor PDF durante exportación. Las pruebas de comentarios, guardado/reapertura y lectura en la aplicación Linux también pasaron. La interfaz fue comprobada en tamaños de escritorio y tablet, incluido texto ampliado.
+Pasaron 88 pruebas unitarias/widget, el análisis estático y los recorridos nativos de PDF y organización/comentarios en Linux. El recorrido de PDF también comprueba escribir durante la exportación, conservar el origen de la hoja y cancelar el selector. Las compilaciones finales Android y Linux terminaron correctamente. La interfaz fue comprobada en tamaños de escritorio y tablet, incluido texto ampliado; la versión Linux final abrió con una base de prueba aislada.
 
 ## Verificación física pendiente
 
@@ -25,4 +25,4 @@ La versión pública todavía requiere registrar los clientes OAuth de Nala en G
 
 ## Publicación
 
-Repositorio público: [felipendelicia/nala](https://github.com/felipendelicia/nala). La primera [v0.1.0](https://github.com/felipendelicia/nala/releases/tag/v0.1.0) corresponde al editor anterior a PDF y a estas mejoras. La siguiente versión descargable está en preparación. No se publican cuadernos personales, bases, caches, SDK, tokens ni claves de firma.
+Repositorio público: [felipendelicia/nala](https://github.com/felipendelicia/nala). La [v0.2.0](https://github.com/felipendelicia/nala/releases/tag/v0.2.0) distribuye el APK Android ARM64 y la aplicación Linux x64 con sumas SHA-256. El acceso Nala del menú de esta PC abre la versión nueva. La primera [v0.1.0](https://github.com/felipendelicia/nala/releases/tag/v0.1.0) corresponde al editor anterior a PDF y a estas mejoras. No se publican cuadernos personales, bases, caches, SDK, tokens ni claves de firma.
