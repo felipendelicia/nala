@@ -729,16 +729,19 @@ class _EditorScreenState extends State<EditorScreen> {
                   IconButton(
                     tooltip: 'Páginas',
                     isSelected: showPages,
-                    onPressed: () => setState(() {
-                      showPages = !showPages;
-                    }),
+                    onPressed: () {
+                      router.reset();
+                      setState(() => showPages = !showPages);
+                    },
                     icon: const Icon(Icons.view_sidebar_outlined),
                   ),
                   IconButton(
                     tooltip: 'Comentarios',
                     isSelected: showComments,
-                    onPressed: () =>
-                        setState(() => showComments = !showComments),
+                    onPressed: () {
+                      router.reset();
+                      setState(() => showComments = !showComments);
+                    },
                     icon: const Icon(Icons.chat_bubble_outline),
                   ),
                   IconButton(
@@ -821,242 +824,270 @@ class _EditorScreenState extends State<EditorScreen> {
                               );
                             },
                     ),
-                  if (exporting) const LinearProgressIndicator(minHeight: 2),
-                  if (placingComment)
-                    MaterialBanner(
-                      content: const Text(
-                        'Elegí un lugar de la hoja para tu comentario.',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () =>
-                              setState(() => placingComment = false),
-                          child: const Text('Cancelar'),
-                        ),
-                      ],
-                    ),
-                  if (exporting)
-                    const Padding(
-                      padding: EdgeInsets.all(6),
-                      child: Text('Preparando PDF… Podés seguir anotando.'),
-                    ),
-                  if (pdfError != null)
-                    MaterialBanner(
-                      content: Text(
-                        pdfError is PdfPasswordException
-                            ? 'Este PDF necesita su contraseña.'
-                            : 'No se pudo mostrar el fondo PDF.',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: pdfError is PdfPasswordException
-                              ? () => unlockPdf()
-                              : () => setState(() {
-                                  pdfError = null;
-                                  pdfRenderVersion++;
-                                  neighborKey = null;
-                                }),
-                          child: Text(
-                            pdfError is PdfPasswordException
-                                ? 'Desbloquear'
-                                : 'Reintentar',
-                          ),
-                        ),
-                      ],
-                    ),
-                  if (controller.savingError != null)
-                    MaterialBanner(
-                      content: const Text(
-                        'No se pudo guardar. Tus cambios siguen en memoria.',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: controller.retrySave,
-                          child: const Text('Reintentar'),
-                        ),
-                      ],
-                    ),
                   Expanded(
-                    child: Row(
+                    child: Stack(
                       children: [
-                        if (showPages)
-                          PagePanel(
-                            pages: controller.notebook.pages,
-                            currentPage: pageIndex,
-                            onPage: changePage,
-                            onAdd: reading ? null : addPage,
-                            pdf: widget.pdf,
-                          ),
-                        Expanded(
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              if (viewSize == null ||
-                                  fittedPage != currentPage.id) {
-                                viewSize = constraints.biggest;
-                                fittedPage = currentPage.id;
-                                view.fit(
-                                  constraints.maxWidth,
-                                  constraints.maxHeight,
-                                  currentPage.width,
-                                  currentPage.height,
-                                );
-                              }
-                              viewSize = constraints.biggest;
-                              var displayPage = currentPage;
-                              if (erased.isNotEmpty) {
-                                displayPage = displayPage.copyWith(
-                                  strokes: displayPage.strokes
-                                      .where((s) => !erased.contains(s.id))
-                                      .toList(),
-                                );
-                              }
-                              if (movingSelection &&
-                                  start != null &&
-                                  latest != null) {
-                                final delta = latest! - start!;
-                                displayPage = displayPage.copyWith(
-                                  strokes: displayPage.strokes
-                                      .map(
-                                        (s) => selected.contains(s.id)
-                                            ? StrokeGeometry.translate(
-                                                s,
-                                                delta.dx,
-                                                delta.dy,
-                                              )
-                                            : s,
-                                      )
-                                      .toList(),
-                                );
-                              }
-                              return ClipRect(
-                                child: Listener(
-                                  behavior: HitTestBehavior.opaque,
-                                  onPointerDown: pointerDown,
-                                  onPointerMove: (e) => router.move(sample(e)),
-                                  onPointerUp: (e) => router.up(sample(e)),
-                                  onPointerCancel: (e) =>
-                                      router.cancel(e.pointer),
-                                  onPointerHover: (e) =>
-                                      router.hover(sample(e)),
-                                  onPointerSignal: (e) {
-                                    if (e is PointerScrollEvent &&
-                                        !router.isWriting) {
-                                      setState(
-                                        () => view.zoom(
-                                          math.exp(-e.scrollDelta.dy / 500),
-                                          math.Point(
-                                            e.localPosition.dx,
-                                            e.localPosition.dy,
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                  },
-                                  child: ColoredBox(
-                                    color: const Color(0xffe8ece6),
-                                    child: Stack(
-                                      children: [
-                                        Positioned(
-                                          left: 0,
-                                          top: 0,
-                                          width: currentPage.width,
-                                          height: currentPage.height,
-                                          child: Transform(
-                                            transform: view.matrix,
-                                            alignment: Alignment.topLeft,
-                                            child: IgnorePointer(
-                                              child: Stack(
-                                                fit: StackFit.expand,
-                                                children: [
-                                                  PaperCanvas(
-                                                    page: displayPage,
-                                                    externalInput: true,
-                                                    tool: tool,
-                                                    onStroke: (_) {},
-                                                    background:
-                                                        widget.pdf == null ||
-                                                            currentPage
-                                                                    .background
-                                                                    .assetId ==
-                                                                null
-                                                        ? null
-                                                        : PdfPageBackground(
-                                                            key: ValueKey(
-                                                              '${currentPage.id}-$pdfRenderVersion',
-                                                            ),
-                                                            pdf: widget.pdf!,
-                                                            page: currentPage,
-                                                            scale:
-                                                                view.scale *
-                                                                MediaQuery.devicePixelRatioOf(
-                                                                  context,
-                                                                ),
-                                                            onError: (error) {
-                                                              if (mounted) {
-                                                                setState(
-                                                                  () =>
-                                                                      pdfError =
-                                                                          error,
-                                                                );
-                                                              }
-                                                            },
-                                                            onRendered:
-                                                                preloadNeighbors,
-                                                          ),
-                                                  ),
-                                                  RepaintBoundary(
-                                                    child: CustomPaint(
-                                                      painter: DraftInkPainter(
-                                                        draft,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  CustomPaint(
-                                                    painter: CommentPinsPainter(
-                                                      currentPage.comments,
-                                                      view.scale,
-                                                    ),
-                                                  ),
-                                                  CustomPaint(
-                                                    painter: _SelectionPainter(
-                                                      displayPage,
-                                                      selected,
-                                                      gestureTool ==
-                                                                  EditorTool
-                                                                      .selection &&
-                                                              !movingSelection &&
-                                                              start != null &&
-                                                              latest != null
-                                                          ? Rect.fromPoints(
-                                                              start!,
-                                                              latest!,
-                                                            )
-                                                          : null,
-                                                      view.scale,
-                                                    ),
-                                                  ),
-                                                ],
+                        Row(
+                          children: [
+                            if (showPages)
+                              PagePanel(
+                                pages: controller.notebook.pages,
+                                currentPage: pageIndex,
+                                onPage: changePage,
+                                onAdd: reading ? null : addPage,
+                                pdf: widget.pdf,
+                              ),
+                            Expanded(
+                              child: LayoutBuilder(
+                                builder: (context, constraints) {
+                                  if (viewSize == null ||
+                                      fittedPage != currentPage.id) {
+                                    viewSize = constraints.biggest;
+                                    fittedPage = currentPage.id;
+                                    view.fit(
+                                      constraints.maxWidth,
+                                      constraints.maxHeight,
+                                      currentPage.width,
+                                      currentPage.height,
+                                    );
+                                  }
+                                  viewSize = constraints.biggest;
+                                  var displayPage = currentPage;
+                                  if (erased.isNotEmpty) {
+                                    displayPage = displayPage.copyWith(
+                                      strokes: displayPage.strokes
+                                          .where((s) => !erased.contains(s.id))
+                                          .toList(),
+                                    );
+                                  }
+                                  if (movingSelection &&
+                                      start != null &&
+                                      latest != null) {
+                                    final delta = latest! - start!;
+                                    displayPage = displayPage.copyWith(
+                                      strokes: displayPage.strokes
+                                          .map(
+                                            (s) => selected.contains(s.id)
+                                                ? StrokeGeometry.translate(
+                                                    s,
+                                                    delta.dx,
+                                                    delta.dy,
+                                                  )
+                                                : s,
+                                          )
+                                          .toList(),
+                                    );
+                                  }
+                                  return ClipRect(
+                                    child: Listener(
+                                      behavior: HitTestBehavior.opaque,
+                                      onPointerDown: pointerDown,
+                                      onPointerMove: (e) =>
+                                          router.move(sample(e)),
+                                      onPointerUp: (e) => router.up(sample(e)),
+                                      onPointerCancel: (e) =>
+                                          router.cancel(e.pointer),
+                                      onPointerHover: (e) =>
+                                          router.hover(sample(e)),
+                                      onPointerSignal: (e) {
+                                        if (e is PointerScrollEvent &&
+                                            !router.isWriting) {
+                                          setState(
+                                            () => view.zoom(
+                                              math.exp(-e.scrollDelta.dy / 500),
+                                              math.Point(
+                                                e.localPosition.dx,
+                                                e.localPosition.dy,
                                               ),
                                             ),
-                                          ),
+                                          );
+                                        }
+                                      },
+                                      child: ColoredBox(
+                                        color: const Color(0xffe8ece6),
+                                        child: Stack(
+                                          children: [
+                                            Positioned(
+                                              left: 0,
+                                              top: 0,
+                                              width: currentPage.width,
+                                              height: currentPage.height,
+                                              child: Transform(
+                                                transform: view.matrix,
+                                                alignment: Alignment.topLeft,
+                                                child: IgnorePointer(
+                                                  child: Stack(
+                                                    fit: StackFit.expand,
+                                                    children: [
+                                                      PaperCanvas(
+                                                        page: displayPage,
+                                                        externalInput: true,
+                                                        tool: tool,
+                                                        onStroke: (_) {},
+                                                        background:
+                                                            widget.pdf ==
+                                                                    null ||
+                                                                currentPage
+                                                                        .background
+                                                                        .assetId ==
+                                                                    null
+                                                            ? null
+                                                            : PdfPageBackground(
+                                                                key: ValueKey(
+                                                                  '${currentPage.id}-$pdfRenderVersion',
+                                                                ),
+                                                                pdf:
+                                                                    widget.pdf!,
+                                                                page:
+                                                                    currentPage,
+                                                                scale:
+                                                                    view.scale *
+                                                                    MediaQuery.devicePixelRatioOf(
+                                                                      context,
+                                                                    ),
+                                                                onError: (error) {
+                                                                  if (mounted) {
+                                                                    setState(
+                                                                      () => pdfError =
+                                                                          error,
+                                                                    );
+                                                                  }
+                                                                },
+                                                                onRendered:
+                                                                    preloadNeighbors,
+                                                              ),
+                                                      ),
+                                                      RepaintBoundary(
+                                                        child: CustomPaint(
+                                                          painter:
+                                                              DraftInkPainter(
+                                                                draft,
+                                                              ),
+                                                        ),
+                                                      ),
+                                                      CustomPaint(
+                                                        painter:
+                                                            CommentPinsPainter(
+                                                              currentPage
+                                                                  .comments,
+                                                              view.scale,
+                                                            ),
+                                                      ),
+                                                      CustomPaint(
+                                                        painter: _SelectionPainter(
+                                                          displayPage,
+                                                          selected,
+                                                          gestureTool ==
+                                                                      EditorTool
+                                                                          .selection &&
+                                                                  !movingSelection &&
+                                                                  start !=
+                                                                      null &&
+                                                                  latest != null
+                                                              ? Rect.fromPoints(
+                                                                  start!,
+                                                                  latest!,
+                                                                )
+                                                              : null,
+                                                          view.scale,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                      ],
+                                      ),
                                     ),
+                                  );
+                                },
+                              ),
+                            ),
+                            if (showComments)
+                              CommentsPanel(
+                                comments: currentPage.comments,
+                                onOpen: openComment,
+                                onClose: () {
+                                  router.reset();
+                                  setState(() => showComments = false);
+                                },
+                                onAdd: reading ? null : placeComment,
+                                onDelete: reading ? null : deleteComment,
+                                player: audioPlayer,
+                              ),
+                          ],
+                        ),
+                        Positioned(
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          child: Column(
+                            children: [
+                              if (exporting)
+                                const LinearProgressIndicator(minHeight: 2),
+                              if (placingComment)
+                                MaterialBanner(
+                                  content: const Text(
+                                    'Elegí un lugar de la hoja para tu comentario.',
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => setState(
+                                        () => placingComment = false,
+                                      ),
+                                      child: const Text('Cancelar'),
+                                    ),
+                                  ],
+                                ),
+                              if (exporting)
+                                const Padding(
+                                  padding: EdgeInsets.all(6),
+                                  child: Text(
+                                    'Preparando PDF… Podés seguir anotando.',
                                   ),
                                 ),
-                              );
-                            },
+                              if (pdfError != null)
+                                MaterialBanner(
+                                  content: Text(
+                                    pdfError is PdfPasswordException
+                                        ? 'Este PDF necesita su contraseña.'
+                                        : 'No se pudo mostrar el fondo PDF.',
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed:
+                                          pdfError is PdfPasswordException
+                                          ? () => unlockPdf()
+                                          : () => setState(() {
+                                              pdfError = null;
+                                              pdfRenderVersion++;
+                                              neighborKey = null;
+                                            }),
+                                      child: Text(
+                                        pdfError is PdfPasswordException
+                                            ? 'Desbloquear'
+                                            : 'Reintentar',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              if (controller.savingError != null)
+                                MaterialBanner(
+                                  content: const Text(
+                                    'No se pudo guardar. Tus cambios siguen en memoria.',
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: controller.retrySave,
+                                      child: const Text('Reintentar'),
+                                    ),
+                                  ],
+                                ),
+                            ],
                           ),
                         ),
-                        if (showComments)
-                          CommentsPanel(
-                            comments: currentPage.comments,
-                            onOpen: openComment,
-                            onClose: () => setState(() => showComments = false),
-                            onAdd: reading ? null : placeComment,
-                            onDelete: reading ? null : deleteComment,
-                            player: audioPlayer,
-                          ),
                       ],
                     ),
                   ),

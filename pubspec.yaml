@@ -35,6 +35,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/nala-icon.png
+    - assets/fonts/NalaSans.ttf
 flutter_launcher_icons:
   android: true
   image_path: assets/nala-icon.png

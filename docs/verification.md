@@ -52,3 +52,18 @@ El adaptador HTTP cubre paginación, multipart idempotente, 401/revocación, Ret
 Las pruebas de cuenta usan particiones SQLite y directorios reales: primera adopción, copia de recursos y carpetas, datos offline después de salir, cambio A/B, reinicio y cancelación de peticiones antiguas. El editor aplica sólo un avance remoto descendiente de su versión guardada, después de soltar el lápiz; conserva la edición actual cuando existen dos ramas. El panel no muestra una conexión ficticia si faltan clientes OAuth.
 
 No se conectó una cuenta Google real. La compilación pública no contiene clientes OAuth; requiere los pasos de docs/drive-setup.md para habilitar Drive. Los tests del SDK Android, los permisos de micrófono y el S Pen necesitan comprobación física.
+
+
+## Revisión final y correcciones
+
+Una revisión independiente de los seis commits detectó seis problemas importantes y ninguno crítico. Se reprodujeron todos antes de corregirlos: audio que seguía en hidden/inactive de Linux, copia local cancelada que ignoraba notas posteriores, restauración tras desconexión si fallaba el borrado del llavero, codec completo ejecutándose en el hilo de escritura, comentarios omitidos del PDF y salto de coordenadas al abrir paneles durante un trazo. Las pruebas específicas pasaron27/27 después de los cambios.
+
+El trabajo real del codec y la composición se instrumentan mediante un puerto de diagnóstico que identifica el isolate; los tests comprueban que confirmación perdida, duplicados y exportación ocurren fuera del hilo principal, sin umbrales dependientes de la PC. Se conserva la prueba de repintado sin reconstrucción por muestra. Los avisos de exportación/error se muestran sobre el área de trabajo y no cambian su origen; cambiar paneles cancela un gesto incompleto.
+
+El PDF incluye marcas numeradas y un anexo con texto Unicode usando DejaVu Sans, distribuida con su licencia. El anexo identifica las notas de voz y su duración; el audio se escucha en Nala. Los originales PDF permanecen preservados y el fondo exportado es una imagen a200dpi.
+
+Linux detiene captura y reproducción al ocultarse o perder foco, y cancela un inicio pendiente. El proceso nativo de audio recibe SIGINT del kernel si termina Nala; la prueba usa un grabador sintético y nunca abre un micrófono real. La desconexión se guarda independientemente de la limpieza del llavero y no se restaura automáticamente al reiniciar. Una adopción interrumpida vuelve a copiar el último estado local antes de seleccionar una cuenta.
+
+Suite final:88/88 unitarias/widget; análisis estático sin problemas. La prueba nativa de organización/comentarios pasó otra vez después de las correcciones. El control de proceso de audio pasó con el binario Linux real y un grabador sintético. Se renderizaron e inspeccionaron ambas páginas del PDF con comentarios: marcadores1/2, anexo, acento, λ y duración0:03 correctos. La prueba nativa PDF también incorpora escritura durante la exportación y comprueba que su aviso no cambia el origen de la hoja.
+
+La prueba nativa PDF final pasó1/1 con el origen de la hoja estable durante el inicio y fin de exportación y con un segundo trazo guardado mientras se preparaba la salida. La simulación inicial reutilizaba un identificador entre lápiz y dedo; se corrigió el test antes de repetir exitosamente.

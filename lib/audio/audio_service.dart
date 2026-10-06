@@ -1,6 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleState;
+
+bool audioLeavesForeground(AppLifecycleState state) =>
+    state == AppLifecycleState.paused ||
+    state == AppLifecycleState.detached ||
+    state == AppLifecycleState.hidden ||
+    (Platform.isLinux && state == AppLifecycleState.inactive);
 
 class AudioPermissionDenied implements Exception {
   const AudioPermissionDenied();
@@ -75,7 +82,6 @@ class LinuxAudioDevice implements AudioDevice {
     if (_capture != null || _starting) {
       throw StateError('Ya hay una grabación en curso.');
     }
-    await stopPlayback();
     final command = _command('pw-record', 'arecord');
     if (command == null) {
       throw StateError(
@@ -85,12 +91,15 @@ class LinuxAudioDevice implements AudioDevice {
     _starting = true;
     final token = ++_generation;
     try {
-      final process = await Process.start(
+      await stopPlayback();
+      if (token != _generation) throw StateError('Grabación cancelada.');
+      final process = await Process.start(Platform.resolvedExecutable, [
+        '--nala-audio-helper',
         command,
-        command.endsWith('pw-record')
+        ...command.endsWith('pw-record')
             ? ['--rate', '16000', '--channels', '1', '--format', 's16', path]
             : ['-f', 'S16_LE', '-r', '16000', '-c', '1', '-t', 'wav', path],
-      );
+      ]);
       unawaited(process.stdout.drain<void>());
       unawaited(process.stderr.drain<void>());
       if (token != _generation) {
@@ -161,7 +170,11 @@ class LinuxAudioDevice implements AudioDevice {
       throw StateError('No hay un reproductor de audio disponible.');
     }
     final token = ++_playbackGeneration;
-    final process = await Process.start(command, [path]);
+    final process = await Process.start(Platform.resolvedExecutable, [
+      '--nala-audio-helper',
+      command,
+      path,
+    ]);
     unawaited(process.stdout.drain<void>());
     unawaited(process.stderr.drain<void>());
     if (token != _playbackGeneration) {

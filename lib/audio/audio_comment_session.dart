@@ -174,8 +174,7 @@ class AudioCommentSession extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.detached) {
+    if (audioLeavesForeground(state)) {
       if (recording) {
         unawaited(
           stop().catchError((Object e) {

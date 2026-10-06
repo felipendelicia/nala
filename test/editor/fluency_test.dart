@@ -13,6 +13,39 @@ import '../support/fixtures.dart';
 import '../support/memory_repository.dart';
 
 void main() {
+  testWidgets(
+    'abrir paneles durante un trazo cancela el gesto antes de mover la hoja',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      var id = 0;
+      final controller = EditorController(
+        notebook: fixtureNotebook(),
+        repository: MemoryRepository(),
+        deviceId: 'pc',
+        newId: () => 'r${++id}',
+        now: () => DateTime.utc(2026),
+      );
+      await tester.pumpWidget(
+        MaterialApp(home: EditorScreen(controller: controller)),
+      );
+      await tester.pumpAndSettle();
+      final pen = await tester.startGesture(
+        tester.getCenter(find.byType(PaperCanvas)),
+        kind: PointerDeviceKind.stylus,
+        pointer: 4,
+      );
+      await pen.moveBy(const Offset(10, 5));
+      await tester.tap(find.byTooltip('Páginas'));
+      await tester.pump();
+      await pen.moveBy(const Offset(10, 5));
+      await pen.up();
+      await tester.pumpAndSettle();
+      expect(controller.notebook.pages.first.strokes, hasLength(1));
+      await tester.pumpWidget(const SizedBox());
+      controller.dispose();
+    },
+  );
   test(
     'la presión nueva es expresiva y la tinta antigua mantiene su ancho',
     () {

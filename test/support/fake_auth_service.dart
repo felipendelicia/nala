@@ -50,6 +50,7 @@ class FakeTokenStore implements TokenStore {
 
   @override
   Future<void> delete() async {
+    if (unavailable) throw StateError('Sin llavero');
     value = null;
   }
 }

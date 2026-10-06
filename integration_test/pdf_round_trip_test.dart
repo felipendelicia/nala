@@ -94,13 +94,29 @@ void main() {
       await tester.tap(find.byTooltip('Agregar hoja').first);
       await tester.pumpAndSettle();
       expect(find.text('2/3'), findsOneWidget);
+      final origin = tester.getTopLeft(canvas);
+      final whileExporting = await tester.startGesture(
+        tester.getCenter(canvas),
+        kind: PointerDeviceKind.stylus,
+        pointer: 40,
+      );
+      await whileExporting.moveBy(const Offset(10, 5));
       await tester.tap(find.byTooltip('Exportar PDF'));
       debugPrint('pdf-flow: export requested');
       // The editor must remain usable while the worker prepares PDF pixels.
       await tester.pump();
+      expect(
+        tester.getTopLeft(canvas),
+        origin,
+        reason:
+            'El aviso de exportación no debe cambiar las coordenadas del lápiz.',
+      );
+      await whileExporting.moveBy(const Offset(10, 5));
+      await whileExporting.up();
       await tester.tap(find.byTooltip('Hoja siguiente'));
       await tester.pump();
       expect(find.text('3/3'), findsOneWidget);
+      final exportOrigin = tester.getTopLeft(canvas);
       await pumpUntil(tester, () => files.saved != null, 'el PDF exportado');
       debugPrint('pdf-flow: export received');
       await tester.pumpAndSettle(
@@ -109,6 +125,7 @@ void main() {
         const Duration(seconds: 60),
       );
       expect(files.saved, isNotNull);
+      expect(tester.getTopLeft(canvas), exportOrigin);
       await captureUi(tester, find.byKey(previewKey), 'pdf-navigation');
       final output = await PdfDocument.openData(files.saved!);
       expect(output.pages.length, 3);
@@ -127,6 +144,7 @@ void main() {
       expect(saved.pages[0].strokes, hasLength(1));
       expect(saved.pages[0].background.pageNumber, 1);
       expect(saved.pages[1].background.pattern, isNotNull);
+      expect(saved.pages[1].strokes, hasLength(1));
       expect(saved.pages[2].background.pageNumber, 2);
       await tester.pumpWidget(const SizedBox.shrink());
       await services.close();

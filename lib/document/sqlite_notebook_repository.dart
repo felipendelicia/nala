@@ -141,6 +141,12 @@ class SqliteNotebookRepository implements NotebookRepository, FolderRepository {
     onLocalChange?.call();
   }
 
+  // Only called for a never-selected account partition during local adoption.
+  // Its previous contents are an interrupted copy, never synchronized work.
+  Future<void> resetForAdoption() async {
+    await _call('resetAdoption');
+  }
+
   @override
   Future<List<NoteFolder>> listFolders({bool includeDeleted = false}) async =>
       ((await _call('folders', {'includeDeleted': includeDeleted})) as List)
@@ -359,6 +365,12 @@ void _databaseWorker((SendPort, String) config) {
               DateTime.now().toUtc().toIso8601String(),
               id,
             ]);
+          });
+        case 'resetAdoption':
+          _transaction(db, () {
+            db.execute('DELETE FROM upload_queue');
+            db.execute('DELETE FROM revisions');
+            db.execute('DELETE FROM folders');
           });
         case 'queueAll':
           db.execute(

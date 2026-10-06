@@ -9,7 +9,7 @@ Nala se desarrolla para tomar apuntes universitarios con S Pen en Samsung Tab S1
 - Ajuste a hoja y ancho, porcentajes de zoom, bloqueo de escala conservando desplazamiento.
 - Comentarios anclados a la hoja, texto editable y grabaciones de voz con guardar, escuchar y descartar. Captura sólo por acción explícita; se detiene al suspender o cerrar.
 - Carpetas y subcarpetas, rutas, renombrado y movimientos. Se rechazan ciclos y borrado de carpetas no vacías.
-- PDF original preservado, importación de páginas rotadas/protegidas, hojas intercaladas y exportación con tinta vectorial y fondos a 200 dpi.
+- PDF original preservado, importación de páginas rotadas/protegidas, hojas intercaladas y exportación con tinta vectorial, fondos a 200 dpi y anexo de comentarios.
 
 El recorrido completo de PDF en Linux pasó, incluido continuar navegando durante la exportación y cancelar el selector. Se corrigió la segunda inicialización del motor PDF durante exportación. Las pruebas de comentarios, guardado/reapertura y lectura en la aplicación Linux también pasaron. La interfaz fue comprobada en tamaños de escritorio y tablet, incluido texto ampliado.
 

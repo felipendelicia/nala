@@ -1,22 +1,21 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:isolate';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 import '../account/auth_service.dart';
 import '../document/folders.dart';
-import '../document/notebook_codec.dart';
 import '../document/revision.dart';
+import '../document/document_worker.dart';
 import 'drive_http.dart';
 import 'remote_store.dart';
 import 'upload_session_store.dart';
 
 String _sha(Uint8List bytes) => sha256.convert(bytes).toString();
 String _md5(Uint8List bytes) => md5.convert(bytes).toString();
-String _revisionJson(Revision revision) =>
-    NotebookCodec.encodeRevision(revision);
 String _quote(String value) =>
     value.replaceAll(r'\', r'\\').replaceAll("'", r"\'");
 String _property(String key, String value) =>
@@ -28,8 +27,11 @@ class DriveRemoteStore implements RemoteStore {
     required http.Client client,
     required this.accountId,
     required this.sessions,
+    this.codecEvents,
   }) : _http = DriveHttp(auth: auth, client: client, accountId: accountId);
   final String accountId;
+  final SendPort? codecEvents;
+  DocumentWorker get _worker => DocumentWorker(events: codecEvents);
   final UploadSessionStore sessions;
   final DriveHttp _http;
   String? _root;
@@ -89,23 +91,15 @@ class DriveRemoteStore implements RemoteStore {
       final cacheKey =
           '${file['id']}:${file['md5Checksum']}:${file['modifiedTime']}';
       final revision = file['md5Checksum'] == null
-          ? await compute(
-              NotebookCodec.decodeRevision,
-              utf8.decode(await _read(file)),
-            )
-          : (_revisions[cacheKey] ??= await compute(
-              NotebookCodec.decodeRevision,
-              utf8.decode(await _read(file)),
-            ));
+          ? await _worker.decode(await _read(file))
+          : (_revisions[cacheKey] ??= await _worker.decode(await _read(file)));
       if (revision.id != revisionId ||
           (properties['documentId'] != null &&
               revision.notebook.id != properties['documentId'])) {
         throw const FormatException('Identidad de revisión inválida');
       }
       final old = result[revision.id];
-      if (old != null &&
-          NotebookCodec.encodeRevision(old) !=
-              NotebookCodec.encodeRevision(revision)) {
+      if (old != null && !await _worker.equal(old, revision)) {
         throw const FormatException(
           'Revisión duplicada con contenido diferente',
         );
@@ -152,12 +146,12 @@ class DriveRemoteStore implements RemoteStore {
     final files = await _find(kind, property, id);
     if (files.isEmpty) return false;
     for (final file in files) {
-      final content = utf8.decode(await _read(file));
+      final bytes = await _read(file);
       final canonical = kind == 'revision'
-          ? NotebookCodec.encodeRevision(NotebookCodec.decodeRevision(content))
+          ? await _worker.canonical(bytes)
           : jsonEncode(
               NoteFolder.fromJson(
-                jsonDecode(content) as Map<String, dynamic>,
+                jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>,
               ).toJson(),
             );
       if (canonical != expected) {
@@ -187,8 +181,7 @@ class DriveRemoteStore implements RemoteStore {
         ...extra,
       },
     });
-    final body =
-        '--$boundary\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n$metadata\r\n--$boundary\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n$payload\r\n--$boundary--\r\n';
+    final body = await _worker.multipart(metadata, payload, boundary);
     try {
       await _http.request(
         'POST',
@@ -197,7 +190,7 @@ class DriveRemoteStore implements RemoteStore {
           'fields': 'id',
         }),
         headers: {'Content-Type': 'multipart/related; boundary=$boundary'},
-        body: body,
+        bytes: body,
       );
     } on TimeoutException {
       if (!await _confirmed(kind, property, id, payload)) rethrow;
@@ -211,7 +204,7 @@ class DriveRemoteStore implements RemoteStore {
     'revision',
     'revisionId',
     revision.id,
-    await compute(_revisionJson, revision),
+    await _worker.encode(revision),
     {'documentId': revision.notebook.id},
   );
   @override

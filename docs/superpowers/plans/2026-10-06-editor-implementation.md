@@ -97,6 +97,6 @@ expect(await assets.contains(hash), isFalse);
 
 ### Final
 
-- [ ] Una revisión de contexto fresco sobre todo el cambio. Corregir Important/Critical con tests RED→GREEN y suite.
+- [x] Una revisión de contexto fresco sobre todo el cambio. Corregir Important/Critical con tests RED→GREEN y suite.
 - [ ] Compilaciones finales si el código cambió tras las primeras builds; commits/push al repositorio público autorizado, prerelease con APK/Linux/checksums.
 - [ ] Informe conciso de funciones entregadas, verificación y requisitos externos restantes.

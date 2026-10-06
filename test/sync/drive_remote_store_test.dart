@@ -1,3 +1,4 @@
+import 'dart:isolate';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -8,6 +9,7 @@ import 'package:http/testing.dart';
 import 'package:apuntes/document/notebook_codec.dart';
 import 'package:apuntes/account/auth_service.dart';
 import 'package:apuntes/document/revision.dart';
+import 'package:apuntes/document/notebook.dart';
 import 'package:apuntes/sync/drive_remote_store.dart';
 import 'package:apuntes/sync/upload_session_store.dart';
 import 'package:apuntes/sync/remote_store.dart';
@@ -48,6 +50,99 @@ Map<String, Object> metadata(
 };
 
 void main() {
+  test(
+    'confirmación perdida y duplicados procesan el documento fuera de UI',
+    () async {
+      final base = revision('large');
+      final r = Revision(
+        id: base.id,
+        deviceId: base.deviceId,
+        parentId: base.parentId,
+        createdAt: base.createdAt,
+        notebook: base.notebook.copyWith(
+          pages: [
+            base.notebook.pages.first.copyWith(
+              strokes: [
+                InkStroke(
+                  id: 'long',
+                  tool: InkTool.pen,
+                  argb: 0xff202020,
+                  width: 2,
+                  points: List.generate(
+                    5000,
+                    (i) => InkPoint(
+                      x: 20 + i % 500 * 1.0,
+                      y: 20 + i ~/ 500 * 1.0,
+                      pressure: .5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+      final payload = NotebookCodec.encodeRevision(r);
+      final events = <(String, SendPort)>[];
+      final receive = ReceivePort();
+      final subscription = receive.listen(
+        (event) => events.add(event as (String, SendPort)),
+      );
+      NotebookCodec.diagnostics = receive.sendPort;
+      var written = false;
+      final client = MockClient((request) async {
+        if (request.method == 'POST' &&
+            request.url.path.startsWith('/upload/')) {
+          written = true;
+          throw TimeoutException('ack perdido');
+        }
+        if (request.url.queryParameters['alt'] == 'media') {
+          return http.Response.bytes(utf8.encode(payload), 200);
+        }
+        final q = request.url.queryParameters['q'] ?? '';
+        return http.Response(
+          jsonEncode({
+            'files': q.contains("value='root'")
+                ? [metadata('root', 'root', {})]
+                : written
+                ? [
+                    metadata('one', 'revision', {'revisionId': r.id}),
+                    metadata('two', 'revision', {'revisionId': r.id}),
+                  ]
+                : [],
+          }),
+          200,
+        );
+      });
+      final remote = DriveRemoteStore(
+        auth: FakeAuthService(),
+        client: client,
+        accountId: 'student',
+        sessions: TestUploadSessions(),
+        codecEvents: receive.sendPort,
+      );
+      try {
+        await remote.putRevision(r);
+        expect(await remote.listRevisions(), hasLength(1));
+        await Future<void>.delayed(Duration.zero);
+        expect(events, isNotEmpty);
+        expect(
+          events.every((event) => event.$2 != Isolate.current.controlPort),
+          isTrue,
+          reason: 'El trabajo real del codec debe quedar fuera de UI.',
+        );
+        expect(
+          events.map((event) => event.$1),
+          containsAll(['encode-revision', 'decode-revision']),
+        );
+      } finally {
+        NotebookCodec.diagnostics = null;
+        remote.close();
+        await subscription.cancel();
+        receive.close();
+      }
+    },
+  );
   test(
     'listado paginado y duplicados idénticos conservan todas las revisiones',
     () async {

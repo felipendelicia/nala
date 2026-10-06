@@ -61,19 +61,21 @@ class CloudController extends ChangeNotifier {
       autoStart,
     );
     await Directory(root).create(recursive: true);
+    var reconnect = true;
     if (await cloud._selection.exists()) {
       // Never fall back silently to an empty library if the saved catalog fails.
-      cloud.account = GoogleAccount.fromJson(
-        jsonDecode(await cloud._selection.readAsString())
-            as Map<String, dynamic>,
-      );
+      final selection =
+          jsonDecode(await cloud._selection.readAsString())
+              as Map<String, dynamic>;
+      cloud.account = GoogleAccount.fromJson(selection);
+      reconnect = selection['connected'] != false;
     }
     cloud.services = await AppServices.open(
       cloud.account == null ? root : cloud._accountRoot(cloud.account!),
     );
     GoogleAccount? restored;
     try {
-      restored = await auth?.restore();
+      if (reconnect) restored = await auth?.restore();
     } catch (_) {
       cloud.message =
           'No se pudo restaurar Drive. Tus apuntes están disponibles sin conexión.';
@@ -145,7 +147,7 @@ class CloudController extends ChangeNotifier {
       if (selected.id != account?.id) {
         replacement = await AppServices.open(_accountRoot(selected));
         _check(epoch);
-        if (account == null) await _adoptLocal(selected, replacement);
+        if (account == null) await _adoptLocal(selected, replacement, epoch);
         _check(epoch);
         await _saveSelection(selected);
         final previous = services;
@@ -154,6 +156,8 @@ class CloudController extends ChangeNotifier {
         account = selected;
         await previous.close();
       }
+      _check(epoch);
+      await _saveSelection(selected);
       _check(epoch);
       _attach();
       if (!auth!.secureStorageAvailable) {
@@ -170,24 +174,32 @@ class CloudController extends ChangeNotifier {
     }
   }
 
-  Future<void> _saveSelection(GoogleAccount value) async {
+  Future<void> _saveSelection(
+    GoogleAccount value, {
+    bool connected = true,
+  }) async {
     final temporary = File('${_selection.path}.tmp');
-    await temporary.writeAsString(jsonEncode(value.toJson()), flush: true);
+    await temporary.writeAsString(
+      jsonEncode({...value.toJson(), 'connected': connected}),
+      flush: true,
+    );
     await temporary.rename(_selection.path);
   }
 
-  Future<void> _adoptLocal(GoogleAccount selected, AppServices target) async {
+  Future<void> _adoptLocal(
+    GoogleAccount selected,
+    AppServices target,
+    int epoch,
+  ) async {
     final marker = File(p.join(root, 'local-adoption.json'));
-    if (await marker.exists()) {
-      final data =
-          jsonDecode(await marker.readAsString()) as Map<String, dynamic>;
-      if (data['accountId'] != selected.id || data['completed'] == true) return;
-    } else {
-      await marker.writeAsString(
-        jsonEncode({'accountId': selected.id, 'completed': false}),
-        flush: true,
-      );
-    }
+    _check(epoch);
+    // If the local partition is still selected, no account has ever begun
+    // syncing this copy. Recopy its current state even after a completed marker.
+    await (target.repository as SqliteNotebookRepository).resetForAdoption();
+    await marker.writeAsString(
+      jsonEncode({'accountId': selected.id, 'completed': false}),
+      flush: true,
+    );
     // Preserve the original local database as a backup. Only the first selected
     // account adopts it; a different account always starts in its own partition.
     await (target.repository as FolderRepository).mergeFolders(
@@ -198,6 +210,7 @@ class CloudController extends ChangeNotifier {
     final assets = Directory(p.join(services.root, 'local', 'assets'));
     if (await assets.exists()) {
       await for (final file in assets.list()) {
+        _check(epoch);
         final id = p.basename(file.path);
         if (file is File && RegExp(r'^[a-f0-9]{64}$').hasMatch(id)) {
           await target.assets.put(await services.assets.read(id));
@@ -208,12 +221,14 @@ class CloudController extends ChangeNotifier {
         .map((e) => e.notebook.id)
         .toSet();
     for (final id in documents) {
+      _check(epoch);
       for (final revision in await services.repository.history(id)) {
         await target.repository.acceptRemote(revision);
       }
     }
     await (target.repository as SqliteNotebookRepository).queueAllForUpload();
     await target.library.refresh();
+    _check(epoch);
     await marker.writeAsString(
       jsonEncode({'accountId': selected.id, 'completed': true}),
       flush: true,
@@ -239,8 +254,11 @@ class CloudController extends ChangeNotifier {
   Future<void> _disconnect() async {
     await _stop();
     try {
+      if (account != null) await _saveSelection(account!, connected: false);
       await auth?.signOut();
-      message = null;
+      message = auth?.secureStorageAvailable == false
+          ? 'Drive quedó desconectado. No se pudo limpiar el llavero; no se reconectará automáticamente.'
+          : null;
     } catch (_) {
       message = 'Drive quedó detenido. No se pudo cerrar la sesión de Google.';
     }

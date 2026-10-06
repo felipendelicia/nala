@@ -57,6 +57,48 @@ class DelayedAudioDevice extends TestAudioDevice {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  for (final state in [AppLifecycleState.hidden, AppLifecycleState.inactive]) {
+    test('el audio se detiene al pasar a $state en escritorio', () async {
+      final root = await Directory.systemTemp.createTemp('nala-audio-hidden-');
+      final device = TestAudioDevice();
+      final session = AudioCommentSession(
+        device: device,
+        assets: FileAssetStore('${root.path}/assets'),
+        directory: '${root.path}/temp',
+      );
+      try {
+        await session.start();
+        session.didChangeAppLifecycleState(state);
+        expect(device.capturing, isFalse);
+        expect(session.recording, isFalse);
+      } finally {
+        await session.close();
+        session.dispose();
+        await root.delete(recursive: true);
+      }
+    });
+    test('una preparación tardía no graba después de $state', () async {
+      final root = await Directory.systemTemp.createTemp(
+        'nala-audio-hidden-start-',
+      );
+      final device = DelayedAudioDevice();
+      final session = AudioCommentSession(
+        device: device,
+        assets: FileAssetStore('${root.path}/assets'),
+        directory: '${root.path}/temp',
+      );
+      final start = session.start();
+      await device.started.future;
+      session.didChangeAppLifecycleState(state);
+      device.permission.complete();
+      await start;
+      expect(device.capturing, isFalse);
+      expect(await session.commit(), isNull);
+      await session.close();
+      session.dispose();
+      await root.delete(recursive: true);
+    });
+  }
   test(
     'cerrar mientras se prepara el micrófono impide una captura tardía',
     () async {

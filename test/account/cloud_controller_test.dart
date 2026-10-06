@@ -5,6 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:apuntes/account/auth_service.dart';
 import 'package:apuntes/account/cloud_controller.dart';
 import 'package:apuntes/document/notebook.dart';
+import 'package:apuntes/bootstrap.dart';
+import 'package:apuntes/account/linux_auth_service.dart';
+import 'package:crypto/crypto.dart';
+import 'dart:convert';
+import 'package:oauth2/oauth2.dart' as oauth2;
 import '../support/fake_auth_service.dart';
 import '../support/fake_remote_store.dart';
 
@@ -21,6 +26,110 @@ class ChoosingAuth extends FakeAuthService {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'una adopción interrumpida vuelve a copiar el estado local más reciente',
+    () async {
+      final dir = await Directory.systemTemp.createTemp(
+        'nala-adoption-cancel-',
+      );
+      final auth = ChoosingAuth(), remote = FakeRemoteStore();
+      final cloud = await CloudController.open(
+        dir.path,
+        auth: auth,
+        autoStart: false,
+        remoteFactory: (_, _) => remote,
+      );
+      try {
+        final entry = await cloud.services.library.createNotebook(
+          title: 'Antes',
+          subject: '',
+          pattern: PaperPattern.blank,
+        );
+        final partition =
+            '${dir.path}/accounts/${sha256.convert(utf8.encode('A'))}';
+        final partial = await AppServices.open(partition);
+        for (final revision in await cloud.services.repository.history(
+          entry.notebook.id,
+        )) {
+          await partial.repository.acceptRemote(revision);
+        }
+        await partial.close();
+        // Durable state after cancellation/crash before selecting the partition.
+        await File(
+          '${dir.path}/local-adoption.json',
+        ).writeAsString('{"accountId":"A","completed":true}');
+        await cloud.services.library.updateNotebook(
+          entry,
+          entry.notebook.copyWith(title: 'Después'),
+        );
+        await cloud.services.library.createNotebook(
+          title: 'Creado después de cancelar',
+          subject: '',
+          pattern: PaperPattern.blank,
+        );
+        await cloud.connect();
+        expect(
+          (await cloud.services.repository.list())
+              .map((e) => e.notebook.title)
+              .toSet(),
+          {'Después', 'Creado después de cancelar'},
+        );
+        expect(await cloud.services.repository.pending(), hasLength(2));
+      } finally {
+        await cloud.close();
+        await dir.delete(recursive: true);
+      }
+    },
+  );
+  test(
+    'desconexión persiste aunque el llavero no pueda borrar su token',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('nala-logout-keyring-');
+      final store = FakeTokenStore()
+        ..value = jsonEncode({
+          'clientId': 'fixture-client',
+          'account': {'id': 'A', 'email': 'a@example.invalid'},
+          'credentials': oauth2.Credentials('retained-token').toJson(),
+        });
+      await File(
+        '${dir.path}/active-account.json',
+      ).writeAsString('{"id":"A","email":"a@example.invalid"}');
+      var remotes = 0;
+      final auth = LinuxAuthService(
+        clientId: 'fixture-client',
+        tokenStore: store,
+      );
+      final cloud = await CloudController.open(
+        dir.path,
+        auth: auth,
+        autoStart: false,
+        remoteFactory: (_, _) {
+          remotes++;
+          return FakeRemoteStore();
+        },
+      );
+      expect(cloud.connected, isTrue);
+      store.unavailable = true;
+      await cloud.disconnect();
+      expect(auth.secureStorageAvailable, isFalse);
+      expect(cloud.message, isNotNull);
+      await cloud.close();
+      store.unavailable = false;
+      final restarted = await CloudController.open(
+        dir.path,
+        auth: LinuxAuthService(clientId: 'fixture-client', tokenStore: store),
+        autoStart: false,
+        remoteFactory: (_, _) {
+          remotes++;
+          return FakeRemoteStore();
+        },
+      );
+      expect(restarted.connected, isFalse);
+      expect(remotes, 1);
+      await restarted.close();
+      await dir.delete(recursive: true);
+    },
+  );
   test(
     'desconectar bloquea otra conexión mientras termina la cuenta anterior',
     () async {

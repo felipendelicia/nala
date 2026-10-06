@@ -1,14 +1,141 @@
 import 'dart:io';
+import 'dart:isolate';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pdfrx_engine/pdfrx_engine.dart';
 import 'package:apuntes/document/asset_store.dart';
 import 'package:apuntes/document/notebook.dart';
+import 'package:apuntes/document/notebook_codec.dart';
+import 'package:apuntes/document/page_comment.dart';
 import 'package:apuntes/pdf/pdf_service.dart';
 import 'package:apuntes/pdf/pdf_export_service.dart';
 import '../support/pdf_engine.dart';
 import '../support/pdf_fixtures.dart';
 
 void main() {
+  test(
+    'exportar tinta ejecuta su composición fuera del hilo de escritura',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('nala-export-worker-');
+      final pdf = PdfService(
+        assets: FileAssetStore('${dir.path}/assets'),
+        initialize: () => initializePdfForTest(dir.path),
+      );
+      final receive = ReceivePort(), events = <(String, SendPort)>[];
+      final sub = receive.listen(
+        (event) => events.add(event as (String, SendPort)),
+      );
+      NotebookCodec.diagnostics = receive.sendPort;
+      try {
+        final book = Notebook.blank(
+          id: 'large',
+          pageId: 'page',
+          title: 'Tinta',
+          subject: '',
+          pattern: PaperPattern.blank,
+          now: DateTime.utc(2026),
+        );
+        final page = book.pages.first.copyWith(
+          strokes: [
+            InkStroke(
+              id: 'long',
+              tool: InkTool.pen,
+              argb: 0xff202020,
+              width: 2,
+              points: List.generate(
+                5000,
+                (i) => InkPoint(
+                  x: 20 + i % 500 * 1.0,
+                  y: 20 + i ~/ 500 * 1.0,
+                  pressure: .5,
+                ),
+              ),
+            ),
+          ],
+        );
+        final bytes = await PdfExportService(
+          pdf,
+          codecEvents: receive.sendPort,
+        ).export(book.copyWith(pages: [page]));
+        final document = await PdfDocument.openData(bytes);
+        expect(document.pages, hasLength(1));
+        await document.dispose();
+        await Future<void>.delayed(Duration.zero);
+        expect(events, isNotEmpty);
+        expect(
+          events.every((event) => event.$2 != Isolate.current.controlPort),
+          isTrue,
+        );
+      } finally {
+        NotebookCodec.diagnostics = null;
+        await sub.cancel();
+        receive.close();
+        pdf.dispose();
+        await dir.delete(recursive: true);
+      }
+    },
+  );
+  test(
+    'PDF conserva marcadores y un anexo de comentarios, incluida la voz',
+    () async {
+      final dir = await Directory.systemTemp.createTemp(
+        'nala-export-comments-',
+      );
+      final pdf = PdfService(
+        assets: FileAssetStore('${dir.path}/assets'),
+        initialize: () => initializePdfForTest(dir.path),
+      );
+      try {
+        final book = Notebook.blank(
+          id: 'comments',
+          pageId: 'page',
+          title: 'Clase',
+          subject: '',
+          pattern: PaperPattern.blank,
+          now: DateTime.utc(2026),
+        );
+        final comments = [
+          PageComment(
+            id: 'text',
+            x: 100,
+            y: 100,
+            text: 'Revisar demostración y λ',
+            createdAt: DateTime.utc(2026),
+          ),
+          PageComment(
+            id: 'voice',
+            x: 200,
+            y: 200,
+            text: '',
+            createdAt: DateTime.utc(2026),
+            audioAssetId: 'a' * 64,
+            audioDurationMs: 3000,
+          ),
+        ];
+        final bytes = await PdfExportService(pdf).export(
+          book.copyWith(pages: [book.pages.first.copyWith(comments: comments)]),
+        );
+        final document = await PdfDocument.openData(bytes);
+        try {
+          expect(document.pages, hasLength(2));
+          await Directory('.dart_tool/pdf-qa').create(recursive: true);
+          await File('.dart_tool/pdf-qa/comments.pdf').writeAsBytes(bytes);
+          expect(
+            (await document.pages.first.loadText())!.fullText,
+            contains('1'),
+          );
+          final text = (await document.pages.last.loadText())!.fullText;
+          expect(text, contains('Revisar demostración y λ'));
+          expect(text, contains('Nota de voz'));
+          expect(text, contains('Audio disponible en Nala'));
+        } finally {
+          await document.dispose();
+        }
+      } finally {
+        pdf.dispose();
+        await dir.delete(recursive: true);
+      }
+    },
+  );
   test(
     'exportar desbloquea el recurso correcto y reintenta la misma instantánea',
     () async {

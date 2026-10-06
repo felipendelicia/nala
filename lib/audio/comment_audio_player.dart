@@ -69,8 +69,7 @@ class CommentAudioPlayer extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.detached) {
+    if (audioLeavesForeground(state)) {
       unawaited(
         stop().catchError((Object e) {
           error = e;

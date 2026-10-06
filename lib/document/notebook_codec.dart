@@ -1,8 +1,13 @@
 import 'dart:convert';
+import 'dart:isolate';
 import 'notebook.dart';
 import 'revision.dart';
 
 class NotebookCodec {
+  // Optional diagnostic port for deterministic UI-isolate regression tests.
+  static SendPort? diagnostics;
+  static void reportWork(String stage) =>
+      diagnostics?.send((stage, Isolate.current.controlPort));
   static Map<String, Object> _notebookJson(Notebook book) => {
     'schemaVersion': 1,
     'id': book.id,
@@ -12,31 +17,48 @@ class NotebookCodec {
     'updatedAt': book.updatedAt.toUtc().toIso8601String(),
     'pages': book.pages.map((p) => p.toJson()).toList(),
   };
-  static String encode(Notebook book) => jsonEncode(_notebookJson(book));
-  static Notebook decode(String json) =>
-      _validated(() => _fromJson(jsonDecode(json) as Map<String, dynamic>));
-  static String encodeRevision(Revision revision) => jsonEncode({
-    'schemaVersion': 1,
-    'id': revision.id,
-    'deviceId': revision.deviceId,
-    'parentId': revision.parentId,
-    'createdAt': revision.createdAt.toUtc().toIso8601String(),
-    'notebook': _notebookJson(revision.notebook),
-  });
-  static Revision decodeRevision(String json) => _validated(() {
-    final map = jsonDecode(json) as Map<String, dynamic>;
-    _version(map);
-    final id = nonEmpty(map['id']);
-    final parent = map['parentId'] == null ? null : nonEmpty(map['parentId']);
-    if (parent == id) throw const FormatException('Revisión cíclica');
-    return Revision(
-      id: id,
-      deviceId: nonEmpty(map['deviceId']),
-      parentId: parent,
-      createdAt: DateTime.parse(map['createdAt'] as String).toUtc(),
-      notebook: _fromJson(map['notebook'] as Map<String, dynamic>),
+  static String encode(Notebook book) {
+    reportWork('encode-notebook');
+    return jsonEncode(_notebookJson(book));
+  }
+
+  static Notebook decode(String json) {
+    reportWork('decode-notebook');
+    return _validated(
+      () => _fromJson(jsonDecode(json) as Map<String, dynamic>),
     );
-  });
+  }
+
+  static String encodeRevision(Revision revision) {
+    reportWork('encode-revision');
+    return jsonEncode({
+      'schemaVersion': 1,
+      'id': revision.id,
+      'deviceId': revision.deviceId,
+      'parentId': revision.parentId,
+      'createdAt': revision.createdAt.toUtc().toIso8601String(),
+      'notebook': _notebookJson(revision.notebook),
+    });
+  }
+
+  static Revision decodeRevision(String json) {
+    reportWork('decode-revision');
+    return _validated(() {
+      final map = jsonDecode(json) as Map<String, dynamic>;
+      _version(map);
+      final id = nonEmpty(map['id']);
+      final parent = map['parentId'] == null ? null : nonEmpty(map['parentId']);
+      if (parent == id) throw const FormatException('Revisión cíclica');
+      return Revision(
+        id: id,
+        deviceId: nonEmpty(map['deviceId']),
+        parentId: parent,
+        createdAt: DateTime.parse(map['createdAt'] as String).toUtc(),
+        notebook: _fromJson(map['notebook'] as Map<String, dynamic>),
+      );
+    });
+  }
+
   static Notebook _fromJson(Map<String, dynamic> map) {
     _version(map);
     final pages = (map['pages'] as List)
