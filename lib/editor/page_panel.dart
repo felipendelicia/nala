@@ -17,7 +17,7 @@ class PagePanel extends StatelessWidget {
   final List<NotebookPage> pages;
   final int currentPage;
   final ValueChanged<int> onPage;
-  final VoidCallback onAdd;
+  final VoidCallback? onAdd;
   final PdfService? pdf;
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -84,11 +84,12 @@ class PagePanel extends StatelessWidget {
             ),
           ),
         ),
-        IconButton(
-          tooltip: 'Agregar hoja',
-          onPressed: onAdd,
-          icon: const Icon(Icons.note_add_outlined),
-        ),
+        if (onAdd != null)
+          IconButton(
+            tooltip: 'Agregar hoja',
+            onPressed: onAdd,
+            icon: const Icon(Icons.note_add_outlined),
+          ),
       ],
     ),
   );

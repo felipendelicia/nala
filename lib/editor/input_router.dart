@@ -29,10 +29,20 @@ class InputRouter {
   final void Function(double dx, double dy, double factor, Point<double> anchor)
   onNavigate;
   int? _inkPointer, _middlePointer;
+  bool readOnly = false;
   Point<double>? _middlePosition;
   final Map<int, Point<double>> _touches = {};
   bool get isWriting => _inkPointer != null;
   void down(InputSample event) {
+    if (readOnly &&
+        (event.device == InputDevice.pen ||
+            (event.device == InputDevice.mouse && event.buttons == 1))) {
+      if (_middlePointer == null) {
+        _middlePointer = event.pointerId;
+        _middlePosition = event.position;
+      }
+      return;
+    }
     if (event.device == InputDevice.pen ||
         (event.device == InputDevice.mouse && event.buttons == 1)) {
       if (_inkPointer != null) return;

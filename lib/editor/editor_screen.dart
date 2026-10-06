@@ -10,6 +10,7 @@ import 'editor_controller.dart';
 import 'editor_toolbar.dart';
 import 'draft_ink.dart';
 import 'pen_settings_dialog.dart';
+import 'zoom_controls.dart';
 import 'input_router.dart';
 import 'page_panel.dart';
 import 'paper_canvas.dart';
@@ -37,7 +38,7 @@ class EditorScreen extends StatefulWidget {
 
 class _EditorScreenState extends State<EditorScreen> {
   bool allowPop = false, closing = false, showPages = false;
-  bool disposing = false;
+  bool disposing = false, reading = false;
   bool exporting = false;
   Object? pdfError;
   int pdfRenderVersion = 0;
@@ -100,6 +101,7 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 
   void begin(InputSample event) {
+    if (reading) return;
     final p = inkPoint(event);
     gestureTool = tool;
     start = latest = Offset(p.x, p.y);
@@ -224,6 +226,7 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 
   void chooseTool(EditorTool selectedTool) {
+    if (reading) return;
     router.reset();
     setState(() {
       tool = selectedTool;
@@ -248,6 +251,7 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 
   void deleteSelection() {
+    if (reading) return;
     if (selected.isEmpty) return;
     final ids = Set<String>.of(selected);
     editPage(
@@ -269,6 +273,7 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 
   void addPage() {
+    if (reading) return;
     router.reset();
     final after = pageIndex.clamp(
       0,
@@ -461,6 +466,7 @@ class _EditorScreenState extends State<EditorScreen> {
       return CallbackShortcuts(
         bindings: {
           const SingleActivator(LogicalKeyboardKey.keyZ, control: true): () {
+            if (reading) return;
             router.reset();
             controller.undo();
           },
@@ -469,6 +475,7 @@ class _EditorScreenState extends State<EditorScreen> {
             control: true,
             shift: true,
           ): () {
+            if (reading) return;
             router.reset();
             controller.redo();
           },
@@ -501,6 +508,21 @@ class _EditorScreenState extends State<EditorScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 actions: [
+                  IconButton(
+                    tooltip: reading ? 'Modo editor' : 'Modo lectura',
+                    isSelected: reading,
+                    onPressed: () {
+                      router.reset();
+                      setState(() {
+                        reading = !reading;
+                        router.readOnly = reading;
+                        selected = {};
+                      });
+                    },
+                    icon: Icon(
+                      reading ? Icons.edit_outlined : Icons.menu_book_outlined,
+                    ),
+                  ),
                   if (widget.pdf != null && widget.files != null)
                     IconButton(
                       tooltip: 'Exportar PDF',
@@ -509,7 +531,7 @@ class _EditorScreenState extends State<EditorScreen> {
                     ),
                   IconButton(
                     tooltip: 'Renombrar cuaderno',
-                    onPressed: rename,
+                    onPressed: reading ? null : rename,
                     icon: const Icon(Icons.drive_file_rename_outline),
                   ),
                   IconButton(
@@ -517,7 +539,6 @@ class _EditorScreenState extends State<EditorScreen> {
                     isSelected: showPages,
                     onPressed: () => setState(() {
                       showPages = !showPages;
-                      fittedPage = null;
                     }),
                     icon: const Icon(Icons.view_sidebar_outlined),
                   ),
@@ -536,66 +557,71 @@ class _EditorScreenState extends State<EditorScreen> {
                         : null,
                     icon: const Icon(Icons.chevron_right),
                   ),
-                  IconButton(
-                    tooltip: 'Agregar hoja',
-                    onPressed: addPage,
-                    icon: const Icon(Icons.note_add_outlined),
-                  ),
+                  if (!reading)
+                    IconButton(
+                      tooltip: 'Agregar hoja',
+                      onPressed: addPage,
+                      icon: const Icon(Icons.note_add_outlined),
+                    ),
                 ],
               ),
               body: Column(
                 children: [
-                  EditorToolbar(
-                    tool: tool,
-                    onTool: chooseTool,
-                    onPenSettings: penSettings,
-                    argb: argb,
-                    onColor: (c) => setState(() => argb = c),
-                    width: width,
-                    onWidth: (w) => setState(() => width = w),
-                    canUndo: controller.canUndo,
-                    canRedo: controller.canRedo,
-                    onUndo: () {
-                      router.reset();
-                      controller.undo();
-                    },
-                    onRedo: () {
-                      router.reset();
-                      controller.redo();
-                    },
-                    onDeleteSelection: selected.isEmpty
-                        ? null
-                        : deleteSelection,
-                    pattern: currentPage.background.pattern,
-                    onPattern: (pattern) {
-                      router.reset();
-                      editPage(
-                        (p) => p.copyWith(
-                          background: PageBackground.paper(pattern),
-                        ),
-                      );
-                    },
-                    onApplyPattern: currentPage.background.pattern == null
-                        ? null
-                        : () {
-                            router.reset();
-                            controller.apply(
-                              (book) => book.copyWith(
-                                pages: book.pages
-                                    .map(
-                                      (p) => p.background.pattern == null
-                                          ? p
-                                          : p.copyWith(
-                                              background: PageBackground.paper(
-                                                currentPage.background.pattern!,
+                  if (!reading)
+                    EditorToolbar(
+                      tool: tool,
+                      onTool: chooseTool,
+                      onPenSettings: penSettings,
+                      argb: argb,
+                      onColor: (c) => setState(() => argb = c),
+                      width: width,
+                      onWidth: (w) => setState(() => width = w),
+                      canUndo: controller.canUndo,
+                      canRedo: controller.canRedo,
+                      onUndo: () {
+                        router.reset();
+                        controller.undo();
+                      },
+                      onRedo: () {
+                        router.reset();
+                        controller.redo();
+                      },
+                      onDeleteSelection: selected.isEmpty
+                          ? null
+                          : deleteSelection,
+                      pattern: currentPage.background.pattern,
+                      onPattern: (pattern) {
+                        router.reset();
+                        editPage(
+                          (p) => p.copyWith(
+                            background: PageBackground.paper(pattern),
+                          ),
+                        );
+                      },
+                      onApplyPattern: currentPage.background.pattern == null
+                          ? null
+                          : () {
+                              router.reset();
+                              controller.apply(
+                                (book) => book.copyWith(
+                                  pages: book.pages
+                                      .map(
+                                        (p) => p.background.pattern == null
+                                            ? p
+                                            : p.copyWith(
+                                                background:
+                                                    PageBackground.paper(
+                                                      currentPage
+                                                          .background
+                                                          .pattern!,
+                                                    ),
                                               ),
-                                            ),
-                                    )
-                                    .toList(),
-                              ),
-                            );
-                          },
-                  ),
+                                      )
+                                      .toList(),
+                                ),
+                              );
+                            },
+                    ),
                   if (exporting) const LinearProgressIndicator(minHeight: 2),
                   if (exporting)
                     const Padding(
@@ -646,13 +672,13 @@ class _EditorScreenState extends State<EditorScreen> {
                             pages: controller.notebook.pages,
                             currentPage: pageIndex,
                             onPage: changePage,
-                            onAdd: addPage,
+                            onAdd: reading ? null : addPage,
                             pdf: widget.pdf,
                           ),
                         Expanded(
                           child: LayoutBuilder(
                             builder: (context, constraints) {
-                              if (viewSize != constraints.biggest ||
+                              if (viewSize == null ||
                                   fittedPage != currentPage.id) {
                                 viewSize = constraints.biggest;
                                 fittedPage = currentPage.id;
@@ -663,6 +689,7 @@ class _EditorScreenState extends State<EditorScreen> {
                                   currentPage.height,
                                 );
                               }
+                              viewSize = constraints.biggest;
                               var displayPage = currentPage;
                               if (erased.isNotEmpty) {
                                 displayPage = displayPage.copyWith(
@@ -829,21 +856,40 @@ class _EditorScreenState extends State<EditorScreen> {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          IconButton(
-                            tooltip: 'Alejar',
-                            onPressed: () => zoom(.8),
-                            icon: const Icon(Icons.remove),
-                          ),
-                          Text('${(view.scale * 100).round()}%'),
-                          IconButton(
-                            tooltip: 'Acercar',
-                            onPressed: () => zoom(1.25),
-                            icon: const Icon(Icons.add),
-                          ),
-                          IconButton(
-                            tooltip: 'Ajustar hoja',
-                            onPressed: () => setState(() => fittedPage = null),
-                            icon: const Icon(Icons.fit_screen),
+                          ZoomControls(
+                            scale: view.scale,
+                            locked: view.zoomLocked,
+                            onZoom: zoom,
+                            onScale: (value) {
+                              if (viewSize != null && !router.isWriting)
+                                setState(
+                                  () => view.setScale(
+                                    value,
+                                    math.Point(
+                                      viewSize!.width / 2,
+                                      viewSize!.height / 2,
+                                    ),
+                                  ),
+                                );
+                            },
+                            onFit: () => setState(() => fittedPage = null),
+                            onFitWidth: () {
+                              if (viewSize != null && !router.isWriting)
+                                setState(
+                                  () => view.fitWidth(
+                                    viewSize!.width,
+                                    viewSize!.height,
+                                    page.width,
+                                    page.height,
+                                  ),
+                                );
+                            },
+                            onLock: () {
+                              router.reset();
+                              setState(
+                                () => view.zoomLocked = !view.zoomLocked,
+                              );
+                            },
                           ),
                         ],
                       ),
