@@ -3,6 +3,7 @@ import 'package:flutter/gestures.dart';
 import 'package:uuid/uuid.dart';
 import '../document/notebook.dart';
 import 'paper_background.dart';
+import 'stroke_geometry.dart';
 
 class PaperCanvas extends StatefulWidget {
   const PaperCanvas({
@@ -40,13 +41,15 @@ class _PaperCanvasState extends State<PaperCanvas> {
   void down(PointerDownEvent event) {
     if (pointer != null ||
         (widget.tool != EditorTool.pen &&
-            widget.tool != EditorTool.highlighter))
+            widget.tool != EditorTool.highlighter)) {
       return;
+    }
     if (event.kind != PointerDeviceKind.stylus &&
         event.kind != PointerDeviceKind.invertedStylus &&
         !(event.kind == PointerDeviceKind.mouse &&
-            event.buttons == kPrimaryButton))
+            event.buttons == kPrimaryButton)) {
       return;
+    }
     setState(() {
       pointer = event.pointer;
       points = [point(event)];
@@ -86,11 +89,12 @@ class _PaperCanvasState extends State<PaperCanvas> {
       onPointerMove: move,
       onPointerUp: up,
       onPointerCancel: (event) {
-        if (event.pointer == pointer)
+        if (event.pointer == pointer) {
           setState(() {
             pointer = null;
             points = [];
           });
+        }
       },
       child: Stack(
         fit: StackFit.expand,
@@ -134,28 +138,13 @@ class InkPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     for (final stroke in strokes) {
-      final paint = Paint()
-        ..color = Color(stroke.argb).withAlpha(255)
-        ..strokeCap = StrokeCap.round;
-      if (stroke.tool == InkTool.highlighter)
-        canvas.saveLayer(
-          Offset.zero & size,
-          Paint()..color = const Color(0x55ffffff),
-        );
-      for (var i = 0; i < stroke.points.length; i++) {
-        final p = stroke.points[i];
-        paint.strokeWidth = stroke.width * (.35 + .65 * p.pressure);
-        canvas.drawCircle(Offset(p.x, p.y), paint.strokeWidth / 2, paint);
-        if (i > 0) {
-          final previous = stroke.points[i - 1];
-          canvas.drawLine(
-            Offset(previous.x, previous.y),
-            Offset(p.x, p.y),
-            paint,
-          );
-        }
-      }
-      if (stroke.tool == InkTool.highlighter) canvas.restore();
+      final alpha = stroke.tool == InkTool.highlighter
+          ? 0x55
+          : ((stroke.argb >> 24) & 0xff);
+      canvas.drawPath(
+        StrokeGeometry.outline(stroke).path,
+        Paint()..color = Color(stroke.argb).withAlpha(alpha),
+      );
     }
   }
 

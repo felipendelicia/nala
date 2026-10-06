@@ -2,11 +2,12 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 import 'document/asset_store.dart';
+import 'document/notebook_repository.dart';
 import 'document/sqlite_notebook_repository.dart';
 import 'library/library_controller.dart';
 
 class AppServices {
-  AppServices._({
+  AppServices({
     required this.root,
     required this.deviceId,
     required this.repository,
@@ -14,8 +15,8 @@ class AppServices {
     required this.library,
   });
   final String root, deviceId;
-  final SqliteNotebookRepository repository;
-  final FileAssetStore assets;
+  final NotebookRepository repository;
+  final AssetStore assets;
   final LibraryController library;
   static Future<AppServices> open(String root) async {
     await Directory(root).create(recursive: true);
@@ -29,7 +30,7 @@ class AppServices {
     );
     final library = LibraryController(repository: repository, deviceId: id);
     await library.refresh();
-    return AppServices._(
+    return AppServices(
       root: root,
       deviceId: id,
       repository: repository,

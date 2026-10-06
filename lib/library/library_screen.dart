@@ -48,7 +48,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       );
       if (mounted) await _open(entry);
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
@@ -56,6 +56,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             ),
           ),
         );
+      }
     }
   }
 

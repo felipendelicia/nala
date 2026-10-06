@@ -11,12 +11,11 @@ class EditorController extends ChangeNotifier {
     required this.deviceId,
     required this.newId,
     required this.now,
-    String? headId,
+    this._headId,
   })
     // Public argument names differ from private storage fields.
     // ignore: prefer_initializing_formals
-    : _notebook = notebook,
-       _headId = headId;
+    : _notebook = notebook;
   final NotebookRepository repository;
   final String deviceId;
   final String Function() newId;

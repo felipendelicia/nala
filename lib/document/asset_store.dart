@@ -15,8 +15,9 @@ class FileAssetStore implements AssetStore {
   FileAssetStore(this.directory);
   final String directory;
   File _file(String id) {
-    if (!RegExp(r'^[a-f0-9]{64}$').hasMatch(id))
+    if (!RegExp(r'^[a-f0-9]{64}$').hasMatch(id)) {
       throw const FormatException('Recurso inválido');
+    }
     return File(p.join(directory, id));
   }
 

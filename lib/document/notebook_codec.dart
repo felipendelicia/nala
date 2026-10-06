@@ -45,11 +45,13 @@ class NotebookCodec {
     final pageIds = <String>{};
     final strokeIds = <String>{};
     for (final page in pages) {
-      if (!pageIds.add(page.id))
+      if (!pageIds.add(page.id)) {
         throw const FormatException('Página duplicada');
+      }
       for (final stroke in page.strokes) {
-        if (!strokeIds.add(stroke.id))
+        if (!strokeIds.add(stroke.id)) {
           throw const FormatException('Trazo duplicado');
+        }
       }
     }
     return Notebook(
@@ -62,8 +64,9 @@ class NotebookCodec {
   }
 
   static void _version(Map<String, dynamic> json) {
-    if (json['schemaVersion'] != 1)
+    if (json['schemaVersion'] != 1) {
       throw const FormatException('Versión de archivo no compatible');
+    }
   }
 
   static T _validated<T>(T Function() parse) {

@@ -12,17 +12,20 @@ class PaperBackgroundPainter extends CustomPainter {
       ..strokeWidth = .6;
     const step = 20.0;
     if (pattern == PaperPattern.grid || pattern == PaperPattern.ruled) {
-      for (double y = step; y < size.height; y += step)
+      for (double y = step; y < size.height; y += step) {
         canvas.drawLine(Offset(0, y), Offset(size.width, y), lines);
+      }
     }
     if (pattern == PaperPattern.grid) {
-      for (double x = step; x < size.width; x += step)
+      for (double x = step; x < size.width; x += step) {
         canvas.drawLine(Offset(x, 0), Offset(x, size.height), lines);
+      }
     }
     if (pattern == PaperPattern.dots) {
       for (double y = step; y < size.height; y += step) {
-        for (double x = step; x < size.width; x += step)
+        for (double x = step; x < size.width; x += step) {
           canvas.drawCircle(Offset(x, y), .8, lines);
+        }
       }
     }
   }

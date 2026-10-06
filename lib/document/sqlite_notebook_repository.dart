@@ -32,8 +32,9 @@ class SqliteNotebookRepository implements NotebookRepository {
       }
       final reply = message as Map;
       if (reply['id'] == null) {
-        if (!ready.isCompleted)
+        if (!ready.isCompleted) {
           ready.completeError(StateError(reply['error'] as String));
+        }
         return;
       }
       final pending = responses.remove(reply['id']);

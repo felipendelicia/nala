@@ -26,7 +26,7 @@ class _NalaAppState extends State<NalaApp> {
       future: services,
       builder: (context, snapshot) {
         if (snapshot.hasData) return LibraryScreen(services: snapshot.data!);
-        if (snapshot.hasError)
+        if (snapshot.hasError) {
           return const Scaffold(
             body: Center(
               child: Text(
@@ -34,6 +34,7 @@ class _NalaAppState extends State<NalaApp> {
               ),
             ),
           );
+        }
         return const Scaffold(body: Center(child: CircularProgressIndicator()));
       },
     ),

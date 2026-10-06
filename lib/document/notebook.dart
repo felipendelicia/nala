@@ -48,8 +48,9 @@ class InkStroke {
         .toList();
     if (points.isEmpty) throw const FormatException('Trazo vacío');
     final color = json['argb'];
-    if (color is! int || color < 0 || color > 0xffffffff)
+    if (color is! int || color < 0 || color > 0xffffffff) {
       throw const FormatException('Color inválido');
+    }
     return InkStroke(
       id: nonEmpty(json['id']),
       tool: InkTool.values.byName(json['tool'] as String),
@@ -183,8 +184,9 @@ class Notebook {
 }
 
 String nonEmpty(Object? value) {
-  if (value is! String || value.trim().isEmpty)
+  if (value is! String || value.trim().isEmpty) {
     throw const FormatException('Identificador vacío');
+  }
   return value;
 }
 
