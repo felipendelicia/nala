@@ -152,15 +152,19 @@ class NotebookPage {
   );
 }
 
+const _keepFolder = Object();
+
 class Notebook {
   Notebook({
     required this.id,
     required this.title,
     required this.subject,
+    this.folderId,
     required List<NotebookPage> pages,
     required this.updatedAt,
   }) : pages = List.unmodifiable(pages);
   final String id, title, subject;
+  final String? folderId;
   final List<NotebookPage> pages;
   final DateTime updatedAt;
   factory Notebook.blank({
@@ -168,12 +172,14 @@ class Notebook {
     required String pageId,
     required String title,
     String subject = '',
+    String? folderId,
     required PaperPattern pattern,
     required DateTime now,
   }) => Notebook(
     id: id,
     title: title,
     subject: subject,
+    folderId: folderId,
     updatedAt: now,
     pages: [
       NotebookPage(
@@ -187,12 +193,16 @@ class Notebook {
   Notebook copyWith({
     String? title,
     String? subject,
+    Object? folderId = _keepFolder,
     List<NotebookPage>? pages,
     DateTime? updatedAt,
   }) => Notebook(
     id: id,
     title: title ?? this.title,
     subject: subject ?? this.subject,
+    folderId: identical(folderId, _keepFolder)
+        ? this.folderId
+        : folderId as String?,
     pages: pages ?? this.pages,
     updatedAt: updatedAt ?? this.updatedAt,
   );

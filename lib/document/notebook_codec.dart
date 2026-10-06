@@ -8,6 +8,7 @@ class NotebookCodec {
     'id': book.id,
     'title': book.title,
     'subject': book.subject,
+    if (book.folderId != null) 'folderId': book.folderId!,
     'updatedAt': book.updatedAt.toUtc().toIso8601String(),
     'pages': book.pages.map((p) => p.toJson()).toList(),
   };
@@ -58,6 +59,7 @@ class NotebookCodec {
       id: nonEmpty(map['id']),
       title: nonEmpty(map['title']),
       subject: map['subject'] as String,
+      folderId: map['folderId'] == null ? null : nonEmpty(map['folderId']),
       pages: pages,
       updatedAt: DateTime.parse(map['updatedAt'] as String).toUtc(),
     );

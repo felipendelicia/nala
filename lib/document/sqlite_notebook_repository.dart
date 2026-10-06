@@ -1,13 +1,15 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:convert';
 import 'package:sqlite3/sqlite3.dart';
 import 'notebook.dart';
 import 'notebook_codec.dart';
 import 'notebook_repository.dart';
 import 'revision.dart';
+import 'folders.dart';
 
-class SqliteNotebookRepository implements NotebookRepository {
+class SqliteNotebookRepository implements NotebookRepository, FolderRepository {
   SqliteNotebookRepository._(
     this._port,
     this._receive,
@@ -141,6 +143,24 @@ class SqliteNotebookRepository implements NotebookRepository {
   }
 
   @override
+  Future<List<NoteFolder>> listFolders({bool includeDeleted = false}) async =>
+      ((await _call('folders', {'includeDeleted': includeDeleted})) as List)
+          .cast<String>()
+          .map(
+            (s) => NoteFolder.fromJson(jsonDecode(s) as Map<String, dynamic>),
+          )
+          .toList();
+  @override
+  Future<void> saveFolder(NoteFolder folder) async {
+    await _call('saveFolder', {'payload': jsonEncode(folder.toJson())});
+  }
+
+  @override
+  Future<void> deleteFolder(String id) async {
+    await _call('deleteFolder', {'folderId': id});
+  }
+
+  @override
   Future<void> close() async {
     if (_closed) return;
     await _call('close');
@@ -159,6 +179,9 @@ void _databaseWorker((SendPort, String) config) {
     db.execute('PRAGMA synchronous=FULL');
     db.execute('PRAGMA busy_timeout=5000');
     db.execute('PRAGMA foreign_keys=ON');
+    db.execute(
+      'CREATE TABLE IF NOT EXISTS folders (id TEXT PRIMARY KEY, name TEXT NOT NULL, parent_id TEXT, updated_at TEXT NOT NULL, deleted INTEGER NOT NULL DEFAULT 0)',
+    );
     db.execute(
       'CREATE TABLE IF NOT EXISTS revisions (id TEXT PRIMARY KEY, document_id TEXT NOT NULL, parent_id TEXT, payload TEXT NOT NULL, frozen INTEGER NOT NULL DEFAULT 0)',
     );
@@ -179,6 +202,76 @@ void _databaseWorker((SendPort, String) config) {
     try {
       Object? result;
       switch (request['op']) {
+        case 'folders':
+          result = db
+              .select(
+                'SELECT * FROM folders WHERE ? OR deleted=0 ORDER BY name COLLATE NOCASE',
+                [request['includeDeleted'] == true ? 1 : 0],
+              )
+              .map(
+                (r) => jsonEncode({
+                  'id': r['id'],
+                  'name': r['name'],
+                  'parentId': r['parent_id'],
+                  'updatedAt': r['updated_at'],
+                  'deleted': r['deleted'] == 1,
+                }),
+              )
+              .toList();
+        case 'saveFolder':
+          _transaction(db, () {
+            final f = NoteFolder.fromJson(
+              jsonDecode(request['payload'] as String) as Map<String, dynamic>,
+            );
+            if (f.id.trim().isEmpty || f.name.trim().isEmpty || f.deleted)
+              throw StateError('Carpeta inválida');
+            var parent = f.parentId;
+            final visited = <String>{f.id};
+            while (parent != null) {
+              if (!visited.add(parent))
+                throw StateError('Una carpeta no puede contenerse a sí misma');
+              final rows = db.select(
+                'SELECT parent_id FROM folders WHERE id=? AND deleted=0',
+                [parent],
+              );
+              if (rows.isEmpty)
+                throw StateError('La carpeta de destino no existe');
+              parent = rows.single['parent_id'] as String?;
+            }
+            if (db.select(
+              'SELECT id FROM folders WHERE parent_id IS ? AND name=? COLLATE NOCASE AND id<>? AND deleted=0',
+              [f.parentId, f.name.trim(), f.id],
+            ).isNotEmpty)
+              throw StateError('Ya hay una carpeta con ese nombre');
+            db.execute(
+              'INSERT INTO folders(id,name,parent_id,updated_at,deleted) VALUES (?,?,?,?,0) ON CONFLICT(id) DO UPDATE SET name=excluded.name,parent_id=excluded.parent_id,updated_at=excluded.updated_at,deleted=0',
+              [
+                f.id,
+                f.name.trim(),
+                f.parentId,
+                f.updatedAt.toUtc().toIso8601String(),
+              ],
+            );
+          });
+        case 'deleteFolder':
+          _transaction(db, () {
+            final id = request['folderId'];
+            if (db.select(
+                  'SELECT id FROM folders WHERE parent_id=? AND deleted=0',
+                  [id],
+                ).isNotEmpty ||
+                db.select(
+                  r"SELECT r.id FROM revisions r WHERE json_extract(r.payload,'$.notebook.folderId')=? AND NOT EXISTS (SELECT 1 FROM revisions c WHERE c.parent_id=r.id AND c.document_id=r.document_id)",
+                  [id],
+                ).isNotEmpty)
+              throw StateError(
+                'La carpeta todavía contiene apuntes o subcarpetas',
+              );
+            db.execute('UPDATE folders SET deleted=1,updated_at=? WHERE id=?', [
+              DateTime.now().toUtc().toIso8601String(),
+              id,
+            ]);
+          });
         case 'list':
           result = db
               .select(

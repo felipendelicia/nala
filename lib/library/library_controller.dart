@@ -3,14 +3,103 @@ import 'package:uuid/uuid.dart';
 import '../document/notebook.dart';
 import '../document/notebook_repository.dart';
 import '../document/revision.dart';
+import '../document/folders.dart';
 
 class LibraryController extends ChangeNotifier {
-  LibraryController({required this.repository, required this.deviceId});
+  LibraryController({
+    required this.repository,
+    required this.deviceId,
+    FolderRepository? folders,
+  }) : folderRepository =
+           folders ??
+           (repository is FolderRepository
+               ? repository as FolderRepository
+               : null);
+  final FolderRepository? folderRepository;
+  List<NoteFolder> folders = [];
+  String? currentFolderId;
+  List<NoteFolder> get childFolders =>
+      folders.where((f) => f.parentId == currentFolderId).toList();
+  List<NoteFolder> get breadcrumbs => pathFor(currentFolderId);
+  List<NoteFolder> pathFor(String? id) {
+    final result = <NoteFolder>[];
+    final seen = <String>{};
+    while (id != null && seen.add(id)) {
+      final matches = folders.where((f) => f.id == id);
+      if (matches.isEmpty) break;
+      final folder = matches.first;
+      result.insert(0, folder);
+      id = folder.parentId;
+    }
+    return result;
+  }
+
+  void openFolder(String? id) {
+    if (id != null && !folders.any((f) => f.id == id))
+      throw StateError('La carpeta no existe');
+    currentFolderId = id;
+    notifyListeners();
+  }
+
+  Future<NoteFolder> createFolder(
+    String name, {
+    Object? parentId = _currentFolder,
+  }) async {
+    final folder = NoteFolder(
+      id: const Uuid().v4(),
+      name: name.trim(),
+      parentId: identical(parentId, _currentFolder)
+          ? currentFolderId
+          : parentId as String?,
+    );
+    await folderRepository!.saveFolder(folder);
+    await refresh();
+    return folders.firstWhere((f) => f.id == folder.id);
+  }
+
+  Future<void> renameFolder(NoteFolder folder, String name) async {
+    final latest = folders.firstWhere((f) => f.id == folder.id);
+    await folderRepository!.saveFolder(
+      latest.copyWith(name: name.trim(), updatedAt: DateTime.now().toUtc()),
+    );
+    await refresh();
+  }
+
+  Future<void> moveFolder(NoteFolder folder, String? parentId) async {
+    final latest = folders.firstWhere((f) => f.id == folder.id);
+    await folderRepository!.saveFolder(
+      latest.copyWith(parentId: parentId, updatedAt: DateTime.now().toUtc()),
+    );
+    await refresh();
+  }
+
+  Future<void> moveNotebook(DocumentEntry entry, String? folderId) async {
+    if (folderId != null && !folders.any((f) => f.id == folderId))
+      throw StateError('La carpeta de destino no existe');
+    await updateNotebook(entry, entry.notebook.copyWith(folderId: folderId));
+  }
+
+  Future<void> updateNotebook(DocumentEntry entry, Notebook book) async {
+    await repository.commit(
+      Revision(
+        id: const Uuid().v4(),
+        deviceId: deviceId,
+        parentId: entry.headId,
+        createdAt: DateTime.now().toUtc(),
+        notebook: book.copyWith(updatedAt: DateTime.now().toUtc()),
+      ),
+    );
+    await refresh();
+  }
+
   final NotebookRepository repository;
   final String deviceId;
   List<DocumentEntry> entries = [];
   Future<void> refresh() async {
     entries = await repository.list();
+    folders = await folderRepository?.listFolders() ?? [];
+    if (currentFolderId != null && !folders.any((f) => f.id == currentFolderId))
+      currentFolderId = null;
     notifyListeners();
   }
 
@@ -26,6 +115,7 @@ class LibraryController extends ChangeNotifier {
       subject: subject.trim(),
       pattern: pattern,
       now: DateTime.now().toUtc(),
+      folderId: currentFolderId,
     );
     return add(book);
   }
@@ -47,6 +137,9 @@ class LibraryController extends ChangeNotifier {
       entries
           .where(
             (e) =>
+                (e.notebook.folderId == currentFolderId ||
+                    (currentFolderId == null &&
+                        !folders.any((f) => f.id == e.notebook.folderId))) &&
                 (subject.isEmpty || e.notebook.subject == subject) &&
                 _normalize(e.notebook.title).contains(_normalize(query)),
           )
@@ -61,3 +154,5 @@ class LibraryController extends ChangeNotifier {
     return normalized;
   }
 }
+
+const _currentFolder = Object();
