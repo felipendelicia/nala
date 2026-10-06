@@ -3,6 +3,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
+import 'package:pdfrx_engine/pdfrx_engine.dart' show PdfPasswordException;
 import '../document/notebook.dart';
 import '../ui/app_theme.dart';
 import 'editor_controller.dart';
@@ -12,10 +13,22 @@ import 'page_panel.dart';
 import 'paper_canvas.dart';
 import 'stroke_geometry.dart';
 import 'viewport.dart' as paper;
+import '../pdf/document_files.dart';
+import '../pdf/pdf_service.dart';
+import '../pdf/pdf_export_service.dart';
+import '../pdf/pdf_page_background.dart';
+import '../pdf/password_dialog.dart';
 
 class EditorScreen extends StatefulWidget {
-  const EditorScreen({super.key, required this.controller});
+  const EditorScreen({
+    super.key,
+    required this.controller,
+    this.pdf,
+    this.files,
+  });
   final EditorController controller;
+  final PdfService? pdf;
+  final DocumentFiles? files;
   @override
   State<EditorScreen> createState() => _EditorScreenState();
 }
@@ -23,6 +36,11 @@ class EditorScreen extends StatefulWidget {
 class _EditorScreenState extends State<EditorScreen> {
   bool allowPop = false, closing = false, showPages = false;
   bool disposing = false;
+  bool exporting = false;
+  Object? pdfError;
+  int pdfRenderVersion = 0;
+  String? neighborKey;
+  final neighborTokens = <PdfRenderCancellation>[];
   int pageIndex = 0;
   EditorTool tool = EditorTool.pen, gestureTool = EditorTool.pen;
   int argb = 0xff202020;
@@ -106,7 +124,8 @@ class _EditorScreenState extends State<EditorScreen> {
     final p = inkPoint(event);
     final previous = latest;
     latest = Offset(p.x, p.y);
-    if (gestureTool == EditorTool.pen || gestureTool == EditorTool.highlighter) {
+    if (gestureTool == EditorTool.pen ||
+        gestureTool == EditorTool.highlighter) {
       draft.add(p);
     }
     if (gestureTool == EditorTool.eraser) eraseAt(p, from: previous);
@@ -115,7 +134,12 @@ class _EditorScreenState extends State<EditorScreen> {
 
   void eraseAt(InkPoint p, {Offset? from}) {
     for (final s in page.strokes) {
-      if (StrokeGeometry.hitSweep(s, math.Point(from?.dx ?? p.x, from?.dy ?? p.y), math.Point(p.x, p.y), 10 / view.scale)) {
+      if (StrokeGeometry.hitSweep(
+        s,
+        math.Point(from?.dx ?? p.x, from?.dy ?? p.y),
+        math.Point(p.x, p.y),
+        10 / view.scale,
+      )) {
         erased.add(s.id);
       }
     }
@@ -216,6 +240,7 @@ class _EditorScreenState extends State<EditorScreen> {
       pageIndex = index;
       selected = {};
       fittedPage = null;
+      pdfError = null;
     });
   }
 
@@ -290,9 +315,114 @@ class _EditorScreenState extends State<EditorScreen> {
     }
   }
 
+  Future<bool> unlockPdf({String? assetId}) async {
+    final id = assetId ?? page.background.assetId;
+    if (id == null || widget.pdf == null) return false;
+    var incorrect = false;
+    while (true) {
+      if (!mounted) return false;
+      final password = await askPdfPassword(context, incorrect: incorrect);
+      if (password == null || !mounted) return false;
+      try {
+        await widget.pdf!.unlock(id, password);
+        if (mounted) {
+          setState(() {
+            pdfError = null;
+            pdfRenderVersion++;
+            neighborKey = null;
+          });
+        }
+        return true;
+      } on PdfPasswordException {
+        incorrect = true;
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No se pudo abrir el PDF.')),
+          );
+        }
+        return false;
+      }
+    }
+  }
+
+  void preloadNeighbors() {
+    final pdf = widget.pdf;
+    if (pdf == null || !mounted) return;
+    final key =
+        '${page.id}:${PdfService.scaleStep(view.scale)}:${widget.controller.notebook.pages.length}';
+    if (key == neighborKey) return;
+    neighborKey = key;
+    for (final token in neighborTokens) {
+      token.cancel();
+    }
+    neighborTokens.clear();
+    final pages = widget.controller.notebook.pages;
+    for (final index in [pageIndex - 1, pageIndex + 1]) {
+      if (index < 0 ||
+          index >= pages.length ||
+          pages[index].background.assetId == null) {
+        continue;
+      }
+      final neighbor = pages[index];
+      final token = PdfRenderCancellation();
+      neighborTokens.add(token);
+      pdf
+          .renderBackground(
+            neighbor.background.assetId!,
+            neighbor.background.pageNumber!,
+            scale: view.scale,
+            cancellation: token,
+          )
+          .then<void>((_) {
+            if (mounted && !token.isCancelled) setState(() {});
+          }, onError: (Object _) {});
+    }
+    setState(() {});
+  }
+
+  Future<void> exportPdf() async {
+    if (exporting || widget.pdf == null || widget.files == null) return;
+    setState(() => exporting = true);
+    try {
+      await widget.controller.flush();
+      final snapshot = widget.controller.notebook;
+      final bytes = await PdfExportService(widget.pdf!).export(snapshot);
+      if (!mounted) return;
+      final saved = await widget.files!.savePdf(bytes, name: snapshot.title);
+      if (mounted && saved) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('PDF guardado.')));
+      }
+    } on PdfPasswordException {
+      if (mounted) {
+        final assets = widget.controller.notebook.pages
+            .map((p) => p.background.assetId)
+            .whereType<String>();
+        if (assets.isNotEmpty) await unlockPdf(assetId: assets.first);
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No se pudo exportar el PDF. Tus anotaciones siguen guardadas en Nala.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => exporting = false);
+    }
+  }
+
   @override
   void dispose() {
     disposing = true;
+    for (final token in neighborTokens) {
+      token.cancel();
+    }
     router.reset();
     super.dispose();
   }
@@ -346,6 +476,12 @@ class _EditorScreenState extends State<EditorScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 actions: [
+                  if (widget.pdf != null && widget.files != null)
+                    IconButton(
+                      tooltip: 'Exportar PDF',
+                      onPressed: exporting ? null : exportPdf,
+                      icon: const Icon(Icons.ios_share_outlined),
+                    ),
                   IconButton(
                     tooltip: 'Renombrar cuaderno',
                     onPressed: rename,
@@ -434,6 +570,36 @@ class _EditorScreenState extends State<EditorScreen> {
                             );
                           },
                   ),
+                  if (exporting) const LinearProgressIndicator(minHeight: 2),
+                  if (exporting)
+                    const Padding(
+                      padding: EdgeInsets.all(6),
+                      child: Text('Preparando PDF… Podés seguir anotando.'),
+                    ),
+                  if (pdfError != null)
+                    MaterialBanner(
+                      content: Text(
+                        pdfError is PdfPasswordException
+                            ? 'Este PDF necesita su contraseña.'
+                            : 'No se pudo mostrar el fondo PDF.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: pdfError is PdfPasswordException
+                              ? () => unlockPdf()
+                              : () => setState(() {
+                                  pdfError = null;
+                                  pdfRenderVersion++;
+                                  neighborKey = null;
+                                }),
+                          child: Text(
+                            pdfError is PdfPasswordException
+                                ? 'Desbloquear'
+                                : 'Reintentar',
+                          ),
+                        ),
+                      ],
+                    ),
                   if (controller.savingError != null)
                     MaterialBanner(
                       content: const Text(
@@ -455,6 +621,7 @@ class _EditorScreenState extends State<EditorScreen> {
                             currentPage: pageIndex,
                             onPage: changePage,
                             onAdd: addPage,
+                            pdf: widget.pdf,
                           ),
                         Expanded(
                           child: LayoutBuilder(
@@ -552,6 +719,36 @@ class _EditorScreenState extends State<EditorScreen> {
                                                     page: displayPage,
                                                     tool: tool,
                                                     onStroke: (_) {},
+                                                    background:
+                                                        widget.pdf == null ||
+                                                            currentPage
+                                                                    .background
+                                                                    .assetId ==
+                                                                null
+                                                        ? null
+                                                        : PdfPageBackground(
+                                                            key: ValueKey(
+                                                              '${currentPage.id}-$pdfRenderVersion',
+                                                            ),
+                                                            pdf: widget.pdf!,
+                                                            page: currentPage,
+                                                            scale:
+                                                                view.scale *
+                                                                MediaQuery.devicePixelRatioOf(
+                                                                  context,
+                                                                ),
+                                                            onError: (error) {
+                                                              if (mounted) {
+                                                                setState(
+                                                                  () =>
+                                                                      pdfError =
+                                                                          error,
+                                                                );
+                                                              }
+                                                            },
+                                                            onRendered:
+                                                                preloadNeighbors,
+                                                          ),
                                                   ),
                                                   if (draftStroke != null)
                                                     CustomPaint(

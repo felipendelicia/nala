@@ -12,28 +12,50 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(1200, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     var id = 0;
-    final controller = EditorController(notebook: fixtureNotebook(), repository: MemoryRepository(),
-      deviceId: 'pc', newId: () => 'r${++id}', now: () => DateTime.utc(2026));
-    await tester.pumpWidget(MaterialApp(home: EditorScreen(controller: controller)));
+    final controller = EditorController(
+      notebook: fixtureNotebook(),
+      repository: MemoryRepository(),
+      deviceId: 'pc',
+      newId: () => 'r${++id}',
+      now: () => DateTime.utc(2026),
+    );
+    await tester.pumpWidget(
+      MaterialApp(home: EditorScreen(controller: controller)),
+    );
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Selección')); await tester.pump();
+    await tester.tap(find.byTooltip('Selección'));
+    await tester.pump();
     var box = tester.renderObject<RenderBox>(find.byType(PaperCanvas));
     var gesture = await tester.createGesture(kind: PointerDeviceKind.stylus);
     await gesture.down(box.localToGlobal(const Offset(5, 10)));
-    await gesture.moveTo(box.localToGlobal(const Offset(40, 50))); await gesture.up(); await tester.pump();
+    await gesture.moveTo(box.localToGlobal(const Offset(40, 50)));
+    await gesture.up();
+    await tester.pump();
     box = tester.renderObject<RenderBox>(find.byType(PaperCanvas));
     gesture = await tester.createGesture(kind: PointerDeviceKind.stylus);
     await gesture.down(box.localToGlobal(const Offset(12, 23)));
-    await gesture.moveTo(box.localToGlobal(const Offset(32, 38))); await gesture.up(); await tester.pumpAndSettle();
+    await gesture.moveTo(box.localToGlobal(const Offset(32, 38)));
+    await gesture.up();
+    await tester.pumpAndSettle();
     final stroke = controller.notebook.pages.single.strokes.single;
-    expect(stroke.id, 'stroke-1'); expect(stroke.points.first.x, closeTo(30, .001));
-    expect(stroke.points.last.y, closeTo(55, .001)); expect(stroke.points.last.pressure, .75);
-    await tester.pumpWidget(const SizedBox.shrink()); controller.dispose();
+    expect(stroke.id, 'stroke-1');
+    expect(stroke.points.first.x, closeTo(30, .001));
+    expect(stroke.points.last.y, closeTo(55, .001));
+    expect(stroke.points.last.pressure, .75);
+    await tester.pumpWidget(const SizedBox.shrink());
+    controller.dispose();
   });
   testWidgets('cerrar la vista durante un trazo lo descarta', (tester) async {
-    final controller = EditorController(notebook: fixtureNotebook(), repository: MemoryRepository(),
-      deviceId: 'pc', newId: () => 'r1', now: () => DateTime.utc(2026));
-    await tester.pumpWidget(MaterialApp(home: EditorScreen(controller: controller)));
+    final controller = EditorController(
+      notebook: fixtureNotebook(),
+      repository: MemoryRepository(),
+      deviceId: 'pc',
+      newId: () => 'r1',
+      now: () => DateTime.utc(2026),
+    );
+    await tester.pumpWidget(
+      MaterialApp(home: EditorScreen(controller: controller)),
+    );
     await tester.pumpAndSettle();
     final box = tester.renderObject<RenderBox>(find.byType(PaperCanvas));
     final pen = await tester.createGesture(kind: PointerDeviceKind.stylus);

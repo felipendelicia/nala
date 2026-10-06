@@ -2,6 +2,14 @@
 
 SDK verificado: Flutter 3.47.6 estable, Dart 3.13.5. Android SDK 36, Java 21. Clang, ninja y libsecret instalados por Felipe.
 
-El wrapper `../flutterw` usa el SDK y caches del workspace. Las pruebas Flutter requieren acceso a localhost. Después de resolver dependencias con `../flutterw pub get`, usar `--no-pub` en las pruebas y builds para evitar consultas innecesarias de red.
+El repositorio se compila con un SDK de Flutter instalado por separado. `tool/flutter-safe` usa Flutter de PATH; en el workspace original puede encontrar un wrapper `../flutterw` con el SDK y los caches locales. Ese wrapper y el SDK no son parte del repositorio.
+
+En Linux se necesitan CMake, Clang, Ninja, pkg-config, GTK 3 de desarrollo, libsecret de desarrollo y las herramientas estándar de C++. Android necesita Android SDK, sus licencias aceptadas y un JDK compatible con la configuración de Gradle. Las pruebas Flutter requieren acceso a localhost.
+
+Resolver dependencias con `tool/flutter-safe pub get` y usar `--no-pub` en las siguientes pruebas y compilaciones. Antes de las pruebas de PDF, ejecutar `tool/flutter-safe build linux --release --no-pub`: el harness usa `build/native_assets/linux/libpdfium.so` producido por la compilación, sin reemplazar el motor PDF por un mock.
+
+Las compilaciones y pruebas se ejecutan de a una mediante `tool/flutter-safe`, que requiere una sesión systemd de usuario y limita el consumo de recursos del árbol completo de procesos. La compilación Android usa un worker y Linux usa un trabajo de Ninja.
+
+Los archivos PDF de `test/support/pdf/` son fixtures sintéticos. La contraseña `nala-test` pertenece únicamente al archivo de prueba `protected.pdf`.
 
 Primera comprobación: ocho tests de codec y lápiz pasando; build Linux debug correcto y aplicación ejecutándose con VM Service el 6 de octubre de 2026. La comprobación física del S Pen queda pendiente de instalar el APK en la tablet.

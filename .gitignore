@@ -35,6 +35,21 @@ migrate_working_dir/
 /dist/
 /android/.kotlin/
 
+# Device data and private configuration
+.env
+.env.*
+!.env.example
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.keystore
+*.jks
+key.properties
+credentials.json
+token.json
+
 # Symbolication related
 app.*.symbols
 

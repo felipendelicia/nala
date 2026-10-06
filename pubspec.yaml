@@ -11,6 +11,7 @@ dependencies:
   pdfrx: 2.6.5
   pdfrx_engine: 0.6.1
   pdf: 3.13.1
+  image: 4.10.1
   google_sign_in: 7.2.0
   oauth2: 2.0.5
   flutter_secure_storage: 11.2.0

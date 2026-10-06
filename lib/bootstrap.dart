@@ -5,6 +5,8 @@ import 'document/asset_store.dart';
 import 'document/notebook_repository.dart';
 import 'document/sqlite_notebook_repository.dart';
 import 'library/library_controller.dart';
+import 'pdf/pdf_service.dart';
+import 'pdf/document_files.dart';
 
 class AppServices {
   AppServices({
@@ -13,12 +15,17 @@ class AppServices {
     required this.repository,
     required this.assets,
     required this.library,
-  });
+    PdfService? pdf,
+    DocumentFiles? files,
+  }) : pdf = pdf ?? PdfService(assets: assets),
+       files = files ?? NativeDocumentFiles();
   final String root, deviceId;
   final NotebookRepository repository;
   final AssetStore assets;
   final LibraryController library;
-  static Future<AppServices> open(String root) async {
+  final PdfService pdf;
+  final DocumentFiles files;
+  static Future<AppServices> open(String root, {DocumentFiles? files}) async {
     await Directory(root).create(recursive: true);
     final device = File(p.join(root, 'device-id.txt'));
     final id = await device.exists()
@@ -36,10 +43,12 @@ class AppServices {
       repository: repository,
       assets: FileAssetStore(p.join(root, 'local', 'assets')),
       library: library,
+      files: files,
     );
   }
 
   Future<void> close() async {
+    pdf.dispose();
     library.dispose();
     await repository.close();
   }

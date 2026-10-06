@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../document/notebook.dart';
 import 'paper_canvas.dart';
 import '../ui/app_theme.dart';
+import '../pdf/pdf_service.dart';
+import '../pdf/pdf_page_background.dart';
 
 class PagePanel extends StatelessWidget {
   const PagePanel({
@@ -10,11 +12,13 @@ class PagePanel extends StatelessWidget {
     required this.currentPage,
     required this.onPage,
     required this.onAdd,
+    this.pdf,
   });
   final List<NotebookPage> pages;
   final int currentPage;
   final ValueChanged<int> onPage;
   final VoidCallback onAdd;
+  final PdfService? pdf;
   @override
   Widget build(BuildContext context) => SizedBox(
     width: 170,
@@ -56,6 +60,16 @@ class PagePanel extends StatelessWidget {
                                 page: pages[index],
                                 tool: EditorTool.pen,
                                 onStroke: (_) {},
+                                background:
+                                    pdf == null ||
+                                        pages[index].background.assetId == null
+                                    ? null
+                                    : PdfPageBackground(
+                                        pdf: pdf!,
+                                        page: pages[index],
+                                        scale: .25,
+                                        render: false,
+                                      ),
                               ),
                             ),
                           ),

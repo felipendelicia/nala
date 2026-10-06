@@ -8,8 +8,24 @@ import '../support/fixtures.dart';
 
 void main() {
   test('un borrador rápido detecta el cruce entre muestras', () {
-    expect(StrokeGeometry.hitSweep(fixtureStroke(), const Point(0.0, 50.0), const Point(50.0, 0.0), 1), isTrue);
-    expect(StrokeGeometry.hitSweep(fixtureStroke(), const Point(0.0, 100.0), const Point(50.0, 100.0), 1), isFalse);
+    expect(
+      StrokeGeometry.hitSweep(
+        fixtureStroke(),
+        const Point(0.0, 50.0),
+        const Point(50.0, 0.0),
+        1,
+      ),
+      isTrue,
+    );
+    expect(
+      StrokeGeometry.hitSweep(
+        fixtureStroke(),
+        const Point(0.0, 100.0),
+        const Point(50.0, 100.0),
+        1,
+      ),
+      isFalse,
+    );
   });
   test('presión y borrador tienen tamaño correcto entre puntos', () {
     expect(StrokeGeometry.widthFor(4, 0), 1.4);

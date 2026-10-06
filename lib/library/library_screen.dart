@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
+import 'package:pdfrx_engine/pdfrx_engine.dart' show PdfPasswordException;
 import '../bootstrap.dart';
 import '../document/notebook.dart';
 import '../document/revision.dart';
@@ -8,6 +9,9 @@ import '../editor/editor_screen.dart';
 import '../editor/paper_canvas.dart';
 import '../ui/app_theme.dart';
 import 'notebook_dialog.dart';
+import '../pdf/password_dialog.dart';
+import '../pdf/pdf_page_background.dart';
+import '../pdf/pdf_service.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key, required this.services});
@@ -18,6 +22,7 @@ class LibraryScreen extends StatefulWidget {
 
 class _LibraryScreenState extends State<LibraryScreen> {
   String query = '', subject = '';
+  bool importing = false;
   Future<void> _open(DocumentEntry entry) async {
     final editor = EditorController(
       notebook: entry.notebook,
@@ -28,7 +33,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
       now: DateTime.now,
     );
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => EditorScreen(controller: editor)),
+      MaterialPageRoute<void>(
+        builder: (_) => EditorScreen(
+          controller: editor,
+          pdf: widget.services.pdf,
+          files: widget.services.files,
+        ),
+      ),
     );
     editor.dispose();
     if (mounted) await widget.services.library.refresh();
@@ -57,6 +68,49 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ),
         );
       }
+    }
+  }
+
+  Future<void> _import() async {
+    setState(() => importing = true);
+    try {
+      final file = await widget.services.files.openPdf();
+      if (file == null || !mounted) return;
+      String? password;
+      while (mounted) {
+        try {
+          final note = await widget.services.pdf.importDocument(
+            bytes: file.bytes,
+            title: file.name.replaceFirst(
+              RegExp(r'\.pdf$', caseSensitive: false),
+              '',
+            ),
+            documentId: const Uuid().v4(),
+            newId: const Uuid().v4,
+            now: DateTime.now(),
+            password: password,
+          );
+          final entry = await widget.services.library.add(note);
+          if (mounted) await _open(entry);
+          break;
+        } on PdfPasswordException {
+          if (!mounted) return;
+          password = await askPdfPassword(context, incorrect: password != null);
+          if (password == null) return;
+        }
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No se pudo abrir ese PDF. Comprobá el archivo y el espacio del dispositivo.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => importing = false);
     }
   }
 
@@ -153,9 +207,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
                             label: const Text('Crear cuaderno'),
                           ),
                           OutlinedButton.icon(
-                            onPressed: null,
+                            onPressed: importing ? null : _import,
                             icon: const Icon(Icons.picture_as_pdf_outlined),
-                            label: const Text('Abrir PDF'),
+                            label: Text(
+                              importing ? 'Abriendo PDF…' : 'Abrir PDF',
+                            ),
                           ),
                           SizedBox(
                             width: constraints.maxWidth < 500
@@ -228,6 +284,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 itemCount: entries.length,
                                 itemBuilder: (context, index) => _NotebookTile(
                                   entry: entries[index],
+                                  pdf: widget.services.pdf,
                                   onTap: () => _open(entries[index]),
                                 ),
                               ),
@@ -245,9 +302,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
 }
 
 class _NotebookTile extends StatelessWidget {
-  const _NotebookTile({required this.entry, required this.onTap});
+  const _NotebookTile({
+    required this.entry,
+    required this.onTap,
+    required this.pdf,
+  });
   final DocumentEntry entry;
   final VoidCallback onTap;
+  final PdfService pdf;
   @override
   Widget build(BuildContext context) => Material(
     color: Colors.white,
@@ -275,6 +337,15 @@ class _NotebookTile extends StatelessWidget {
                         page: entry.notebook.pages.first,
                         tool: EditorTool.pen,
                         onStroke: (_) {},
+                        background:
+                            entry.notebook.pages.first.background.assetId ==
+                                null
+                            ? null
+                            : PdfPageBackground(
+                                pdf: pdf,
+                                page: entry.notebook.pages.first,
+                                scale: .25,
+                              ),
                       ),
                     ),
                   ),

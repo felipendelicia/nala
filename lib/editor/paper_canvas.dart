@@ -13,12 +13,14 @@ class PaperCanvas extends StatefulWidget {
     required this.tool,
     this.argb = 0xff202020,
     this.width = 2,
+    this.background,
   });
   final NotebookPage page;
   final ValueChanged<InkStroke> onStroke;
   final EditorTool tool;
   final int argb;
   final double width;
+  final Widget? background;
   @override
   State<PaperCanvas> createState() => _PaperCanvasState();
 }
@@ -100,11 +102,13 @@ class _PaperCanvasState extends State<PaperCanvas> {
         fit: StackFit.expand,
         children: [
           RepaintBoundary(
-            child: CustomPaint(
-              painter: PaperBackgroundPainter(
-                widget.page.background.pattern ?? PaperPattern.blank,
-              ),
-            ),
+            child:
+                widget.background ??
+                CustomPaint(
+                  painter: PaperBackgroundPainter(
+                    widget.page.background.pattern ?? PaperPattern.blank,
+                  ),
+                ),
           ),
           RepaintBoundary(
             child: CustomPaint(painter: InkPainter(widget.page.strokes)),
