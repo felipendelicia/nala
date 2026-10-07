@@ -17,3 +17,5 @@ Primera comprobación: ocho tests de codec y lápiz pasando; build Linux debug c
 Para generar una versión release después de pruebas de integración, usá `tool/flutter-safe build apk --release --target-platform android-arm64` y `tool/flutter-safe build linux --release`, sin `--no-pub`. Flutter 3.47.6 regenera así los registros de plugins excluyendo dependencias de desarrollo; omitir esa fase puede dejar un registro Android de integration_test que no existe en release. No se modifica el archivo generado a mano.
 
 Gradle usa heap de 512 MiB, metaspace de 384 MiB, code cache de 64 MiB, SerialGC y dos procesadores activos. Esto permite que la compilación Dart y el empaquetador compartan el límite global de 2300 MiB.
+
+El límite suave de memoria del servicio es 2200 MiB, con un techo total de 2300 MiB y 256 MiB de swap. El compilador de Dart llegó a ~1.39 GiB RSS; el límite suave anterior de 1800 MiB forzaba intercambio y systemd-oomd detenía ese servicio aunque el equipo tenía memoria disponible. Se ajustó el límite suave dentro del mismo techo total, manteniendo dos CPU, prioridad baja y compilaciones secuenciales.

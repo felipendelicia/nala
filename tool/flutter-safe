@@ -20,7 +20,7 @@ if [[ -n "${XAUTHORITY:-}" ]]; then display_environment+=(--setenv=XAUTHORITY); 
 systemd-run --user --wait --pipe --collect \
   --unit="nala-build-${BASHPID}" \
   --working-directory="$repo_root" \
-  --property=MemoryMax=2300M --property=MemoryHigh=1800M \
+  --property=MemoryMax=2300M --property=MemoryHigh=2200M \
   --property=MemorySwapMax=256M --property=CPUQuota=200% \
   --property=Nice=10 --property=OOMPolicy=stop \
   --setenv="PATH=$repo_root/tool/serial-bin:$PATH" \
