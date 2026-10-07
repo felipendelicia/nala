@@ -57,4 +57,4 @@ Files: audio/notebook_audio_session.dart, audio/recording_panel.dart, audio/seek
 - [x] Format, analyze and run complete tests through tool/flutter-safe.
 - [x] Run native Linux feature/PDF flows, inspect screenshots and exported PDF.
 - [x] Review the full diff, fix demonstrated defects and rerun affected checks.
-- [ ] Build Linux x64 and Android ARM64 sequentially; document exact results and physical checks.
+- [x] Build Linux x64 and Android ARM64 sequentially; document exact results and physical checks.

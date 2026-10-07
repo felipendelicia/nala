@@ -23,9 +23,11 @@ Presión inmediata y suavizado inicial 0%; caché de tinta activa por mosaicos c
 
 Formas/regla, selección con copiar/cortar/duplicar/pegar/escala/giro/color, imágenes y texto, favoritos persistidos, pestañas/vista dividida, plantillas propias y portadas, búsqueda, audio temporal y tarjetas con repetición espaciada. Los nuevos datos conservan la compatibilidad con los cuadernos anteriores y sus medios se incluyen en guardado/sync/exportación. Los apuntes manuscritos se reconocen localmente en Android después de descargar explícitamente el modelo español; Linux requiere Tesseract con español para OCR de impresos y puede buscar el texto reconocido guardado en Android. Ver [guía de uso](study-tools.md) y [revisión](study-tools-review.md).
 
+Entrega local 0.5 lista en `dist/`: APK ARM64 y paquete Linux x64; el menú Nala abre la versión nueva. Pasaron **206** pruebas, análisis sin incidencias y tres recorridos nativos Linux. El binario final abrió con SQLite temporal válido. La versión 0.4 queda respaldada; la última release pública sigue siendo 0.4. Detalles en [verificación](verification.md).
+
 ## Verificación física pendiente
 
-Felipe confirmó que la primera versión funciona en la tablet. Esta mejora de presión/latencia, el micrófono y altavoz reales y el selector Android necesitan probarse allí con el nuevo APK. Las pruebas de escritorio no demuestran una sensación equivalente a Notewise.
+Felipe confirmó que la primera versión funciona en la tablet. La presión/latencia, el micrófono y altavoz reales, el selector Android y la descarga/calidad del modelo manuscrito necesitan probarse allí con el nuevo APK. Las pruebas de escritorio no demuestran una sensación equivalente a Notewise.
 
 ## Etapa final
 

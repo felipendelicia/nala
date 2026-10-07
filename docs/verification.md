@@ -175,3 +175,37 @@ cacce35aa2b78659b0ad6a3e76214023e4157f323a44a0078875a4904d66c5d5  Nala-Linux-x64
 La auditoría revisó archivos actuales e historial: ninguna ruta privada prohibida ni patrón conocido de credenciales. No se publican datos de notas ni claves de firma. Samsung, proximidad/botón y sensación punta-pantalla requieren el nuevo APK en la Tab S10. Sincronización continúa diferida; el binario público funciona localmente. Las decisiones y costes se conservan en [decisiones](decisions.md).
 
 Se publicó la [prerelease v0.4.0](https://github.com/felipendelicia/nala/releases/tag/v0.4.0), con tag en `ae8201e4aac7b0d69f4b3151154478c4bf729d59`. La API de GitHub confirmó los tres archivos subidos y sus tamaños/digests SHA-256 exactos: APK, paquete Linux y SHA256SUMS. Main recibió el historial por avance directo; el repositorio continúa público. Se revisaron 173 archivos y 400 blobs históricos antes de publicar, sin patrones conocidos de credenciales ni rutas privadas prohibidas. El cierre posterior sólo documenta esta verificación y no modifica el producto compilado.
+
+
+## Herramientas y estudio 0.5.0
+
+Código compilado: `7455da3424e5352f65793dfdc86d799992bd1a2a`. El commit `c39e418` contiene la implementación verificada; los tres siguientes ajustan sólo el empaquetado Android y su documentación. Incorpora las nueve funciones del pedido autónomo: formas/regla, selección completa, texto/imágenes, favoritos, pestañas/vista dividida, plantillas/portadas, búsqueda, audio ligado a tinta y tarjetas con repetición espaciada. La [guía de uso](study-tools.md) describe cada control y los requisitos de reconocimiento/audio.
+
+Verificación final de fuente: **206/206** pruebas unitarias/widget en 1min34,1s; análisis global sin incidencias. Se conservaron las pruebas anteriores de presión/S Pen, PDF, comentarios, organización y Drive simulado. Las nuevas cubren codec y medios, geometría/portapapeles, favoritos, imágenes/fondos, búsqueda PDF real y huellas de reconocimiento, foco y primer gesto entre paneles, plantillas pequeñas, recuperación de audio y programación de tarjetas.
+
+La revisión independiente encontró cuatro defectos iniciales y dos interacciones posteriores, corregidos antes de esta suite: pérdida del WAV al fallar almacenamiento, primer gesto cancelado, teclado dirigido al panel anterior, medidas negativas con una plantilla pequeña, recuperación de audio con varios paneles laterales y borrado normal del audio pendiente que se deshacía al reintentar. Se reprodujeron también la goma temporal conservada al cerrar nuevos menús, el desplazamiento de cámara al entrar en lectura y el reconocimiento por mantener la punta con muestras pequeñas. Una última regresión demuestra que un comentario visible sobre tinta con audio mantiene prioridad al tocarlo. La [revisión](study-tools-review.md) conserva sus hallazgos y la comprobación posterior de código.
+
+Pasaron tres recorridos nativos Linux, cada uno en un proceso Flutter: estudio (40,3s con compilación), PDF (36,6s) y carpetas/comentarios (39,0s). El primero crea texto, duplica/deshace, dibuja una forma, aplica Cornell, busca sin acentos, crea/repasa una tarjeta, agrega una imagen, exporta, divide dos apuntes y vuelve a cargar los datos de SQLite. El segundo importa PDF, intercala una hoja, escribe durante la exportación, abre la salida de tres páginas y cancela otra exportación. El tercero conserva carpetas anidadas y comentarios tras cerrar/reabrir y leer. El test PDF ahora busca su título dentro del editor, porque también aparece en la pestaña.
+
+Se inspeccionaron las capturas de editor, estudio y dos paneles. Poppler confirmó el PDF nuevo de una página A4, con texto Unicode seleccionable, imagen azul, forma vectorial y guías Cornell correctas. Un fallo inicial del build Linux se debía a una caché del SDK con el directorio de cabeceras vacío; regenerar la caché resolvió la compilación sin cambiar CMake.
+
+Las pruebas usan apuntes temporales y audio sintético. No se activó el micrófono real ni se modificó la biblioteca personal. Android reconoce tinta escrita en Nala después de descargar explícitamente el modelo español; su precisión/descarga y el S Pen/micrófono/selector requieren comprobación en la Tab S10. Linux no tiene Tesseract con español en este equipo: informa que el OCR no está disponible y permite ingresar texto manualmente o buscar lo reconocido/guardado en Android. Drive real sigue pendiente de configurar OAuth y probar dos dispositivos.
+
+
+### Paquetes locales verificados
+
+Las compilaciones finales corresponden a `7455da3424e5352f65793dfdc86d799992bd1a2a`. Android ARM64 release terminó en 19,5 s después de los ajustes de empaquetado; Linux x64 release se regeneró en 2,3 s aprovechando su compilación anterior de 48,5 s. Todas las tareas Flutter fueron secuenciales con el techo de 2300 MiB, swap de 256 MiB, dos CPU y un worker de compilación.
+
+El primer Android frío fue detenido por OOM dentro de su servicio propio. El siguiente completó Dart y ML Kit pero R8 agotó el heap de 512 MiB y repetía GC completo sin liberar espacio; se detuvo sólo ese servicio y se desactivó la minificación/reducción Java. La compilación sin R8 pasó en 2 min 14,1 s. El APK inicial de 57,3 MB anunciaba ARMv7/x86_64 por los JNI transitivos sin motor Flutter para ellos; se agregó el filtro ARM64 y la propiedad que conserva ese filtro frente al valor predeterminado del plugin Flutter 3.47. La entrega final incluye sólo ARM64, Dart AOT e iconos reducidos. [Decisiones y coste](decisions.md).
+
+- APK: **43 867 003 bytes**, versión 0.5.0+5, nombre Nala, package `com.felipe.apuntes`, mínimo API 24 y target 36. Firma v2 válida y certificado SHA-256 `e92cb0c4bf598fbf0347d135efb275bfb381761f156c2984e2c796b63ff09887`, idéntico al anterior: permite actualizar sin desinstalar. Firma de desarrollo para pruebas. aapt y la inspección ZIP confirmaron sólo ARM64, los motores Flutter/PDF/ML Kit y el logo exacto.
+- Linux: **17 782 232 bytes**, 41 entradas en el paquete, con binario, bibliotecas, recursos, icono, fuentes/licencias, guía y lanzador ejecutable. Versión0.5.0+5; todas las bibliotecas resueltas, logo idéntico y entrada del menú validada. El APK y el binario entregados coinciden byte por byte con las salidas compiladas.
+- La versión Linux final abrió con datos temporales aislados y siguió activa; su SQLite `quick_check` devolvió `ok`. Se detuvo sólo el servicio propio y se borraron sus datos de prueba. La biblioteca personal no se abrió ni modificó.
+- Los archivos locales están en `dist/`; el acceso Nala del menú apunta a la versión nueva. Se conserva 0.4 completa en `dist/previous-v0.4.0`. Esta etapa no publicó una release externa ni modificó main.
+
+SHA-256 finales, comprobados desde los archivos entregados:
+
+```text
+1b66b2776ed6d689a49ba2298b15de0e2a8306673300d45f5623b1042cb60942  Nala.apk
+9d50834771ba38389f6db5ccd31f55311959a77053ac3d27987923c246ab00cd  Nala-Linux-x64.tar.gz
+```
