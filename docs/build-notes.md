@@ -21,3 +21,5 @@ Gradle usa heap de 512 MiB, metaspace de 384 MiB, code cache de 64 MiB, SerialGC
 El límite suave de memoria del servicio es 2200 MiB, con un techo total de 2300 MiB y 256 MiB de swap. El compilador de Dart llegó a ~1.39 GiB RSS; el límite suave anterior de 1800 MiB forzaba intercambio y systemd-oomd detenía ese servicio aunque el equipo tenía memoria disponible. Se ajustó el límite suave dentro del mismo techo total, manteniendo dos CPU, prioridad baja y compilaciones secuenciales.
 
 En0.5 se desactivan `isMinifyEnabled` y `isShrinkResources` del paquete Android. El grafo de ML Kit hizo que R8 llenara el heap512 y repitiera GC completo sin liberar memoria. Dart sigue compilándose AOT en release y los iconos siguen reduciéndose. Esta decisión aumenta el tamaño del APK para conservar la compilación dentro del presupuesto; no se elevan los límites del servicio ni el heap.
+
+La propiedad `disable-abi-filtering=true` desactiva la lista predeterminada del plugin Flutter, que en3.47 reemplaza los ABI configurados por el proyecto. El filtro ARM64 de defaultConfig permanece activo; la comprobación de aapt/ZIP debe mostrar únicamente arm64-v8a.
