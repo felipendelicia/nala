@@ -216,7 +216,7 @@ class _EditorScreenState extends State<EditorScreen> {
   Size? viewSize;
   String? fittedPage;
   final draft = DraftInk();
-  double pressureSensitivity = 1, stabilization = .08;
+  double pressureSensitivity = 1, stabilization = 0;
   final erased = <String>{};
   Set<String> selected = {};
   Offset? start, latest;
@@ -282,6 +282,8 @@ class _EditorScreenState extends State<EditorScreen> {
         width: width,
         sensitivity: pressureSensitivity,
         stabilization: stabilization,
+        rasterBounds: Rect.fromLTWH(0, 0, page.width, page.height),
+        rasterScale: view.scale * MediaQuery.devicePixelRatioOf(context),
         pressureCurve: event.device == InputDevice.mouse
             ? PressureCurve.uniform
             : PressureCurve.expressive,
@@ -311,18 +313,23 @@ class _EditorScreenState extends State<EditorScreen> {
       draft.add(p);
       return;
     }
-    if (gestureTool == EditorTool.eraser) eraseAt(p, from: previous);
+    if (gestureTool == EditorTool.eraser) {
+      final count = erased.length;
+      eraseAt(p, from: previous);
+      if (erased.length == count) return;
+    }
     setState(() {});
   }
 
   void eraseAt(InkPoint p, {Offset? from}) {
     for (final s in page.strokes) {
-      if (StrokeGeometry.hitSweep(
-        s,
-        math.Point(from?.dx ?? p.x, from?.dy ?? p.y),
-        math.Point(p.x, p.y),
-        10 / view.scale,
-      )) {
+      if (!erased.contains(s.id) &&
+          StrokeGeometry.hitSweep(
+            s,
+            math.Point(from?.dx ?? p.x, from?.dy ?? p.y),
+            math.Point(p.x, p.y),
+            10 / view.scale,
+          )) {
         erased.add(s.id);
       }
     }

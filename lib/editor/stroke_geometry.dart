@@ -45,6 +45,11 @@ class StrokeGeometry {
     Point<double> to,
     double radius,
   ) {
+    final sweep = Rect.fromPoints(
+      Offset(from.x, from.y),
+      Offset(to.x, to.y),
+    ).inflate(radius + .0001);
+    if (!bounds(stroke).overlaps(sweep)) return false;
     for (var i = 0; i < stroke.points.length; i++) {
       final p = stroke.points[i], previous = stroke.points[i == 0 ? 0 : i - 1];
       final a = Point(previous.x, previous.y), b = Point(p.x, p.y);
@@ -165,7 +170,10 @@ class StrokeGeometry {
             )
             .toList(),
       );
-  static Rect bounds(InkStroke stroke) {
+  static final Expando<Rect> _bounds = Expando();
+  static Rect bounds(InkStroke stroke) =>
+      _bounds[stroke] ??= _buildBounds(stroke);
+  static Rect _buildBounds(InkStroke stroke) {
     var left = double.infinity,
         top = double.infinity,
         right = double.negativeInfinity,

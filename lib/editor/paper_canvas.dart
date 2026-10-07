@@ -61,6 +61,8 @@ class _PaperCanvasState extends State<PaperCanvas> {
           : InkTool.pen,
       argb: widget.argb,
       width: widget.width,
+      rasterBounds: Rect.fromLTWH(0, 0, widget.page.width, widget.page.height),
+      rasterScale: MediaQuery.devicePixelRatioOf(context),
       pressureCurve: event.kind == PointerDeviceKind.mouse
           ? PressureCurve.uniform
           : PressureCurve.expressive,

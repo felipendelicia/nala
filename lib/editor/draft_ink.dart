@@ -2,13 +2,15 @@ import 'dart:collection';
 import 'package:flutter/material.dart';
 import '../document/notebook.dart';
 import 'stroke_geometry.dart';
+import 'live_ink_raster.dart';
 
 /// Only the live ink layer listens to this buffer; no widget rebuild per sample.
 class DraftInk extends ChangeNotifier {
   final _points = <InkPoint>[];
   Path _path = Path();
   InkStroke? _style;
-  double _stabilization = .08;
+  double _stabilization = 0;
+  LiveInkRaster? _raster;
   Path get path => _path;
   List<InkPoint> get points => UnmodifiableListView(_points);
   bool get isEmpty => _points.isEmpty;
@@ -27,8 +29,14 @@ class DraftInk extends ChangeNotifier {
     required double width,
     PressureCurve pressureCurve = PressureCurve.expressive,
     double sensitivity = 1,
-    double stabilization = .08,
+    double stabilization = 0,
+    Rect? rasterBounds,
+    double rasterScale = 1,
   }) {
+    _raster?.dispose();
+    _raster = rasterBounds == null
+        ? null
+        : LiveInkRaster(bounds: rasterBounds, scale: rasterScale);
     _points.clear();
     _path = Path();
     _stabilization = stabilization.clamp(0, .4);
@@ -50,7 +58,8 @@ class DraftInk extends ChangeNotifier {
   void _append(InkPoint point) {
     final previous = _points.isEmpty ? null : _points.last;
     final r = StrokeGeometry.strokeWidth(_style!, point.pressure) / 2;
-    _path.addOval(Rect.fromCircle(center: Offset(point.x, point.y), radius: r));
+    final segment = Path()
+      ..addOval(Rect.fromCircle(center: Offset(point.x, point.y), radius: r));
     if (previous != null) {
       final corners = StrokeGeometry.segmentCorners(
         previous,
@@ -58,8 +67,10 @@ class DraftInk extends ChangeNotifier {
         StrokeGeometry.strokeWidth(_style!, previous.pressure) / 2,
         r,
       );
-      if (corners != null) _path.addPolygon(corners, true);
+      if (corners != null) segment.addPolygon(corners, true);
     }
+    _path.addPath(segment, Offset.zero);
+    _raster?.add(segment);
     _points.add(point);
   }
 
@@ -71,7 +82,7 @@ class DraftInk extends ChangeNotifier {
       InkPoint(
         x: previous.x * _stabilization + point.x * raw,
         y: previous.y * _stabilization + point.y * raw,
-        pressure: previous.pressure * .25 + point.pressure * .75,
+        pressure: point.pressure,
       ),
     );
     notifyListeners();
@@ -101,7 +112,24 @@ class DraftInk extends ChangeNotifier {
     return stroke;
   }
 
+  void paint(Canvas canvas) {
+    if (isEmpty) return;
+    if (_raster != null) {
+      _raster!.paint(canvas, color);
+    } else {
+      canvas.drawPath(_path, Paint()..color = color);
+    }
+  }
+
+  @override
+  void dispose() {
+    _raster?.dispose();
+    super.dispose();
+  }
+
   void cancel() {
+    _raster?.dispose();
+    _raster = null;
     _points.clear();
     _path = Path();
     _style = null;
@@ -114,7 +142,7 @@ class DraftInkPainter extends CustomPainter {
   final DraftInk ink;
   @override
   void paint(Canvas canvas, Size size) {
-    if (!ink.isEmpty) canvas.drawPath(ink.path, Paint()..color = ink.color);
+    ink.paint(canvas);
   }
 
   @override
