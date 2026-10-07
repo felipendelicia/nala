@@ -274,3 +274,7 @@ f831a779c89d5ea8034629f4ca50d4fd27beecd04d610872d06c45ac98be045f  Nala-Linux-x64
 825e2c89af89140bb2a7caac4d54374b8b4155885092fcdc6c4a11e856ac5919  GUIA-0.5.md
 ab03af0738987a1c9c67802aff5335d10763d3bfd73f5f9b1a3389789584c1c1  Vista-Nala-0.6.png
 ```
+
+Publicación completada el **7 de octubre de 2026, 17:34:23 UTC**, en [GitHub v0.6.0](https://github.com/felipendelicia/nala/releases/tag/v0.6.0), como prerelease. `main` y `codex/study-tools` se actualizaron por avance directo y la etiqueta anotada `v0.6.0` identifica **56bfcfa1e6e29a7d17f84b7a2c56a9f9ed71df2b**, con el mismo código de aplicación compilado en bbd21ec.
+
+Los seis adjuntos se descargaron mientras la release era borrador y se compararon byte por byte/hash/tamaño con `dist/`; todos coincidieron. Después de publicar, la API confirmó `isDraft=false`, la misma lista de IDs/tamaños/estado de los adjuntos y la URL final. El manifiesto se descargó sin autenticación y coincidió con el local; los cinco enlaces públicos restantes devolvieron HTTP 200. Evidencia en `.dart_tool/github-v060-{draft,published}.json`, `github-v060-draft-check.json` y `github-v060-public-SHA256SUMS`. No se publicó ninguna base de apuntes ni configuración privada.
