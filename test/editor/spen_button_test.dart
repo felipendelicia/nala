@@ -24,7 +24,10 @@ Future<void> nativeEdge(WidgetTester tester, String method, [bool? value]) {
   return done.future;
 }
 
-Future<EditorController> editor(WidgetTester tester) async {
+Future<EditorController> editor(
+  WidgetTester tester, {
+  PenPreferencesController? prefs,
+}) async {
   await tester.binding.setSurfaceSize(const Size(1200, 900));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   var id = 0;
@@ -35,7 +38,11 @@ Future<EditorController> editor(WidgetTester tester) async {
     newId: () => 'r${++id}',
     now: () => DateTime.utc(2026),
   );
-  await tester.pumpWidget(MaterialApp(home: EditorScreen(controller: c)));
+  await tester.pumpWidget(
+    MaterialApp(
+      home: EditorScreen(controller: c, penPreferences: prefs),
+    ),
+  );
   await tester.pumpAndSettle();
   addTearDown(() {
     c.dispose();
@@ -234,6 +241,42 @@ void main() {
     expect(selectedTool(tester), EditorTool.pen);
     await tester.pumpWidget(const SizedBox());
   });
+  testWidgets(
+    'selección con botón se conserva al soltar para poder eliminarla',
+    (tester) async {
+      late Directory dir;
+      late PenPreferencesController prefs;
+      await tester.runAsync(() async {
+        dir = await Directory.systemTemp.createTemp('nala-selection-button-');
+        prefs = await PenPreferencesController.open(dir.path);
+        await prefs.update(
+          const PenSettings(buttonTool: PenButtonTool.selection),
+        );
+      });
+      final c = await editor(tester, prefs: prefs);
+      final sheet = tester.renderObject<RenderBox>(find.byType(PaperCanvas));
+      await nativeEdge(tester, 'button', true);
+      await tester.pump();
+      final pen = await tester.startGesture(
+        sheet.localToGlobal(const Offset(3, 12)),
+        kind: PointerDeviceKind.stylus,
+        buttons: kPrimaryStylusButton,
+      );
+      await pen.moveTo(sheet.localToGlobal(const Offset(38, 48)));
+      await pen.up();
+      await tester.pump();
+      expect(find.byTooltip('Eliminar selección'), findsOneWidget);
+      await nativeEdge(tester, 'button', false);
+      await tester.pump();
+      expect(selectedTool(tester), EditorTool.pen);
+      expect(find.byTooltip('Eliminar selección'), findsOneWidget);
+      await tester.tap(find.byTooltip('Eliminar selección'));
+      await tester.pumpAndSettle();
+      expect(c.notebook.pages.first.strokes, isEmpty);
+      await tester.pumpWidget(const SizedBox());
+      await tester.runAsync(() => dir.delete(recursive: true));
+    },
+  );
   for (final toggle in [false, true]) {
     testWidgets(
       toggle

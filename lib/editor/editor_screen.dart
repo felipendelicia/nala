@@ -283,10 +283,13 @@ class _EditorScreenState extends State<EditorScreen>
       }
     }
     if (next == null || next == tool) return;
+    final keepSelection =
+        tool == EditorTool.selection || next == EditorTool.selection;
     router.changeInkTool(() {
       setState(() {
         tool = next!;
-        selected = {};
+        if (!keepSelection) selected = {};
+        placingComment = false;
       });
     });
   }

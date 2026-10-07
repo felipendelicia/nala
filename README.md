@@ -33,7 +33,7 @@ tool/flutter-safe test --no-pub integration_test/spen_fluency_test.dart -d linux
 tool/flutter-safe build apk --release --target-platform android-arm64
 ```
 
-`tool/flutter-safe` ejecuta las tareas de a una dentro de un servicio con un límite total de 2300 MiB de RAM, 256 MiB de swap y dos CPU. Requiere Linux con una sesión systemd de usuario. Gradle además tiene un límite de heap de 640 MiB, un solo worker y no deja un daemon persistente. La compilación de Linux usa Ninja con un solo trabajo. Estos límites se añadieron para una PC de 7.5 GiB de RAM. No ejecutar tareas de Flutter por fuera del script al mismo tiempo que se genera el APK.
+`tool/flutter-safe` ejecuta las tareas de a una dentro de un servicio con un límite total de 2300 MiB de RAM, 256 MiB de swap y dos CPU. Requiere Linux con una sesión systemd de usuario. Gradle además tiene un límite de heap de 512 MiB, un solo worker y no deja un daemon persistente. La compilación de Linux usa Ninja con un solo trabajo. Estos límites se añadieron para una PC de 7.5 GiB de RAM. No ejecutar tareas de Flutter por fuera del script al mismo tiempo que se genera el APK.
 
 La compilación Linux debe preceder a las pruebas de PDF: les proporciona la biblioteca nativa PDFium real. Requisitos de las plataformas y detalles del entorno en [compilación](docs/build-notes.md).
 
