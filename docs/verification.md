@@ -127,4 +127,21 @@ La indicación posterior reemplaza la paleta verde de la interfaz por blanco, ne
 
 La suite completa de la paleta final pasó 108/108. Se mantuvieron todas las comprobaciones de trazo, presión, geometría reutilizada, guardado, compartir, carpetas y cuentas.
 
-El perfil de heap de 512 MiB mantuvo la protección, pero R8 ocupó todo el heap y dedicó 97 segundos a 159 recolecciones completas de memoria. Se detuvo sólo ese servicio de compilación y se eligió un valor intermedio de 640 MiB, manteniendo metaspace 384 MiB y los límites globales anteriores. La configuración final se valida con el APK compilado.
+El perfil de heap de 512 MiB mantuvo la protección, pero R8 ocupó todo el heap y dedicó 97 segundos a 159 recolecciones completas de memoria. La compilación terminó exitosamente antes de la orden de detención, que no afectó ningún proceso porque el servicio ya había finalizado. Se eligió un valor intermedio de 640 MiB, manteniendo metaspace 384 MiB y los límites globales anteriores; la compilación incremental posterior también terminó correctamente.
+
+## Entregables finales 0.3.0
+
+El código de ambas compilaciones es `aaac87201bc578e5354b70b2dd46620c0b63f127`, con el tema blanco/negro final solicitado por Felipe. Los cambios posteriores son documentación de entrega. La suite de 108/108 y analyze sin problemas cubren ese código de aplicación; el último recorrido nativo de apariencia/compartir/mover pasó 1/1 y regeneró cinco capturas, inspeccionadas en claro/oscuro, editor continuo y lectura. El recorrido PDF también pasó después de las correcciones de instantánea/cámara.
+
+El APK final 0.3.0+3 ocupa 31 063 142 bytes; package com.felipe.apuntes, mínimo API24, target36 y bibliotecas Flutter ARM64. Firma APK v2 válida, certificado SHA-256 e92cb0c4bf598fbf0347d135efb275bfb381761f156c2984e2c796b63ff09887, idéntico al anterior. Permite actualizar sin desinstalar. El perfil512 completó en254.8s; el perfil final640 completó una compilación incremental en19.9s. Linux release terminó en54.3s. Todos mediante el wrapper secuencial, sin modificar el límite global.
+
+El paquete Linux ocupa 17 549 754 bytes. Se comprobaron bibliotecas, rutas portables y permisos ejecutables, fuentes/licencias y el logo exacto en ambos binarios. El acceso del menú Nala y el lanzador son válidos; la versión0.2 permanece como respaldo local. La versión release abrió en una ventana real y siguió activa, con un SQLite aislado de los apuntes personales; PRAGMA quick_check devolvió ok. Se detuvo sólo el servicio propio de esa comprobación.
+
+Sumas de los archivos finales:
+
+```text
+aff77e4086b58dffd5c6fcb683118f2ab58cd51cab675833c86ea45011fd2a8c  Nala.apk
+e156a83331c1bc973640dcb66696b514895c3c504736082a94c65892300f41a2  Nala-Linux-x64.tar.gz
+```
+
+La comprobación física del S Pen y del selector/permisos Android queda para la tablet; recepción en aplicaciones externas y Drive real siguen con los límites documentados.
