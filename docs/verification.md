@@ -145,3 +145,7 @@ e156a83331c1bc973640dcb66696b514895c3c504736082a94c65892300f41a2  Nala-Linux-x64
 ```
 
 La comprobación física del S Pen y del selector/permisos Android queda para la tablet; recepción en aplicaciones externas y Drive real siguen con los límites documentados.
+
+Se publicó la [prerelease v0.3.0](https://github.com/felipendelicia/nala/releases/tag/v0.3.0), con tag en `5b973184923d7b1aa82724c391b75b06aade92e9` (el código compilado y documentación de entrega). La API de GitHub confirmó que el repositorio continúa público, los tres archivos están subidos y sus tamaños/digests SHA-256 coinciden exactamente con los locales: APK, paquete Linux y SHA256SUMS. Main recibió el historial por avance directo.
+
+La auditoría de los 164 archivos de código y los blobs históricos no encontró rutas privadas prohibidas ni patrones conocidos de credenciales. Las decisiones de este plan y sus costes están preservados en [decisiones](decisions.md); no quedaron observaciones menores diferidas. La última modificación sólo cierra documentación y el plan; no cambia los binarios verificados.

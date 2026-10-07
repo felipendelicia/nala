@@ -68,5 +68,5 @@ expect(reopened.notebook.folderId, target.id);
 ### Final
 
 - [x] Una revisión fresca. Corregir Important/Critical en una pasada con RED→GREEN; documentar decisiones/límites.
-- [ ] Generar APK/Linux seguros versión 0.3.0+3, instalar acceso PC, publicar fuente y prerelease autorizadas, comprobar digests remotos.
-- [ ] Documentar pruebas, latencia física pendiente y entrega con enlaces; limpiar sólo workspace temporal de este plan.
+- [x] Generar APK/Linux seguros versión 0.3.0+3, instalar acceso PC, publicar fuente y prerelease autorizadas, comprobar digests remotos.
+- [x] Documentar pruebas, latencia física pendiente y entrega con enlaces; limpiar sólo workspace temporal de este plan.
