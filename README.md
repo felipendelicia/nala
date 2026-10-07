@@ -20,7 +20,7 @@ La sincronización automática con Drive está incorporada al código: carpetas,
 
 La versión 0.6 agrega elementos reutilizables, enlaces entre páginas de apuntes, recorte y opacidad de imágenes con original recuperable, bloqueo de objetos, barra configurable, backup completo restaurable y fórmulas LaTeX con vista previa local. La restauración crea copias y conserva la biblioteca actual. Ver [la guía de estas herramientas](docs/notebook-workflow.md).
 
-La última [versión publicada, 0.4.0](https://github.com/felipendelicia/nala/releases/tag/v0.4.0), incluye las mejoras previas de S Pen. La entrega 0.6.0 se genera localmente en `dist/`, conservando 0.5.1 como respaldo. Descargas de 0.4: [APK para la Tab S10 (Android ARM64)](https://github.com/felipendelicia/nala/releases/download/v0.4.0/Nala.apk), [Linux x64](https://github.com/felipendelicia/nala/releases/download/v0.4.0/Nala-Linux-x64.tar.gz) y [sumas de comprobación](https://github.com/felipendelicia/nala/releases/download/v0.4.0/SHA256SUMS). La primera versión corresponde al editor previo al trabajo de PDF; su APK fue probado en la tablet. Los archivos compilados no se incluyen en el historial de código.
+La [versión de prueba 0.6.0](https://github.com/felipendelicia/nala/releases/tag/v0.6.0) incluye estas herramientas, las mejoras de estudio y el encabezado compacto. Descargas: [APK para la Tab S10 (Android ARM64)](https://github.com/felipendelicia/nala/releases/download/v0.6.0/Nala.apk), [Linux x64](https://github.com/felipendelicia/nala/releases/download/v0.6.0/Nala-Linux-x64.tar.gz), [guía de uso](https://github.com/felipendelicia/nala/releases/download/v0.6.0/GUIA-0.6.md) y [sumas de comprobación](https://github.com/felipendelicia/nala/releases/download/v0.6.0/SHA256SUMS). La entrega local está en `dist/`, con 0.5.1 conservada como respaldo. La primera versión corresponde al editor previo al trabajo de PDF; su APK fue probado en la tablet. Los archivos compilados se distribuyen como adjuntos de la release y no se incluyen en el historial de código.
 
 En Linux, descomprimí el paquete y ejecutá `Abrir-Nala.sh` manteniéndolo junto a `Nala-Linux/`. En Android, copiá `Nala.apk`, abrilo y permití la instalación desde la aplicación que lo abre. Es un APK de prueba firmado con una clave de desarrollo.
 
@@ -37,6 +37,7 @@ tool/flutter-safe test --no-pub integration_test/pdf_round_trip_test.dart -d lin
 tool/flutter-safe test --no-pub integration_test/appearance_share_test.dart -d linux
 tool/flutter-safe test --no-pub integration_test/spen_fluency_test.dart -d linux
 tool/flutter-safe test --no-pub integration_test/study_tools_test.dart -d linux
+tool/flutter-safe test --no-pub integration_test/notebook_workflow_test.dart -d linux
 tool/flutter-safe build apk --release --target-platform android-arm64
 ```
 

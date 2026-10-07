@@ -23,7 +23,7 @@ Presión inmediata y suavizado inicial 0%; caché de tinta activa por mosaicos c
 
 Formas/regla, selección con copiar/cortar/duplicar/pegar/escala/giro/color, imágenes y texto, favoritos persistidos, pestañas/vista dividida, plantillas propias y portadas, búsqueda, audio temporal y tarjetas con repetición espaciada. Los nuevos datos conservan la compatibilidad con los cuadernos anteriores y sus medios se incluyen en guardado/sync/exportación. Los apuntes manuscritos se reconocen localmente en Android después de descargar explícitamente el modelo español; Linux requiere Tesseract con español para OCR de impresos y puede buscar el texto reconocido guardado en Android. Ver [guía de uso](study-tools.md) y [revisión](study-tools-review.md).
 
-La entrega local actual es **0.6.0+7**, lista en `dist/`: APK ARM64 y paquete Linux x64; el menú Nala abre la versión nueva. Pasaron **270** pruebas, análisis sin incidencias y tres recorridos nativos Linux. El paquete final descomprimido abrió con SQLite temporal válido. La entrega 0.5.1 completa queda respaldada junto a las anteriores; la última release pública sigue siendo 0.4. Detalles en [verificación](verification.md).
+La entrega actual es **0.6.0+7**, disponible en [GitHub](https://github.com/felipendelicia/nala/releases/tag/v0.6.0) y en `dist/`: APK ARM64 y paquete Linux x64; el menú Nala abre la versión nueva. Pasaron **270** pruebas, análisis sin incidencias y tres recorridos nativos Linux. El paquete final descomprimido abrió con SQLite temporal válido. La entrega 0.5.1 completa queda respaldada junto a las anteriores. Detalles en [verificación](verification.md).
 
 ## Encabezado compacto 0.5.1
 
@@ -45,4 +45,4 @@ La versión pública todavía requiere registrar los clientes OAuth de Nala en G
 
 ## Publicación
 
-Repositorio público: [felipendelicia/nala](https://github.com/felipendelicia/nala). La [v0.4.0](https://github.com/felipendelicia/nala/releases/tag/v0.4.0) distribuye el APK Android ARM64 y la aplicación Linux x64 con sumas SHA-256. El acceso Nala del menú de esta PC abre la versión nueva. La primera [v0.1.0](https://github.com/felipendelicia/nala/releases/tag/v0.1.0) corresponde al editor anterior a PDF y a estas mejoras. No se publican cuadernos personales, bases, caches, SDK, tokens ni claves de firma.
+Repositorio público: [felipendelicia/nala](https://github.com/felipendelicia/nala). La [v0.6.0](https://github.com/felipendelicia/nala/releases/tag/v0.6.0) distribuye el APK Android ARM64 y la aplicación Linux x64 con guías y sumas SHA-256. Se mantiene como versión de prueba. El acceso Nala del menú de esta PC abre la versión nueva. La primera [v0.1.0](https://github.com/felipendelicia/nala/releases/tag/v0.1.0) corresponde al editor anterior a PDF y a estas mejoras. No se publican cuadernos personales, bases, caches, SDK, tokens ni claves de firma.

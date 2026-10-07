@@ -228,6 +228,13 @@ Compilaciones release con `tool/flutter-safe`, secuenciales y bajo los límites 
 - La versión final arrancó con un directorio temporal propio y continuó activa; SQLite `quick_check` devolvió `ok`. El servicio terminó después sin fallo registrado y se borró la base de prueba. El menú y lanzador existentes conservan sus rutas y ahora abren 0.5.1.
 - `dist/previous-v0.5.0` conserva la entrega anterior completa y sus hashes. Entrega local, sin publicar una nueva release externa. No se comprobó el S Pen ni el micrófono físicos en la tablet.
 
+SHA-256 de los archivos entregados de **0.5.1**:
+
+```text
+228acd0bb0a3b13759ade0400eb6929c2afca6d10753c1680c985b920ad06c33  Nala.apk
+83dae03ac9865129274723a4f7f624612c1721bc4329cbcee7dbe8c707d483bb  Nala-Linux-x64.tar.gz
+```
+
 ## Herramientas para apuntes 0.6.0
 
 Se incorporan elementos reutilizables, enlaces a páginas de otros apuntes, recorte/opacidad/restablecimiento de imágenes, bloqueo de objetos, orden/visibilidad/ubicación de la barra, backups `.nala.zip` y edición de fórmulas LaTeX con render transparente local. Se conserva el encabezado compacto y las pestañas estables. La [guía](notebook-workflow.md) describe los accesos; la [revisión](notebook-workflow-review.md) registra los hallazgos corregidos y sus comprobaciones.
@@ -247,16 +254,23 @@ Entrega local compilada del commit **bbd21ec40504b8308c8b97c95ae493d2cc1d1b97**,
 - El paquete se descomprimió en una carpeta temporal y se abrió por su lanzador con XDG de prueba: proceso activo, una base SQLite y `quick_check=ok`. Se detuvo únicamente el servicio propio y se limpiaron esos archivos. Resultado en `.dart_tool/release-smoke-v060.json`; verificación de contenido/hashes/tar/permisos/menú en `.dart_tool/workflow-delivery-check.log`.
 - `dist/previous-v0.5.1/` conserva la entrega anterior completa, comprobada contra sus hashes originales. El acceso existente del menú conserva su ruta y apunta a la nueva entrega. Entrega local; no se publicó una release externa. Las pruebas físicas del S Pen, micrófono y selector Android siguen pendientes de la tablet.
 
-Sumas SHA-256 de `dist/SHA256SUMS`:
+Sumas SHA-256 de la entrega local original de 0.6.0, antes de actualizar las guías para su publicación:
 
 ```text
 d24861470aae2f9d03e7800a3636651ab80455124c485c6753ee0c1f4e040251  Nala.apk
 c88c321809c8f73c3ed4c757552aee6277d49d87835fde505b309d4874784535  Nala-Linux-x64.tar.gz
 ```
 
-SHA-256 de los archivos entregados:
+## Paquete público 0.6.0
+
+Para publicar la misma aplicación compilada se corrigió el enlace de `GUIA-0.6.md` a `GUIA-0.5.md`, incluida en el tar, y se actualizó LEEME con la dirección de la release. El paquete final Linux mide **18 739 183 bytes**, con las mismas 65 entradas. La comparación del tar original/final confirmó que sólo cambiaron esas dos piezas de documentación; el APK, ejecutables, bibliotecas y recursos permanecen idénticos al build verificado. Se repitió el verificador completo de archivos, hashes, manifiestos, firma, librerías, permisos, logo y menú. La auditoría independiente confirmó que no se publican datos personales, claves ni cachés.
+
+Notas en [release 0.6.0](releases/v0.6.0.md). El manifiesto vigente incluye instaladores, ambas guías y captura sintética del editor:
 
 ```text
-228acd0bb0a3b13759ade0400eb6929c2afca6d10753c1680c985b920ad06c33  Nala.apk
-83dae03ac9865129274723a4f7f624612c1721bc4329cbcee7dbe8c707d483bb  Nala-Linux-x64.tar.gz
+d24861470aae2f9d03e7800a3636651ab80455124c485c6753ee0c1f4e040251  Nala.apk
+f831a779c89d5ea8034629f4ca50d4fd27beecd04d610872d06c45ac98be045f  Nala-Linux-x64.tar.gz
+094cfeb291035074953029d2c4087d198fcdc08c6c58c8119aa249db765549ca  GUIA-0.6.md
+825e2c89af89140bb2a7caac4d54374b8b4155885092fcdc6c4a11e856ac5919  GUIA-0.5.md
+ab03af0738987a1c9c67802aff5335d10763d3bfd73f5f9b1a3389789584c1c1  Vista-Nala-0.6.png
 ```
