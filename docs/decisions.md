@@ -67,3 +67,11 @@ La entrega de esta etapa es local (APK ARM64 y Linux x64); no se publica una nue
 - La primera compilación Android alcanzó el límite del servicio. El reintento completó Dart y el puente ML Kit, pero R8 llenó el heap512 y sólo repetía GC completo sin liberar espacio. Se detuvo ese servicio propio y se desactivó la minificación/reducción de recursos Java en release, manteniendo Dart AOT y la reducción de iconos. Coste: APK más grande y clases Java sin ofuscar; se conservan los límites globales, un worker y la firma previa.
 
 - El APK se limita a ARM64 en la configuración Android, además del objetivo Flutter. ML Kit y JNI agregaban bibliotecas ARMv7/x86_64 que no tenían motor Flutter correspondiente; filtrarlas evita anunciar soporte incompleto y reduce el tamaño. Esta entrega sigue dirigida a la Tab S10; otros ABI requieren una compilación preparada para ellos.
+
+## Encabezado compacto 0.5.1
+
+El pedido de Felipe se resuelve con AppBar de 56 y herramientas principales de 56 píxeles lógicos. En lectura sólo queda AppBar. Las pestañas de 48 aparecen con más de un apunte; abrir otro y dividir están también en Opciones del cuaderno. El título ocupa una línea y su descripción conserva el nombre completo y la materia. Exportar PDF pasa al menú; compartir sigue directo en paneles de al menos 600 de ancho y aparece en el menú de los más estrechos.
+
+Las herramientas adicionales se abren en un diálogo con etiquetas y objetivos amplios. El diálogo conserva el rectángulo y el origen de la hoja; elegir una acción lo cierra antes de ejecutarla. El botón permanente de Más herramientas indica si hay una forma, regla o selección activa. Se mantiene una barra por editor para conservar su foco, selección y herramienta independientes en vista dividida. Coste: las acciones menos frecuentes requieren un toque adicional.
+
+La revisión detectó que los menús de grosor y fondo quedaban en 37 píxeles de alto con texto normal. Una prueba reprodujo el problema y ambos conservan ahora un mínimo de 48, dentro de la fila de 56. No se cambian los formatos de apuntes ni el guardado. La entrega es local y conserva 0.5.0 como respaldo.

@@ -256,76 +256,81 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         body: SafeArea(
           child: Column(
             children: [
-              Material(
-                color: Theme.of(context).colorScheme.surfaceContainer,
-                child: Row(
-                  children: [
-                    IconButton(
-                      tooltip: 'Cerrar espacio de trabajo',
-                      onPressed: closing ? null : _leave,
-                      icon: closing
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.library_books_outlined),
-                    ),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            for (final tab in workspace.tabs)
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 2,
-                                  vertical: 4,
-                                ),
-                                child: InputChip(
-                                  key: ValueKey('workspace-tab-${tab.id}'),
-                                  selected: workspace.isActive(tab.id),
-                                  label: ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      maxWidth: 180,
+              if (workspace.tabs.length > 1)
+                Material(
+                  color: Theme.of(context).colorScheme.surfaceContainer,
+                  child: SizedBox(
+                    height: 48,
+                    child: Row(
+                      children: [
+                        IconButton(
+                          tooltip: 'Cerrar espacio de trabajo',
+                          onPressed: closing ? null : _leave,
+                          icon: closing
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.library_books_outlined),
+                        ),
+                        Expanded(
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: [
+                                for (final tab in workspace.tabs)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 2,
                                     ),
-                                    child: Text(
-                                      tab.controller.notebook.title,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                                    child: InputChip(
+                                      key: ValueKey('workspace-tab-${tab.id}'),
+                                      selected: workspace.isActive(tab.id),
+                                      label: ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          maxWidth: 180,
+                                        ),
+                                        child: Text(
+                                          tab.controller.notebook.title,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      tooltip: tab.controller.notebook.title,
+                                      onPressed: closing
+                                          ? null
+                                          : () => workspace.select(tab.id),
+                                      onDeleted: closing || closingId != null
+                                          ? null
+                                          : () => _closeTab(tab.id),
+                                      deleteButtonTooltipMessage:
+                                          'Cerrar ${tab.controller.notebook.title}',
                                     ),
                                   ),
-                                  tooltip: tab.controller.notebook.title,
-                                  onPressed: closing
-                                      ? null
-                                      : () => workspace.select(tab.id),
-                                  onDeleted: closing || closingId != null
-                                      ? null
-                                      : () => _closeTab(tab.id),
-                                  deleteButtonTooltipMessage:
-                                      'Cerrar ${tab.controller.notebook.title}',
-                                ),
-                              ),
-                          ],
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
+                        IconButton(
+                          tooltip: 'Abrir otro apunte',
+                          onPressed: closing ? null : () => _choose(),
+                          icon: const Icon(Icons.add),
+                        ),
+                        IconButton(
+                          tooltip: workspace.split
+                              ? 'Una sola vista'
+                              : 'Vista dividida',
+                          onPressed: closing ? null : _split,
+                          isSelected: workspace.split,
+                          icon: const Icon(Icons.vertical_split_outlined),
+                        ),
+                      ],
                     ),
-                    IconButton(
-                      tooltip: 'Abrir otro apunte',
-                      onPressed: closing ? null : () => _choose(),
-                      icon: const Icon(Icons.add),
-                    ),
-                    IconButton(
-                      tooltip: workspace.split
-                          ? 'Una sola vista'
-                          : 'Vista dividida',
-                      onPressed: closing ? null : _split,
-                      isSelected: workspace.split,
-                      icon: const Icon(Icons.vertical_split_outlined),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, size) {
@@ -385,6 +390,11 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                                               closingId != tab.id,
                                           workspaceManaged: true,
                                           onClose: _leave,
+                                          onOpenNotebook: closing
+                                              ? null
+                                              : () => _choose(),
+                                          onSplitView: closing ? null : _split,
+                                          splitView: workspace.split,
                                           onFocus: () =>
                                               workspace.focus(tab.id),
                                           registerClose: (callback) =>

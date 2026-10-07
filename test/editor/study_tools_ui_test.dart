@@ -8,6 +8,18 @@ import 'package:apuntes/editor/paper_canvas.dart';
 import '../support/fixtures.dart';
 import '../support/memory_repository.dart';
 
+Future<void> tapStudyTool(WidgetTester tester, String tooltip) async {
+  final target = find.byTooltip(tooltip);
+  if (target.evaluate().isEmpty) {
+    await tester.tap(find.byTooltip('Más herramientas'));
+    await tester.pumpAndSettle();
+  }
+  await tester.ensureVisible(target);
+  await tester.pumpAndSettle();
+  await tester.tap(target);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   late EditorController controller;
   void createController({double? paperSize}) {
@@ -46,8 +58,7 @@ void main() {
     tester,
   ) async {
     await open(tester);
-    await tester.tap(find.byTooltip('Insertar texto'));
-    await tester.pumpAndSettle();
+    await tapStudyTool(tester, 'Insertar texto');
     await tester.enterText(
       find.bySemanticsLabel('Texto'),
       'Límite y continuidad',
@@ -68,9 +79,7 @@ void main() {
       (tester.state(find.byType(EditorScreen)) as dynamic).selected,
       isNotEmpty,
     );
-    await tester.ensureVisible(find.byTooltip('Duplicar selección'));
-    await tester.tap(find.byTooltip('Duplicar selección'));
-    await tester.pumpAndSettle();
+    await tapStudyTool(tester, 'Duplicar selección');
     expect(controller.notebook.pages.single.objects, hasLength(2));
     expect(
       controller.notebook.pages.single.objects.map((o) => o.id).toSet(),
@@ -83,8 +92,7 @@ void main() {
   });
   testWidgets('explicit rectangle saves closed vector ink', (tester) async {
     await open(tester);
-    await tester.tap(find.byTooltip('Formas'));
-    await tester.pumpAndSettle();
+    await tapStudyTool(tester, 'Formas');
     await tester.tap(find.text('Rectángulo'));
     await tester.pumpAndSettle();
     final box = tester.renderObject<RenderBox>(find.byType(PaperCanvas));
@@ -116,8 +124,7 @@ void main() {
     'text fits a small imported template without negative dimensions',
     (tester) async {
       await open(tester, paperSize: 32);
-      await tester.tap(find.byTooltip('Insertar texto'));
-      await tester.pumpAndSettle();
+      await tapStudyTool(tester, 'Insertar texto');
       await tester.enterText(find.bySemanticsLabel('Texto'), 'x');
       await tester.pump();
       await tester.tap(find.text('Insertar'));

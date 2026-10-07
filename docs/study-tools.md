@@ -1,6 +1,6 @@
-# Nala 0.5: herramientas para editar y estudiar
+# Nala 0.5.1: herramientas para editar y estudiar
 
-Abrí un apunte desde la biblioteca. Para editar, activá **Modo editor**; **Modo lectura** permite recorrer las hojas y escuchar audio vinculado. Las barras se desplazan horizontalmente cuando falta espacio. Podés escribir y seleccionar con lápiz o ratón; los dedos sirven para navegar y ampliar la hoja.
+Abrí un apunte desde la biblioteca. Para editar, activá **Modo editor**; **Modo lectura** permite recorrer las hojas y escuchar audio vinculado. El encabezado ocupa dos filas al editar y una al leer. **Más herramientas** abre un panel con formas, regla, texto, imágenes, favoritos, plantillas, selección, búsqueda, audio y tarjetas; elegir una acción devuelve el espacio a la hoja. El botón indica si hay una forma, regla o selección activa. La fila de lápiz, color y deshacer se desplaza horizontalmente cuando falta espacio. Podés escribir y seleccionar con lápiz o ratón; los dedos sirven para navegar y ampliar la hoja.
 
 ## 1. Formas y regla
 
@@ -34,9 +34,9 @@ Se conservan en el dispositivo entre sesiones. Podés guardar hasta doce y elimi
 
 ## 5. Pestañas y vista dividida
 
-Desde la fila superior, **Abrir otro apunte** agrega una pestaña. Tocá su nombre para cambiar de documento; cada uno conserva su navegación y zoom.
+Desde **Opciones del cuaderno → Abrir otro apunte**, abrí el segundo documento. Las pestañas aparecen sólo cuando hay varios apuntes; esa fila también ofrece **Abrir otro apunte**. Tocá su nombre para cambiar de documento; cada uno conserva su navegación y zoom.
 
-**Vista dividida** muestra dos apuntes: lado a lado en pantallas amplias y uno encima del otro en las más estrechas. Tocá el panel que querés usar para activarlo. **Una sola vista** vuelve al apunte activo.
+**Opciones del cuaderno → Vista dividida** muestra dos apuntes: lado a lado en pantallas amplias y uno encima del otro en las más estrechas. Tocá el panel que querés usar para activarlo. **Una sola vista** vuelve al apunte activo.
 
 La cruz de cada pestaña la cierra; **Cerrar espacio de trabajo** vuelve a la biblioteca. Nala intenta guardar antes de cerrar y mantiene abierta la pestaña si necesita resolver un error de guardado.
 
@@ -78,6 +78,6 @@ En **Repasar pendientes**, intentá responder antes de pulsar **Mostrar respuest
 
 Las herramientas funcionan con guardado local y no requieren una cuenta ni servicios pagos. La conexión opcional a Google Drive sigue dependiendo de completar la configuración OAuth pendiente de la integración previa.
 
-**Exportar PDF** conserva fondos, tinta, texto e imágenes. Las grabaciones y tarjetas se consultan dentro de Nala.
+**Opciones del cuaderno → Exportar PDF** conserva fondos, tinta, texto e imágenes. Las grabaciones y tarjetas se consultan dentro de Nala.
 
 Nala 0.5 abre los cuadernos anteriores con sus datos existentes. Para usar objetos, audio de clase y tarjetas entre dispositivos, instalá 0.5 en ambos antes de editar esos apuntes: las versiones anteriores desconocen los campos nuevos y pueden omitirlos al guardar.

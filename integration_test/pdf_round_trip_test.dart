@@ -47,6 +47,17 @@ Future<void> pumpUntil(
   }
 }
 
+Future<void> requestPdfExport(WidgetTester tester) async {
+  final direct = find.byTooltip('Exportar PDF');
+  if (direct.evaluate().isNotEmpty) {
+    await tester.tap(direct.first);
+    return;
+  }
+  await tester.tap(find.byTooltip('Opciones del cuaderno').first);
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Exportar PDF'));
+}
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   testWidgets('importar, anotar, insertar hoja y exportar conserva el cuaderno', (
@@ -104,14 +115,17 @@ void main() {
           widget is PaperCanvas && widget.page.background.pattern != null,
     );
     final origin = tester.getTopLeft(canvas);
+    await requestPdfExport(tester);
+    debugPrint('pdf-flow: export requested');
+    // Close the options popup without waiting for the export worker. Drawing
+    // begins after the deliberate input reset caused by opening that menu.
+    await tester.pump();
     final whileExporting = await tester.startGesture(
       tester.getCenter(canvas),
       kind: PointerDeviceKind.stylus,
       pointer: 40,
     );
     await whileExporting.moveBy(const Offset(10, 5));
-    await tester.tap(find.byTooltip('Exportar PDF'));
-    debugPrint('pdf-flow: export requested');
     // The editor must remain usable while the worker prepares PDF pixels.
     await tester.pump();
     expect(
@@ -145,7 +159,7 @@ void main() {
     expect(output.pages.length, 3);
     await output.dispose();
     files.cancelSave = true;
-    await tester.tap(find.byTooltip('Exportar PDF'));
+    await requestPdfExport(tester);
     await tester.pumpAndSettle(
       const Duration(milliseconds: 100),
       EnginePhase.sendSemanticsUpdate,

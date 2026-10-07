@@ -27,7 +27,24 @@ Future<void> waitStudy(WidgetTester tester, bool Function() ready) async {
 }
 
 Future<void> tapStudy(WidgetTester tester, String tooltip) async {
-  final target = find.byTooltip(tooltip).first;
+  var target = find.byTooltip(tooltip);
+  if (target.evaluate().isEmpty) {
+    final notebookOption = {
+      'Abrir otro apunte',
+      'Vista dividida',
+      'Exportar PDF',
+    }.contains(tooltip);
+    await tester.tap(
+      find
+          .byTooltip(
+            notebookOption ? 'Opciones del cuaderno' : 'Más herramientas',
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
+    target = notebookOption ? find.text(tooltip) : find.byTooltip(tooltip);
+  }
+  target = target.first;
   await tester.ensureVisible(target);
   await tester.pumpAndSettle();
   await tester.tap(target);
@@ -70,6 +87,10 @@ void main() {
     final controller = tester
         .widget<EditorScreen>(find.byType(EditorScreen))
         .controller;
+    await captureUi(tester, find.byKey(preview), 'compact-editor-v051');
+    await tapStudy(tester, 'Más herramientas');
+    await captureUi(tester, find.byKey(preview), 'compact-tools-v051');
+    await tapStudy(tester, 'Cerrar herramientas');
     await tapStudy(tester, 'Insertar texto');
     await tester.enterText(
       find.bySemanticsLabel('Texto'),
@@ -141,7 +162,7 @@ void main() {
     await tester.tap(find.text('Bien'));
     await tester.pumpAndSettle();
     expect(controller.notebook.studyCards.single.repetitions, 1);
-    await captureUi(tester, find.byKey(preview), 'study-cards-v05');
+    await captureUi(tester, find.byKey(preview), 'study-cards-v051');
     await tapStudy(tester, 'Cerrar estudio');
     final image = img.Image(width: 160, height: 100);
     img.fill(image, color: img.ColorRgb8(200, 220, 250));
@@ -167,17 +188,17 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await captureUi(tester, find.byKey(preview), 'study-editor-v05');
+    await captureUi(tester, find.byKey(preview), 'study-editor-v051');
     final bytes = await PdfExportService(
       services.pdf,
     ).export(controller.notebook);
-    await File('.dart_tool/ui-qa/study-export-v05.pdf').writeAsBytes(bytes);
+    await File('.dart_tool/ui-qa/study-export-v051.pdf').writeAsBytes(bytes);
     await tapStudy(tester, 'Abrir otro apunte');
     await tester.tap(find.text('Análisis').last);
     await tester.pumpAndSettle();
     await tapStudy(tester, 'Vista dividida');
     expect(find.byType(EditorScreen), findsNWidgets(2));
-    await captureUi(tester, find.byKey(preview), 'study-split-v05');
+    await captureUi(tester, find.byKey(preview), 'study-split-v051');
     await tapStudy(tester, 'Cerrar espacio de trabajo');
     await waitStudy(
       tester,

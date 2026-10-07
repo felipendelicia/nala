@@ -67,6 +67,9 @@ class EditorScreen extends StatefulWidget {
     this.workspaceManaged = false,
     this.onClose,
     this.onFocus,
+    this.onOpenNotebook,
+    this.onSplitView,
+    this.splitView = false,
     this.registerClose,
     this.initialPageIndex = 0,
     this.storageRoot,
@@ -80,8 +83,8 @@ class EditorScreen extends StatefulWidget {
   final String? audioDirectory;
   final CloudController? cloud;
   final PenPreferencesController? penPreferences;
-  final bool active, workspaceManaged;
-  final VoidCallback? onClose, onFocus;
+  final bool active, workspaceManaged, splitView;
+  final VoidCallback? onClose, onFocus, onOpenNotebook, onSplitView;
   final ValueChanged<Future<void> Function()>? registerClose;
   final int initialPageIndex;
   final String? storageRoot;
@@ -1843,6 +1846,140 @@ class _EditorScreenState extends State<EditorScreen>
     super.dispose();
   }
 
+  Future<void> moreTools() async {
+    router.reset();
+    await showDialog<void>(
+      context: context,
+      builder: (panelContext) {
+        void run(VoidCallback callback) {
+          Navigator.pop(panelContext);
+          router.reset();
+          callback();
+        }
+
+        return Dialog(
+          alignment: Alignment.topRight,
+          insetPadding: const EdgeInsets.fromLTRB(16, 112, 16, 16),
+          child: SizedBox(
+            width: 440,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(panelContext).height * .65,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      left: 20,
+                      right: 8,
+                      top: 8,
+                      bottom: 8,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Más herramientas',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Cerrar herramientas',
+                          onPressed: () => Navigator.pop(panelContext),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: AdvancedToolbar(
+                        onOpenMenu: router.reset,
+                        shape: shape,
+                        onShape: (value) => run(
+                          () => setState(() {
+                            tool = EditorTool.pen;
+                            shape = value;
+                            selected = {};
+                          }),
+                        ),
+                        ruler: ruler,
+                        rulerAngle: rulerAngle,
+                        onRuler: () =>
+                            run(() => setState(() => ruler = !ruler)),
+                        onAngle: (value) =>
+                            run(() => setState(() => rulerAngle = value)),
+                        hasSelection: selected.isNotEmpty,
+                        canPaste: !clipboard.isEmpty,
+                        onCopy: () => run(() => copySelection()),
+                        onCut: () => run(() => copySelection(cut: true)),
+                        onDuplicate: () => run(duplicateSelection),
+                        onPaste: () => run(pasteSelection),
+                        onScale: (value) =>
+                            run(() => transformSelection(scale: value)),
+                        onRotate: () =>
+                            run(() => transformSelection(rotate: true)),
+                        onText: () => run(() => insertText()),
+                        onEditText: () => run(editSelectedText),
+                        onImage: assets == null ? null : () => run(insertImage),
+                        favorites: favoriteValues,
+                        onFavorite: (value) => run(() => chooseFavorite(value)),
+                        onSaveFavorite: favorites == null
+                            ? null
+                            : () => run(saveFavorite),
+                        onRemoveFavorite: favorites == null
+                            ? null
+                            : (id) => run(() async {
+                                try {
+                                  await favorites!.remove(id);
+                                  if (mounted) setState(() {});
+                                } catch (_) {
+                                  message('No se pudo quitar el favorito.');
+                                }
+                              }),
+                        onTemplates:
+                            root == null || assets == null || widget.pdf == null
+                            ? null
+                            : () => run(templates),
+                        onSearch: widget.pdf == null || assets == null
+                            ? null
+                            : () => run(searchNotebook),
+                        onAudio: notebookAudio == null
+                            ? null
+                            : () => run(() async {
+                                await audioPlayer?.stop();
+                                if (!mounted) return;
+                                if (showRecording &&
+                                    !await suspendNotebookAudio()) {
+                                  return;
+                                }
+                                if (mounted) {
+                                  setState(() {
+                                    showRecording = !showRecording;
+                                    if (showRecording) {
+                                      showComments = false;
+                                      showPages = false;
+                                    }
+                                  });
+                                }
+                              }),
+                        onStudy: () => run(openStudy),
+                        reading: reading,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    if (mounted) router.reset();
+  }
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.controller,
@@ -1911,25 +2048,19 @@ class _EditorScreenState extends State<EditorScreen>
                   onPressed: close,
                   icon: const Icon(Icons.arrow_back),
                 ),
-                title: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      controller.notebook.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (controller.notebook.subject.isNotEmpty)
-                      Text(
-                        controller.notebook.subject,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                  ],
+                toolbarHeight: 56,
+                leadingWidth: 48,
+                titleSpacing: 8,
+                title: Tooltip(
+                  message: [
+                    controller.notebook.title,
+                    controller.notebook.subject,
+                  ].where((text) => text.isNotEmpty).join(' · '),
+                  child: Text(
+                    controller.notebook.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 actions: [
                   AppearanceButton(beforeChange: router.reset),
@@ -1949,43 +2080,38 @@ class _EditorScreenState extends State<EditorScreen>
                       reading ? Icons.edit_outlined : Icons.menu_book_outlined,
                     ),
                   ),
-                  if (widget.pdf != null && widget.share != null)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: Tooltip(
-                        message: 'Compartir PDF',
-                        child: MediaQuery.sizeOf(context).width >= 1100
-                            ? FilledButton.icon(
-                                onPressed: exporting || choosingShare
-                                    ? null
-                                    : sharePdf,
-                                icon: const Icon(
-                                  Icons.share_outlined,
-                                  size: 19,
-                                ),
-                                label: const Text('Compartir'),
-                              )
-                            : IconButton.filledTonal(
-                                onPressed: exporting || choosingShare
-                                    ? null
-                                    : sharePdf,
-                                icon: const Icon(Icons.share_outlined),
-                              ),
-                      ),
-                    ),
-                  if (widget.pdf != null && widget.files != null)
+                  if (reading)
                     IconButton(
-                      tooltip: 'Exportar PDF',
-                      onPressed: exporting ? null : exportPdf,
-                      icon: const Icon(Icons.ios_share_outlined),
+                      tooltip: 'Más herramientas',
+                      onPressed: moreTools,
+                      icon: const Icon(Icons.apps_outlined),
+                    ),
+                  if (widget.pdf != null &&
+                      widget.share != null &&
+                      MediaQuery.sizeOf(context).width >= 600)
+                    IconButton(
+                      tooltip: 'Compartir PDF',
+                      onPressed: exporting || choosingShare ? null : sharePdf,
+                      icon: const Icon(Icons.share_outlined),
                     ),
                   PopupMenuButton<String>(
                     tooltip: 'Opciones del cuaderno',
                     onOpened: router.reset,
                     onCanceled: router.reset,
-                    onSelected: (_) {
+                    onSelected: (value) {
                       router.reset();
-                      rename();
+                      switch (value) {
+                        case 'rename':
+                          rename();
+                        case 'share':
+                          sharePdf();
+                        case 'export':
+                          exportPdf();
+                        case 'open':
+                          widget.onOpenNotebook?.call();
+                        case 'split':
+                          widget.onSplitView?.call();
+                      }
                     },
                     itemBuilder: (_) => [
                       PopupMenuItem(
@@ -1993,6 +2119,32 @@ class _EditorScreenState extends State<EditorScreen>
                         enabled: !reading,
                         child: const Text('Renombrar cuaderno'),
                       ),
+                      if (widget.pdf != null && widget.share != null)
+                        PopupMenuItem(
+                          value: 'share',
+                          enabled: !exporting && !choosingShare,
+                          child: const Text('Compartir PDF'),
+                        ),
+                      if (widget.pdf != null && widget.files != null)
+                        PopupMenuItem(
+                          value: 'export',
+                          enabled: !exporting,
+                          child: const Text('Exportar PDF'),
+                        ),
+                      if (widget.onOpenNotebook != null)
+                        const PopupMenuItem(
+                          value: 'open',
+                          child: Text('Abrir otro apunte'),
+                        ),
+                      if (widget.onSplitView != null)
+                        PopupMenuItem(
+                          value: 'split',
+                          child: Text(
+                            widget.splitView
+                                ? 'Una sola vista'
+                                : 'Vista dividida',
+                          ),
+                        ),
                     ],
                   ),
                   IconButton(
@@ -2023,6 +2175,9 @@ class _EditorScreenState extends State<EditorScreen>
                       onTool: chooseTool,
                       onPenSettings: penSettings,
                       onOpenMenu: router.reset,
+                      onMoreTools: moreTools,
+                      moreToolsActive:
+                          shape != null || ruler || selected.isNotEmpty,
                       argb: argb,
                       onColor: changeInkColor,
                       width: width,
@@ -2073,81 +2228,6 @@ class _EditorScreenState extends State<EditorScreen>
                               );
                             },
                     ),
-                  AdvancedToolbar(
-                    onOpenMenu: router.reset,
-                    shape: shape,
-                    onShape: (value) {
-                      router.reset();
-                      setState(() {
-                        tool = EditorTool.pen;
-                        shape = value;
-                        selected = {};
-                      });
-                    },
-                    ruler: ruler,
-                    rulerAngle: rulerAngle,
-                    onRuler: () {
-                      router.reset();
-                      setState(() => ruler = !ruler);
-                    },
-                    onAngle: (value) {
-                      router.reset();
-                      setState(() => rulerAngle = value);
-                    },
-                    hasSelection: selected.isNotEmpty,
-                    canPaste: !clipboard.isEmpty,
-                    onCopy: () => copySelection(),
-                    onCut: () => copySelection(cut: true),
-                    onDuplicate: duplicateSelection,
-                    onPaste: pasteSelection,
-                    onScale: (value) => transformSelection(scale: value),
-                    onRotate: () => transformSelection(rotate: true),
-                    onText: () => insertText(),
-                    onEditText: editSelectedText,
-                    onImage: assets == null ? null : insertImage,
-                    favorites: favoriteValues,
-                    onFavorite: chooseFavorite,
-                    onSaveFavorite: favorites == null ? null : saveFavorite,
-                    onRemoveFavorite: favorites == null
-                        ? null
-                        : (id) async {
-                            try {
-                              await favorites!.remove(id);
-                              if (mounted) setState(() {});
-                            } catch (_) {
-                              message('No se pudo quitar el favorito.');
-                            }
-                          },
-                    onTemplates:
-                        root == null || assets == null || widget.pdf == null
-                        ? null
-                        : templates,
-                    onSearch: widget.pdf == null || assets == null
-                        ? null
-                        : searchNotebook,
-                    onAudio: notebookAudio == null
-                        ? null
-                        : () async {
-                            router.reset();
-                            await audioPlayer?.stop();
-                            if (!mounted) return;
-                            if (showRecording &&
-                                !await suspendNotebookAudio()) {
-                              return;
-                            }
-                            if (mounted) {
-                              setState(() {
-                                showRecording = !showRecording;
-                                if (showRecording) {
-                                  showComments = false;
-                                  showPages = false;
-                                }
-                              });
-                            }
-                          },
-                    onStudy: openStudy,
-                    reading: reading,
-                  ),
                   Expanded(
                     child: Stack(
                       children: [

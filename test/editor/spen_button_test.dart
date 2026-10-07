@@ -335,6 +335,7 @@ void main() {
     'Porcentaje de zoom',
     'Color de tinta',
     'Apariencia',
+    'Más herramientas',
     'Formas',
     'Lápices favoritos',
   ]) {
@@ -356,9 +357,21 @@ void main() {
         await tester.binding.setSurfaceSize(const Size(900, 900));
         await tester.pumpAndSettle();
       }
+      final advancedPopup = menu == 'Formas' || menu == 'Lápices favoritos';
+      if (advancedPopup) {
+        await tester.tap(find.byTooltip('Más herramientas'));
+        await tester.pumpAndSettle();
+      }
       await nativeEdge(tester, 'button', true);
       await tester.pump();
-      expect(selectedTool(tester), EditorTool.eraser);
+      expect(
+        selectedTool(tester),
+        advancedPopup ? EditorTool.pen : EditorTool.eraser,
+        reason: advancedPopup
+            ? 'El panel de herramientas bloquea los botones nativos como cualquier modal.'
+            : 'Mantener el botón activa la herramienta temporal antes de abrir el menú.',
+      );
+      await tester.ensureVisible(find.byTooltip(menu));
       await tester.tap(find.byTooltip(menu));
       await tester.pumpAndSettle();
       await nativeEdge(tester, 'button', false);
@@ -366,6 +379,10 @@ void main() {
       // Dismiss the actual popup through its outside barrier.
       await tester.tapAt(const Offset(20, 800));
       await tester.pumpAndSettle();
+      if (find.byTooltip('Cerrar herramientas').evaluate().isNotEmpty) {
+        await tester.tap(find.byTooltip('Cerrar herramientas'));
+        await tester.pumpAndSettle();
+      }
       expect(selectedTool(tester), EditorTool.pen);
       await tester.pumpWidget(const SizedBox());
       if (appearanceDir != null) {
