@@ -209,3 +209,28 @@ SHA-256 finales, comprobados desde los archivos entregados:
 1b66b2776ed6d689a49ba2298b15de0e2a8306673300d45f5623b1042cb60942  Nala.apk
 9d50834771ba38389f6db5ccd31f55311959a77053ac3d27987923c246ab00cd  Nala-Linux-x64.tar.gz
 ```
+
+
+## Encabezado compacto 0.5.1
+
+Código compilado: `e2ef49510da57d6e43fa969fa1f4b88c37ffb0e1`. El pedido reduce la parte superior a AppBar de 56 y herramientas principales de 56 píxeles; lectura usa sólo AppBar. Las pestañas añaden 48 únicamente con varios documentos. El panel Más herramientas se superpone sin alterar el rectángulo ni el origen del papel y se cierra antes de ejecutar acciones. Exportar y abrir/dividir están en las opciones del cuaderno; compartir conserva acceso directo desde 600 de ancho.
+
+La prueba inicial reprodujo seis fallas de altura: el editor con texto al 150% comenzaba la hoja en 197 y ahora lo hace en 112; en lectura, en 56. La revisión independiente detectó los menús de grosor/tipo de hoja con área de 37; una prueba reprodujo la falla y ambos recuperaron un mínimo de 48. Sus objetivos táctiles conservan la fila de 56.
+
+Verificación final: **215/215** pruebas unitarias/widget, en 1 min 24 s (servicio 1 min 28,5 s); análisis sin incidencias. Incluye 400×650, 800×1200 y 1200×800 en claro/oscuro con texto al 150%, tamaño de botones con texto normal, estabilidad de papel/viewport al abrir/cerrar el panel y modo lectura. Las pruebas del workspace cubren 1500×1000 y 800×1200, con pestañas condicionales, mismo estado montado, primer trazo al activar el panel y deshacer dirigido al editor activo. Las pruebas de S Pen comprueban también abrir/cancelar Más herramientas y los menús secundarios dentro del modal.
+
+Pasaron los recorridos nativos Linux de estudio (39,3s con compilación) y PDF (36,4s). El primero usa el panel para insertar/duplicar texto, elegir forma, plantillas, búsqueda y tarjetas; abre otro apunte desde las opciones y divide sin perder datos. El segundo exporta desde las opciones, permite tinta posterior mientras prepara el PDF, conserva el origen de la hoja y la salida de tres páginas. Se inspeccionaron las capturas de editor, panel y vista dividida en `.dart_tool/ui-qa/*v051.png`.
+
+Compilaciones release con `tool/flutter-safe`, secuenciales y bajo los límites existentes: Android ARM64 en 70,2 s y Linux en 48,4 s. Paquetes comprobados:
+
+- APK: **43 866 991 bytes**, versión 0.5.1+6, `com.felipe.apuntes`, Nala, API mínima 24 y target 36; seis bibliotecas sólo ARM64. Firma v2 válida con certificado SHA-256 `e92cb0c4bf598fbf0347d135efb275bfb381761f156c2984e2c796b63ff09887`, el mismo que 0.5.0. Logo idéntico al seleccionado.
+- Linux: **17 798 280 bytes**, 40 entradas, recursos/manifiesto de bibliotecas, fuentes/licencias, icono, guía y lanzador. APK/binario/libapp/guía coinciden con las salidas y fuentes compiladas, hashes correctos y bibliotecas resueltas. El paquete omite el antiguo `lib/native_assets.json` sobrante; el `NativeAssetsManifest.json` usado en ejecución conserva los nombres portables de PDFium y SQLite presentes en lib/.
+- La versión final arrancó con un directorio temporal propio y continuó activa; SQLite `quick_check` devolvió `ok`. El servicio terminó después sin fallo registrado y se borró la base de prueba. El menú y lanzador existentes conservan sus rutas y ahora abren 0.5.1.
+- `dist/previous-v0.5.0` conserva la entrega anterior completa y sus hashes. Entrega local, sin publicar una nueva release externa. No se comprobó el S Pen ni el micrófono físicos en la tablet.
+
+SHA-256 de los archivos entregados:
+
+```text
+228acd0bb0a3b13759ade0400eb6929c2afca6d10753c1680c985b920ad06c33  Nala.apk
+83dae03ac9865129274723a4f7f624612c1721bc4329cbcee7dbe8c707d483bb  Nala-Linux-x64.tar.gz
+```
