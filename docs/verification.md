@@ -240,6 +240,20 @@ Recorrido nativo Linux de las seis funciones: **1/1**, 27 s de interacción y 59
 
 Regresiones nativas: herramientas de estudio **1/1** (12 s; servicio 46,4 s, `.dart_tool/workflow-study-native.log`) y recorrido de importación/anotación/hoja intercalada/exportación PDF **1/1** (6 s; servicio 37,1 s, `.dart_tool/workflow-pdf-native.log`). Ambos usan bibliotecas temporales y motores nativos. Las ejecuciones fueron seriales y no usaron apuntes personales, cuentas ni micrófono real.
 
+Entrega local compilada del commit **bbd21ec40504b8308c8b97c95ae493d2cc1d1b97**, Flutter 3.47.6/Dart 3.13.5, versión **0.6.0+7**. Ambos builds se ejecutaron sin `--no-pub` para regenerar los plugins de producción: Android 96,6 s (servicio 97,8 s, `.dart_tool/workflow-build-apk.log`) y Linux 53,7 s (`.dart_tool/workflow-build-linux.log`). Se conservaron los límites de memoria y los ajustes de Gradle.
+
+- APK: **45 554 336 bytes**, `com.felipe.apuntes`, Nala, API mínima 24/target 36, seis bibliotecas exclusivamente ARM64 y veinte fuentes KaTeX. Firma v2 válida con certificado SHA-256 `e92cb0c4bf598fbf0347d135efb275bfb381761f156c2984e2c796b63ff09887`, idéntico al anterior; permite actualizar sin desinstalar. Firma de desarrollo para pruebas. Manifiesto y certificado registrados en `.dart_tool/workflow-apk-{manifest,signature}.log`.
+- Linux: **18 739 132 bytes**, 65 entradas en el paquete, con recursos/fuentes/licencias, bibliotecas, logo, lanzador y ambas guías. Los archivos entregados coinciden byte por byte con el bundle release y APK compilados. El paquete omite el sidecar legado con rutas de compilación; el manifiesto de recursos nativos referencia sus bibliotecas por nombre y fue verificado. Todas las bibliotecas resuelven y el logo coincide.
+- El paquete se descomprimió en una carpeta temporal y se abrió por su lanzador con XDG de prueba: proceso activo, una base SQLite y `quick_check=ok`. Se detuvo únicamente el servicio propio y se limpiaron esos archivos. Resultado en `.dart_tool/release-smoke-v060.json`; verificación de contenido/hashes/tar/permisos/menú en `.dart_tool/workflow-delivery-check.log`.
+- `dist/previous-v0.5.1/` conserva la entrega anterior completa, comprobada contra sus hashes originales. El acceso existente del menú conserva su ruta y apunta a la nueva entrega. Entrega local; no se publicó una release externa. Las pruebas físicas del S Pen, micrófono y selector Android siguen pendientes de la tablet.
+
+Sumas SHA-256 de `dist/SHA256SUMS`:
+
+```text
+d24861470aae2f9d03e7800a3636651ab80455124c485c6753ee0c1f4e040251  Nala.apk
+c88c321809c8f73c3ed4c757552aee6277d49d87835fde505b309d4874784535  Nala-Linux-x64.tar.gz
+```
+
 SHA-256 de los archivos entregados:
 
 ```text

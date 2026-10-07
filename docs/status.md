@@ -23,11 +23,15 @@ Presión inmediata y suavizado inicial 0%; caché de tinta activa por mosaicos c
 
 Formas/regla, selección con copiar/cortar/duplicar/pegar/escala/giro/color, imágenes y texto, favoritos persistidos, pestañas/vista dividida, plantillas propias y portadas, búsqueda, audio temporal y tarjetas con repetición espaciada. Los nuevos datos conservan la compatibilidad con los cuadernos anteriores y sus medios se incluyen en guardado/sync/exportación. Los apuntes manuscritos se reconocen localmente en Android después de descargar explícitamente el modelo español; Linux requiere Tesseract con español para OCR de impresos y puede buscar el texto reconocido guardado en Android. Ver [guía de uso](study-tools.md) y [revisión](study-tools-review.md).
 
-La entrega local actual es **0.5.1**, lista en `dist/`: APK ARM64 y paquete Linux x64; el menú Nala abre la versión nueva. Pasaron **215** pruebas, análisis sin incidencias y los recorridos nativos Linux de herramientas y PDF. El binario final abrió con SQLite temporal válido. Las versiones 0.4 y 0.5.0 quedan respaldadas; la última release pública sigue siendo 0.4. Detalles en [verificación](verification.md).
+La entrega local actual es **0.6.0+7**, lista en `dist/`: APK ARM64 y paquete Linux x64; el menú Nala abre la versión nueva. Pasaron **270** pruebas, análisis sin incidencias y tres recorridos nativos Linux. El paquete final descomprimido abrió con SQLite temporal válido. La entrega 0.5.1 completa queda respaldada junto a las anteriores; la última release pública sigue siendo 0.4. Detalles en [verificación](verification.md).
 
 ## Encabezado compacto 0.5.1
 
 Dos filas de 56 píxeles al editar y sólo una al leer. Las pestañas de 48 aparecen con varios apuntes. Más herramientas abre los controles adicionales en un panel con etiquetas; elegir una acción lo cierra sin cambiar las coordenadas de la hoja. Opciones del cuaderno permite abrir otro apunte, dividir y exportar. Se verificaron texto ampliado, temas claro/oscuro, pantalla pequeña y división horizontal/vertical.
+
+## Herramientas para apuntes 0.6.0
+
+Elementos reutilizables con búsqueda/renombrado e inserciones independientes; enlaces a páginas de otros apuntes que conservan los editores abiertos; recorte, opacidad, original recuperable y bloqueo de imágenes/objetos; fórmulas LaTeX con vista previa local y representación en PDF; barra ordenable con accesos elegibles y ubicación superior/lateral. El backup completo `.nala.zip` incluye la biblioteca, recursos y ajustes locales; comprueba el archivo antes de restaurar copias y remapea los enlaces internos. Guía en [herramientas para apuntes](notebook-workflow.md) y hallazgos corregidos en [revisión](notebook-workflow-review.md).
 
 ## Verificación física pendiente
 

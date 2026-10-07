@@ -68,5 +68,5 @@
 - [x] Keep stable editor keys; add navigation request token/page ID for already open linked tabs.
 - [x] Verify all unit/widget tests, analysis and native Linux flows including PDF and backup restore.
 - [x] Request independent subsystem review; fix findings and rerun affected checks.
-- [ ] Build both releases serially, preserve 0.5.1, package and verify manifests/hashes/native smoke.
-- [ ] Update guide/progress/delivery records, commit reviewed changes and provide final artifact links.
+- [x] Build both releases serially, preserve 0.5.1, package and verify manifests/hashes/native smoke.
+- [x] Update guide/progress/delivery records, commit reviewed changes and provide final artifact links.
