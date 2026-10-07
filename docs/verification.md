@@ -126,3 +126,5 @@ El primer intento Android de esta etapa fue detenido por systemd-oomd al alcanza
 La indicación posterior reemplaza la paleta verde de la interfaz por blanco, negro y grises. El tema oscuro tiene fondo negro real; claro usa blanco, con controles de contraste alto, paneles y avisos neutros. Las muestras de tinta mantienen sus colores seleccionables y el tema no recolorea los apuntes ni sus PDF. La prueba de colores reprodujo el tinte anterior y después pasó comprobando roles neutros y contraste de controles de al menos 7:1; las pruebas enfocadas de apariencia y layouts pasaron 14/14. La entrega se vuelve a compilar con esta paleta final.
 
 La suite completa de la paleta final pasó 108/108. Se mantuvieron todas las comprobaciones de trazo, presión, geometría reutilizada, guardado, compartir, carpetas y cuentas.
+
+El perfil de heap de 512 MiB mantuvo la protección, pero R8 ocupó todo el heap y dedicó 97 segundos a 159 recolecciones completas de memoria. Se detuvo sólo ese servicio de compilación y se eligió un valor intermedio de 640 MiB, manteniendo metaspace 384 MiB y los límites globales anteriores. La configuración final se valida con el APK compilado.

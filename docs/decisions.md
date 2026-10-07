@@ -33,4 +33,4 @@ La revisión nueva encontró dos problemas importantes y ninguno crítico o meno
 
 No quedaron observaciones menores diferidas. Los binarios y sus hashes se comprueban después de esta revisión; los resultados finales están en [verificación](verification.md).
 
-- El compilador Android usa un heap reducido a 512 MiB y mantiene los límites globales y las tareas secuenciales. Una compilación fue detenida por la protección de memoria de su servicio; el coste es que compilar puede tardar más.
+- El compilador Android usa un heap reducido a 640 MiB y mantiene los límites globales y las tareas secuenciales. Una compilación fue detenida por la protección de memoria de su servicio; el coste es que compilar puede tardar más.
