@@ -8,7 +8,7 @@ En el editor, abrí **Ajustes del lápiz** (icono de ajustes al lado del grosor)
 - Usá el botón con la punta cerca de la pantalla o apoyada. No requiere Bluetooth. Los comandos a distancia/Air Actions no forman parte de esta integración.
 - Presión 100% y suavizado 0% son los valores iniciales para seguir la punta sin retraso añadido por filtros. Aumentá el suavizado si preferís corregir pequeñas vibraciones del trazo.
 
-Cambiar de herramienta con el botón durante un trazo confirma su tramo anterior antes de continuar. Lectura y ventanas abiertas impiden cambios del botón; cancelar, perder foco o salir del editor restaura la herramienta temporal. La palma continúa sin mover la hoja mientras escribís.
+Cambiar de herramienta con el botón durante un trazo confirma su tramo anterior antes de continuar. Al pasar a la goma, la transición sola no borra ese segmento: hay que mover la punta o hacer un contacto nuevo para borrar. Abrir/cancelar cualquier menú restaura la herramienta temporal; alternar conserva la pulsación física a través de las ventanas para no contarla dos veces. Lectura y ventanas abiertas impiden cambios del botón; cancelar, perder foco o salir del editor restaura la herramienta temporal. La palma continúa sin mover la hoja mientras escribís.
 
 ## Renderizado y verificación
 

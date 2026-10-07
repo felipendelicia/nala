@@ -62,6 +62,8 @@ class AppearanceButton extends StatelessWidget {
     final appearance = AppearanceScope.of(context);
     return PopupMenuButton<ThemeMode>(
       tooltip: 'Apariencia',
+      onOpened: beforeChange,
+      onCanceled: beforeChange,
       enabled: appearance != null,
       icon: Icon(
         Theme.of(context).brightness == Brightness.dark

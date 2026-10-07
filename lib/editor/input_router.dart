@@ -25,6 +25,7 @@ class InputRouter {
     required this.onNavigate,
     this.onStylusButton,
     this.onReset,
+    this.onToolBegin,
   });
   final void Function(InputSample) onBegin, onUpdate, onEnd;
   final void Function() onCancel;
@@ -32,11 +33,13 @@ class InputRouter {
   onNavigate;
   final void Function(bool)? onStylusButton;
   final void Function()? onReset;
+  final void Function(InputSample)? onToolBegin;
   InputSample? _inkSample;
   bool _buttonPressed = false;
   int? _inkPointer, _middlePointer;
   bool readOnly = false;
   bool nativeButtonEvents = false;
+  bool preserveButtonOnReset = false;
   Point<double>? _middlePosition;
   final Map<int, Point<double>> _touches = {};
   bool get isWriting => _inkPointer != null;
@@ -137,7 +140,7 @@ class InputRouter {
   }
 
   void _resetButton() {
-    _buttonPressed = false;
+    if (!preserveButtonOnReset) _buttonPressed = false;
     onReset?.call();
   }
 
@@ -159,7 +162,7 @@ class InputRouter {
     final contact = _inkSample;
     if (contact != null) onEnd(contact);
     change();
-    if (contact != null) onBegin(contact);
+    if (contact != null) (onToolBegin ?? onBegin)(contact);
   }
 
   void hover(InputSample event) => _observeButton(event);

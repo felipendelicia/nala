@@ -88,10 +88,12 @@ class _EditorScreenState extends State<EditorScreen>
     settings = widget.penPreferences?.value ?? const PenSettings();
     pressureSensitivity = settings.pressure;
     stabilization = settings.stabilization;
+    router.preserveButtonOnReset = settings.buttonMode == PenButtonMode.toggle;
     WidgetsBinding.instance.addObserver(this);
     buttonBridge.start(
       onButton: (pressed) {
-        if (acceptShortcut) router.stylusButton(pressed);
+        // Releases update the physical latch even while a modal covers us.
+        if (acceptShortcut || !pressed) router.stylusButton(pressed);
       },
       onReset: () => router.reset(),
       onAvailability: (available) {
@@ -300,6 +302,7 @@ class _EditorScreenState extends State<EditorScreen>
   bool movingSelection = false;
   late final router = InputRouter(
     onBegin: begin,
+    onToolBegin: (event) => begin(event, toolChange: true),
     onUpdate: update,
     onEnd: end,
     onCancel: cancel,
@@ -356,7 +359,7 @@ class _EditorScreenState extends State<EditorScreen>
     return visible.inflate(4 / view.scale).intersect(sheet);
   }
 
-  void begin(InputSample event) {
+  void begin(InputSample event, {bool toolChange = false}) {
     if (reading) return;
     final p = inkPoint(event);
     gestureTool = tool;
@@ -384,7 +387,9 @@ class _EditorScreenState extends State<EditorScreen>
       // The live painter is already mounted: first contact needs no UI rebuild.
       return;
     }
-    if (tool == EditorTool.eraser) eraseAt(p);
+    // A synthetic handoff is not deliberate eraser contact. Movement or a
+    // new physical contact can still erase the preceding segment normally.
+    if (tool == EditorTool.eraser && !toolChange) eraseAt(p);
     if (tool == EditorTool.selection) {
       movingSelection = page.strokes.any(
         (s) =>
@@ -407,6 +412,7 @@ class _EditorScreenState extends State<EditorScreen>
       return;
     }
     if (gestureTool == EditorTool.eraser) {
+      if (previous == latest) return;
       final count = erased.length;
       eraseAt(p, from: previous);
       if (erased.length == count) return;
@@ -510,6 +516,8 @@ class _EditorScreenState extends State<EditorScreen>
     if (result != null && mounted) {
       setState(() {
         settings = result;
+        router.preserveButtonOnReset =
+            result.buttonMode == PenButtonMode.toggle;
         buttonPreviousTool = null;
         pressureSensitivity = result.pressure;
         stabilization = result.stabilization;
@@ -1279,6 +1287,8 @@ class _EditorScreenState extends State<EditorScreen>
                     ),
                   PopupMenuButton<String>(
                     tooltip: 'Opciones del cuaderno',
+                    onOpened: router.reset,
+                    onCanceled: router.reset,
                     onSelected: (_) {
                       router.reset();
                       rename();
@@ -1318,6 +1328,7 @@ class _EditorScreenState extends State<EditorScreen>
                       tool: tool,
                       onTool: chooseTool,
                       onPenSettings: penSettings,
+                      onOpenMenu: router.reset,
                       argb: argb,
                       onColor: (c) => setState(() => argb = c),
                       width: width,
@@ -1551,6 +1562,7 @@ class _EditorScreenState extends State<EditorScreen>
                                 ).colorScheme.outlineVariant,
                               ),
                               ZoomControls(
+                                onOpenMenu: router.reset,
                                 scale: view.scale,
                                 locked: view.zoomLocked,
                                 horizontalLocked: view.horizontalLocked,

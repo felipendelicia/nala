@@ -20,6 +20,7 @@ class EditorToolbar extends StatelessWidget {
     required this.onPattern,
     required this.onApplyPattern,
     this.onPenSettings,
+    this.onOpenMenu,
   });
   final EditorTool tool;
   final ValueChanged<EditorTool> onTool;
@@ -34,6 +35,7 @@ class EditorToolbar extends StatelessWidget {
   final ValueChanged<PaperPattern> onPattern;
   final VoidCallback? onApplyPattern;
   final VoidCallback? onPenSettings;
+  final VoidCallback? onOpenMenu;
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -160,6 +162,8 @@ class EditorToolbar extends StatelessWidget {
               ] else
                 PopupMenuButton<int>(
                   tooltip: 'Color de tinta',
+                  onOpened: onOpenMenu,
+                  onCanceled: onOpenMenu,
                   initialValue: argb,
                   onSelected: onColor,
                   icon: Icon(Icons.circle, color: Color(argb)),
@@ -179,6 +183,8 @@ class EditorToolbar extends StatelessWidget {
                 ),
               PopupMenuButton<double>(
                 tooltip: 'Grosor de tinta',
+                onOpened: onOpenMenu,
+                onCanceled: onOpenMenu,
                 initialValue: width,
                 onSelected: onWidth,
                 itemBuilder: (_) => [
@@ -259,6 +265,8 @@ class EditorToolbar extends StatelessWidget {
                 divider(),
                 PopupMenuButton<PaperPattern>(
                   tooltip: 'Tipo de hoja',
+                  onOpened: onOpenMenu,
+                  onCanceled: onOpenMenu,
                   initialValue: pattern,
                   onSelected: onPattern,
                   itemBuilder: (_) => PaperPattern.values

@@ -12,10 +12,12 @@ class ZoomControls extends StatelessWidget {
     required this.onLock,
     this.horizontalLocked = false,
     this.onHorizontalLock,
+    this.onOpenMenu,
   });
   final double scale;
   final bool horizontalLocked;
   final VoidCallback? onHorizontalLock;
+  final VoidCallback? onOpenMenu;
   final bool locked;
   final ValueChanged<double> onScale, onZoom;
   final VoidCallback onFit, onFitWidth, onLock;
@@ -40,6 +42,8 @@ class ZoomControls extends StatelessWidget {
       ),
       PopupMenuButton<double>(
         tooltip: 'Porcentaje de zoom',
+        onOpened: onOpenMenu,
+        onCanceled: onOpenMenu,
         enabled: !locked,
         onSelected: onScale,
         itemBuilder: (_) => [.5, .75, 1.0, 1.25, 1.5, 2.0]

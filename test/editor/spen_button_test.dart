@@ -11,6 +11,7 @@ import 'package:apuntes/editor/editor_screen.dart';
 import 'package:apuntes/editor/editor_controller.dart';
 import 'package:apuntes/editor/paper_canvas.dart';
 import 'package:apuntes/editor/pen_preferences.dart';
+import 'package:apuntes/ui/appearance.dart';
 import '../support/fixtures.dart';
 import '../support/memory_repository.dart';
 
@@ -27,6 +28,7 @@ Future<void> nativeEdge(WidgetTester tester, String method, [bool? value]) {
 Future<EditorController> editor(
   WidgetTester tester, {
   PenPreferencesController? prefs,
+  AppearanceController? appearance,
 }) async {
   await tester.binding.setSurfaceSize(const Size(1200, 900));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -39,9 +41,16 @@ Future<EditorController> editor(
     now: () => DateTime.utc(2026),
   );
   await tester.pumpWidget(
-    MaterialApp(
-      home: EditorScreen(controller: c, penPreferences: prefs),
-    ),
+    appearance == null
+        ? MaterialApp(
+            home: EditorScreen(controller: c, penPreferences: prefs),
+          )
+        : AppearanceScope(
+            controller: appearance,
+            child: MaterialApp(
+              home: EditorScreen(controller: c, penPreferences: prefs),
+            ),
+          ),
   );
   await tester.pumpAndSettle();
   addTearDown(() {
@@ -273,6 +282,135 @@ void main() {
       await tester.tap(find.byTooltip('Eliminar selección'));
       await tester.pumpAndSettle();
       expect(c.notebook.pages.first.strokes, isEmpty);
+      await tester.pumpWidget(const SizedBox());
+      await tester.runAsync(() => dir.delete(recursive: true));
+    },
+  );
+  for (final release in [false, true]) {
+    testWidgets(
+      'goma al cambiar herramienta no borra sin movimiento: release=$release',
+      (tester) async {
+        final c = await editor(tester);
+        final center = tester.getCenter(find.byType(PaperCanvas));
+        final pen = await tester.startGesture(
+          center,
+          kind: PointerDeviceKind.stylus,
+          pointer: 22,
+        );
+        await pen.moveBy(const Offset(40, 0));
+        await nativeEdge(tester, 'button', true);
+        await tester.pump();
+        final committed = c.notebook.pages.first.strokes.last.id;
+        if (release) await nativeEdge(tester, 'button', false);
+        await pen.up();
+        await tester.pumpAndSettle();
+        expect(
+          c.notebook.pages.first.strokes.any((s) => s.id == committed),
+          isTrue,
+          reason:
+              'La transición sin mover la punta conserva el segmento anterior.',
+        );
+        // A deliberate new eraser contact still erases that saved line.
+        if (release) await nativeEdge(tester, 'button', true);
+        final eraser = await tester.startGesture(
+          center + const Offset(20, 0),
+          kind: PointerDeviceKind.stylus,
+          buttons: kPrimaryStylusButton,
+          pointer: 23,
+        );
+        await eraser.up();
+        await tester.pumpAndSettle();
+        expect(
+          c.notebook.pages.first.strokes.any((s) => s.id == committed),
+          isFalse,
+        );
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  }
+  for (final menu in [
+    'Grosor de tinta',
+    'Opciones del cuaderno',
+    'Tipo de hoja',
+    'Porcentaje de zoom',
+    'Color de tinta',
+    'Apariencia',
+  ]) {
+    testWidgets('abrir y cancelar $menu restaura el botón mantenido', (
+      tester,
+    ) async {
+      Directory? appearanceDir;
+      AppearanceController? appearance;
+      if (menu == 'Apariencia') {
+        await tester.runAsync(() async {
+          appearanceDir = await Directory.systemTemp.createTemp(
+            'nala-theme-button-',
+          );
+          appearance = await AppearanceController.open(appearanceDir!.path);
+        });
+      }
+      await editor(tester, appearance: appearance);
+      if (menu == 'Color de tinta') {
+        await tester.binding.setSurfaceSize(const Size(900, 900));
+        await tester.pumpAndSettle();
+      }
+      await nativeEdge(tester, 'button', true);
+      await tester.pump();
+      expect(selectedTool(tester), EditorTool.eraser);
+      await tester.tap(find.byTooltip(menu));
+      await tester.pumpAndSettle();
+      await nativeEdge(tester, 'button', false);
+      await tester.pump();
+      // Dismiss the actual popup through its outside barrier.
+      await tester.tapAt(const Offset(20, 800));
+      await tester.pumpAndSettle();
+      expect(selectedTool(tester), EditorTool.pen);
+      await tester.pumpWidget(const SizedBox());
+      if (appearanceDir != null) {
+        await tester.runAsync(() => appearanceDir!.delete(recursive: true));
+        appearance!.dispose();
+      }
+    });
+  }
+  testWidgets(
+    'alternar no cuenta dos veces la pulsación mantenida tras modal',
+    (tester) async {
+      late Directory dir;
+      late PenPreferencesController prefs;
+      await tester.runAsync(() async {
+        dir = await Directory.systemTemp.createTemp('nala-toggle-modal-');
+        prefs = await PenPreferencesController.open(dir.path);
+        await prefs.update(
+          const PenSettings(
+            buttonTool: PenButtonTool.highlighter,
+            buttonMode: PenButtonMode.toggle,
+          ),
+        );
+      });
+      await editor(tester, prefs: prefs);
+      await nativeEdge(tester, 'button', true);
+      await tester.pump();
+      expect(selectedTool(tester), EditorTool.highlighter);
+      await tester.tap(find.byTooltip('Ajustes del lápiz'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+      // Android resamples the still-held physical button on each ACTION_DOWN.
+      await nativeEdge(tester, 'button', true);
+      await tester.pump();
+      expect(selectedTool(tester), EditorTool.highlighter);
+      await tester.tap(find.byTooltip('Ajustes del lápiz'));
+      await tester.pumpAndSettle();
+      await nativeEdge(tester, 'button', false);
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+      await nativeEdge(tester, 'button', true);
+      await tester.pump();
+      expect(
+        selectedTool(tester),
+        EditorTool.pen,
+        reason: 'Liberar durante el modal permite una nueva pulsación real.',
+      );
       await tester.pumpWidget(const SizedBox());
       await tester.runAsync(() => dir.delete(recursive: true));
     },
