@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import 'package:pdfrx_engine/pdfrx_engine.dart' show PdfPasswordException;
@@ -349,9 +350,24 @@ class _LibraryScreenState extends State<LibraryScreen> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 const Icon(Icons.chevron_right, size: 18),
-                                TextButton(
-                                  onPressed: () => _navigate(f.id),
-                                  child: Text(f.name),
+                                ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    maxWidth: math.min(
+                                      320,
+                                      constraints.maxWidth - 64,
+                                    ),
+                                  ),
+                                  child: Tooltip(
+                                    message: f.name,
+                                    child: TextButton(
+                                      onPressed: () => _navigate(f.id),
+                                      child: Text(
+                                        f.name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
@@ -420,22 +436,33 @@ class _LibraryScreenState extends State<LibraryScreen> {
                             ),
                           ),
                           if (subjects.isNotEmpty)
-                            DropdownButton<String>(
-                              value: subject,
-                              items: [
-                                const DropdownMenuItem(
-                                  value: '',
-                                  child: Text('Todas las materias'),
-                                ),
-                                ...subjects.map(
-                                  (s) => DropdownMenuItem(
-                                    value: s,
-                                    child: Text(s),
+                            SizedBox(
+                              width: math.min(260, constraints.maxWidth - 32),
+                              child: DropdownButton<String>(
+                                isExpanded: true,
+                                value: subject,
+                                items: [
+                                  const DropdownMenuItem(
+                                    value: '',
+                                    child: Text('Todas las materias'),
                                   ),
-                                ),
-                              ],
-                              onChanged: (s) =>
-                                  setState(() => subject = s ?? ''),
+                                  ...subjects.map(
+                                    (s) => DropdownMenuItem(
+                                      value: s,
+                                      child: Tooltip(
+                                        message: s,
+                                        child: Text(
+                                          s,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                onChanged: (s) =>
+                                    setState(() => subject = s ?? ''),
+                              ),
                             ),
                         ],
                       ),

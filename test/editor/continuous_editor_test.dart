@@ -204,6 +204,67 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+  testWidgets(
+    'deshacer y rehacer hojas mantiene una página visible y permite ajustar',
+    (tester) async {
+      final controller = await mount(tester, count: 1);
+      for (var i = 0; i < 3; i++) {
+        await tester.tap(find.byTooltip('Agregar hoja'));
+        await tester.pumpAndSettle();
+      }
+      for (var i = 0; i < 3; i++) {
+        await tester.tap(find.byTooltip('Deshacer'));
+        await tester.pumpAndSettle();
+        expect(
+          find.text(
+            '${controller.notebook.pages.length}/${controller.notebook.pages.length}',
+          ),
+          findsOneWidget,
+        );
+        expect(canvas(controller.notebook.pages.last.id), findsOneWidget);
+        await tester.tap(find.byTooltip('Ajustar hoja'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Ajustar ancho'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      }
+      await tester.tap(find.byTooltip('Rehacer'));
+      await tester.pumpAndSettle();
+      expect(find.text('1/2'), findsOneWidget);
+      final first = canvas(controller.notebook.pages.first.id);
+      final origin = tester.getTopLeft(first);
+      final pen = await tester.startGesture(
+        tester
+            .renderObject<RenderBox>(first)
+            .localToGlobal(const Offset(100, 120)),
+        kind: PointerDeviceKind.stylus,
+      );
+      await pen.moveBy(const Offset(20, 20));
+      await pen.up();
+      await tester.pumpAndSettle();
+      expect(controller.notebook.pages.first.strokes, hasLength(2));
+      await tester.tap(find.byTooltip('Deshacer'));
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(first), origin);
+      await controller.apply(
+        (book) => book.copyWith(
+          pages: [
+            NotebookPage(
+              id: 'inserted',
+              width: 841.89,
+              height: 595.28,
+              background: const PageBackground.paper(PaperPattern.blank),
+            ),
+            ...book.pages,
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('2/3'), findsOneWidget);
+      expect(tester.getTopLeft(first), origin);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
   testWidgets('mil hojas no montan mil lienzos', (tester) async {
     await mount(tester, count: 1000);
     expect(

@@ -82,6 +82,7 @@ class _EditorScreenState extends State<EditorScreen> {
     super.initState();
     widget.cloud?.addListener(syncChanged);
     widget.controller.addListener(localSettled);
+    rememberPageFocus();
   }
 
   void syncChanged() {
@@ -92,7 +93,49 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 
   void localSettled() {
+    reconcilePages();
     if (!widget.controller.saving) unawaited(refreshRemote());
+  }
+
+  List<NotebookPage>? observedPages;
+  String? observedPageId;
+  Rect? observedBounds;
+  void rememberPageFocus() {
+    observedPages = widget.controller.notebook.pages;
+    observedPageId = page.id;
+    observedBounds = layout.rect(pageIndex);
+  }
+
+  void reconcilePages() {
+    final pages = widget.controller.notebook.pages;
+    if (identical(pages, observedPages)) return;
+    final retained =
+        pageIndex < pages.length && pages[pageIndex].id == observedPageId
+        ? pageIndex
+        : pages.indexWhere((p) => p.id == observedPageId);
+    final previousIndex = pageIndex;
+    pageIndex = retained < 0 ? pageIndex.clamp(0, pages.length - 1) : retained;
+    final bounds = layout.rect(pageIndex);
+    if (retained < 0) {
+      router.reset();
+      selected = {};
+      placingComment = false;
+      pdfError = null;
+      audioPlayer?.stop();
+      if (viewSize != null) {
+        view.ty = 24 - bounds.top * view.scale;
+        if (!view.horizontalLocked) {
+          view.tx = (viewSize!.width - layout.width * view.scale) / 2;
+        }
+      }
+    } else if (viewSize != null && observedBounds != null) {
+      // Keep the current sheet's origin when pages before it are inserted/removed.
+      // Ordinary ink edits have identical bounds and leave the camera untouched.
+      view.tx += (observedBounds!.left - bounds.left) * view.scale;
+      view.ty += (observedBounds!.top - bounds.top) * view.scale;
+    }
+    if (previousIndex != pageIndex) pdfError = null;
+    rememberPageFocus();
   }
 
   Future<void> refreshRemote() async {
@@ -109,7 +152,8 @@ class _EditorScreenState extends State<EditorScreen> {
           final index = widget.controller.notebook.pages.indexWhere(
             (p) => p.id == previousPage,
           );
-          pageIndex = index < 0 ? 0 : index;
+          if (index >= 0) pageIndex = index;
+          rememberPageFocus();
           selected = {};
         });
       }
@@ -399,6 +443,7 @@ class _EditorScreenState extends State<EditorScreen> {
         }
       }
       pdfError = null;
+      rememberPageFocus();
     });
   }
 
@@ -468,6 +513,7 @@ class _EditorScreenState extends State<EditorScreen> {
           audioPlayer?.stop();
         }
       }
+      rememberPageFocus();
     });
   }
 
@@ -732,6 +778,7 @@ class _EditorScreenState extends State<EditorScreen> {
     if (!router.isWriting && hit != null && hit != pageIndex) {
       setState(() {
         pageIndex = hit;
+        rememberPageFocus();
         selected = {};
         pdfError = null;
       });
@@ -929,8 +976,8 @@ class _EditorScreenState extends State<EditorScreen> {
     }
     setState(() => exporting = true);
     try {
-      await widget.controller.flush();
       final snapshot = widget.controller.notebook;
+      await widget.controller.flush();
       Uint8List? bytes;
       if (identical(snapshot, exportedSnapshot)) bytes = exportedBytes;
       bytes ??= await PdfExportService(widget.pdf!).exportWithUnlock(

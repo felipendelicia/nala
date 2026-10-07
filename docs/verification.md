@@ -105,3 +105,14 @@ Capturas nativas en .dart_tool/ui-qa: biblioteca clara/oscura, editor oscuro, na
 La suite completa de cierre pasó 102/102 después de añadir orientaciones mixtas, separación sin tinta y origen estable al cruzarla. Se reprodujo un overflow del estado local de biblioteca con texto a 1.5 en 800×1200; ahora ese estado tiene ancho limitado o icono con descripción, como los controles de Drive. La suite posterior pasó y analyze siguió sin problemas.
 
 También se reprodujo que los permisos por defecto de un PDF temporal Linux permitían lectura a grupo/otros. Compartir ahora usa carpetas 0700, archivos 0600 y rechaza una raíz temporal que sea enlace. La prueba examina los permisos reales antes del canal de entrega y pasó junto con compartir desde el editor (2/2). Android usa su caché privada y FileProvider limitado a nala-share/. No se abrió ningún cliente de correo ni se cambió el portapapeles real durante la automatización.
+
+### Correcciones finales 0.3.0
+
+Una revisión independiente nueva encontró dos problemas importantes, ninguno crítico y ninguna observación menor. Se reprodujeron antes de corregirlos:
+
+- Agregar varias hojas y deshacerlas dejaba un índice fuera de rango y podía romper Ajustar hoja/ancho. Se conserva la página por identificador, se elige una vecina válida si desaparece y se restablece una vista utilizable. Deshacer tinta mantiene la cámara; insertar una hoja antes de la actual conserva su origen.
+- Compartir durante un guardado podía tomar un trazo posterior todavía pendiente. Una prueba con dos guardados diferidos y fallo del segundo reabre/renderiza el PDF real: el píxel de ese trazo pasó de negro a blanco después de tomar la instantánea antes de esperar el guardado correspondiente. La revisión persistida contiene sólo el primer estado; el trazo fallido sigue en memoria para reintentar.
+
+Se amplió la comprobación de accesibilidad con nombres largos de carpetas, materias y apuntes a 1.5 de texto en 800×1200. Reprodujo dos desbordes; anchos limitados y descripciones del nombre completo los corrigen y dejan accesible Mover a…/Cancelar. Una prueba adicional cancela el destino de compartir y sigue escribiendo sin exportar ni guardar otra copia.
+
+Las pruebas enfocadas pasaron 11/11 y la suite completa posterior pasó 106/106; analyze no encontró problemas. No se solicitó una segunda revisión: las reproducciones y la suite verifican esta pasada de correcciones. La prueba física y las aplicaciones externas pendientes se conservan explícitas en decisiones.
