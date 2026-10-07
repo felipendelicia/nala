@@ -8,7 +8,7 @@ Nala se desarrolla para tomar apuntes universitarios con S Pen en Samsung Tab S1
 - Tinta activa incremental en su propia capa, sin reconstruir la interfaz por muestra. Presión expresiva y suavizado ajustables; el trazo terminado reutiliza su geometría y los trazos antiguos conservan su aspecto.
 - Bloqueos independientes de movimiento horizontal y zoom. Se puede seguir bajando o saltar de hoja con ambos bloqueados.
 - Lápiz grafito de 2.5 pt y resaltador amarillo de 14 pt; grosores y colores independientes durante la sesión.
-- Diseño nuevo de biblioteca/editor, Manrope y el logo minimalista elegido por Felipe. Claro, Oscuro o Seguir sistema con preferencia guardada; las hojas y PDF conservan sus colores.
+- Diseño nuevo de biblioteca/editor, Manrope y el logo minimalista elegido por Felipe. Interfaz en blanco, negro y grises; Claro, Oscuro o Seguir sistema con preferencia guardada; las hojas y PDF conservan sus colores.
 - Compartir PDF directo desde el editor: selector Android; archivo al portapapeles o adjunto de correo Linux. Exportar una copia sigue disponible.
 - Mover/renombrar apuntes desde su menú, carpetas y subcarpetas persistidas en SQLite.
 - Lectura, comentarios de texto/voz y PDF protegido/rotado con hojas intercaladas. El PDF exportado conserva tinta vectorial y fondos a 200 dpi; comentarios en anexo y audio disponible en Nala.

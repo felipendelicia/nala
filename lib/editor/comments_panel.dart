@@ -162,7 +162,9 @@ class CommentsPanel extends StatelessWidget {
                       padding: const EdgeInsets.all(16),
                       child: Text(
                         '${player!.error}',
-                        style: const TextStyle(color: Colors.red),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
                       ),
                     ),
             ),
@@ -181,7 +183,7 @@ class CommentPinsPainter extends CustomPainter {
     for (var i = 0; i < comments.length; i++) {
       final comment = comments[i];
       final position = Offset(comment.x, comment.y);
-      canvas.drawCircle(position, 12 / scale, Paint()..color = nalaGreen);
+      canvas.drawCircle(position, 12 / scale, Paint()..color = nalaAnnotation);
       canvas.drawCircle(
         position,
         12 / scale,

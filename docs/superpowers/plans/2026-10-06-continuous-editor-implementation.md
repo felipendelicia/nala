@@ -15,7 +15,7 @@
 - Lápiz 2.5 pt grafito y resaltador 14 pt amarillo, ajustes independientes.
 - Compartir requiere acción explícita; no envío automático; temporales únicos privados y saneados.
 - Todas las tareas Flutter secuenciales mediante tool/flutter-safe.
-- Tema claro/oscuro/sistema persistido; el papel/PDF conserva sus colores. Usar exactamente el segundo logo elegido por el usuario.
+- Interfaz blanco/negro/grises neutros solicitada por Felipe; tema claro/oscuro/sistema persistido; el papel/PDF conserva sus colores. Usar exactamente el segundo logo elegido por el usuario.
 
 ## Review Focus
 

@@ -1,25 +1,32 @@
 import 'package:flutter/material.dart';
 
-const nalaGreen = Color(0xff24584b);
-const nalaForest = Color(0xff183e35);
-const nalaBackground = Color(0xfff1f5f6);
-const nalaInk = Color(0xff20343b);
+const nalaAnnotation = Color(0xff202020);
+const nalaSidebar = Color(0xff111111);
+const nalaBackground = Colors.white;
+const nalaInk = Color(0xff181818);
 
 ThemeData nalaTheme({Brightness brightness = Brightness.light}) {
   final dark = brightness == Brightness.dark;
   final scheme = ColorScheme.fromSeed(
-    seedColor: nalaGreen,
+    seedColor: Colors.black,
+    dynamicSchemeVariant: DynamicSchemeVariant.monochrome,
     brightness: brightness,
-    primary: dark ? const Color(0xffa3d8bd) : nalaGreen,
-    surface: dark ? const Color(0xff1b2429) : Colors.white,
-    onSurface: dark ? const Color(0xffe6eef0) : nalaInk,
+    primary: dark ? Colors.white : Colors.black,
+    onPrimary: dark ? Colors.black : Colors.white,
+    surface: dark ? const Color(0xff101010) : Colors.white,
+    onSurface: dark ? Colors.white : nalaInk,
+    error: dark ? Colors.white : Colors.black,
+    onError: dark ? Colors.black : Colors.white,
+    errorContainer: dark ? const Color(0xff303030) : const Color(0xffeeeeee),
+    onErrorContainer: dark ? Colors.white : Colors.black,
+    surfaceTint: Colors.transparent,
   );
   final theme = ThemeData(
     useMaterial3: true,
     brightness: brightness,
     colorScheme: scheme,
     fontFamily: 'Manrope',
-    scaffoldBackgroundColor: dark ? const Color(0xff11191e) : nalaBackground,
+    scaffoldBackgroundColor: dark ? Colors.black : nalaBackground,
   );
   return theme.copyWith(
     textTheme: theme.textTheme.copyWith(
@@ -64,7 +71,7 @@ ThemeData nalaTheme({Brightness brightness = Brightness.light}) {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: dark ? const Color(0xff242f35) : const Color(0xfff0f4f5),
+      fillColor: dark ? const Color(0xff202020) : const Color(0xfff2f2f2),
       contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),

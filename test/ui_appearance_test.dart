@@ -1,7 +1,9 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:apuntes/ui/appearance.dart';
+import 'package:apuntes/ui/app_theme.dart';
 import 'package:apuntes/app.dart';
 import 'package:apuntes/bootstrap.dart';
 import 'package:apuntes/document/asset_store.dart';
@@ -10,6 +12,63 @@ import 'package:apuntes/library/library_screen.dart';
 import '../test/support/memory_repository.dart';
 
 void main() {
+  test('claro y oscuro usan blanco negro y grises en toda la interfaz', () {
+    for (final brightness in Brightness.values) {
+      final theme = nalaTheme(brightness: brightness);
+      final scheme = theme.colorScheme;
+      final colors = [
+        theme.scaffoldBackgroundColor,
+        scheme.primary,
+        scheme.onPrimary,
+        scheme.primaryContainer,
+        scheme.onPrimaryContainer,
+        scheme.secondary,
+        scheme.onSecondary,
+        scheme.secondaryContainer,
+        scheme.tertiary,
+        scheme.tertiaryContainer,
+        scheme.error,
+        scheme.errorContainer,
+        scheme.onError,
+        scheme.onErrorContainer,
+        scheme.surface,
+        scheme.onSurface,
+        scheme.onSurfaceVariant,
+        scheme.surfaceContainer,
+        scheme.surfaceContainerLow,
+        scheme.surfaceContainerHigh,
+        scheme.surfaceContainerHighest,
+        scheme.outline,
+        scheme.outlineVariant,
+        scheme.inversePrimary,
+        scheme.inverseSurface,
+        scheme.onInverseSurface,
+        theme.inputDecorationTheme.fillColor!,
+        nalaSidebar,
+        nalaAnnotation,
+      ];
+      for (final color in colors) {
+        final rgb = color.toARGB32();
+        expect(
+          (rgb >> 16) & 255,
+          (rgb >> 8) & 255,
+          reason: 'Los controles no deben tener tintes de color.',
+        );
+        expect((rgb >> 8) & 255, rgb & 255);
+      }
+      expect(
+        theme.scaffoldBackgroundColor,
+        brightness == Brightness.dark ? Colors.black : Colors.white,
+      );
+      final foreground = scheme.onPrimary.computeLuminance();
+      final background = scheme.primary.computeLuminance();
+      expect(
+        (math.max(foreground, background) + .05) /
+            (math.min(foreground, background) + .05),
+        greaterThanOrEqualTo(7),
+      );
+    }
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
   test(
     'tema oscuro y sistema se conservan al reiniciar sin tocar los apuntes',

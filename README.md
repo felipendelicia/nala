@@ -8,7 +8,7 @@ El código actual incorpora importación de PDF, anotaciones sobre sus páginas,
 
 El editor muestra las páginas una debajo de otra: podés seguir bajando sin abrir el índice. Incluye modo lectura, ajuste a hoja y ancho, porcentajes de zoom y bloqueos independientes del zoom y del movimiento horizontal. El resaltador empieza más ancho que el lápiz y cada herramienta conserva su grosor y color durante la sesión. Compartir PDF prepara una instantánea del apunte y abre directamente el selector de Android; Linux permite copiar el archivo o adjuntarlo a un correo, sin guardarlo antes manualmente.
 
-La biblioteca y el editor usan un diseño nuevo con Manrope y el logo minimalista elegido por Felipe. Desde Apariencia podés elegir Claro, Oscuro o Seguir sistema; la preferencia se conserva al reiniciar. El papel y los PDF mantienen sus colores originales. Los apuntes se pueden mover entre carpetas desde su menú de opciones.
+La biblioteca y el editor usan un diseño nuevo con Manrope y el logo minimalista elegido por Felipe. La interfaz usa blanco, negro y grises. Desde Apariencia podés elegir Claro, Oscuro o Seguir sistema; la preferencia se conserva al reiniciar. El papel y los PDF mantienen sus colores originales. Los apuntes se pueden mover entre carpetas desde su menú de opciones.
 
 Se pueden anclar comentarios de texto y notas de voz a la hoja. El audio comienza únicamente al pulsar Grabar, se puede escuchar o descartar y se detiene al pasar la app al fondo. Android usa su micrófono y Linux necesita PipeWire (pw-record/pw-play) o ALSA (arecord/aplay); los recursos se guardan como WAV mono de 16 kHz. Los comentarios permanecen editables en Nala. El PDF exportado incluye marcadores numerados y un anexo con el texto; las notas de voz se identifican con su duración y se escuchan desde Nala.
 
@@ -32,7 +32,7 @@ tool/flutter-safe test --no-pub integration_test/appearance_share_test.dart -d l
 tool/flutter-safe build apk --release --target-platform android-arm64
 ```
 
-`tool/flutter-safe` ejecuta las tareas de a una dentro de un servicio con un límite total de 2300 MiB de RAM, 256 MiB de swap y dos CPU. Requiere Linux con una sesión systemd de usuario. Gradle además tiene un límite de heap de 768 MiB, un solo worker y no deja un daemon persistente. La compilación de Linux usa Ninja con un solo trabajo. Estos límites se añadieron para una PC de 7.5 GiB de RAM. No ejecutar tareas de Flutter por fuera del script al mismo tiempo que se genera el APK.
+`tool/flutter-safe` ejecuta las tareas de a una dentro de un servicio con un límite total de 2300 MiB de RAM, 256 MiB de swap y dos CPU. Requiere Linux con una sesión systemd de usuario. Gradle además tiene un límite de heap de 512 MiB, un solo worker y no deja un daemon persistente. La compilación de Linux usa Ninja con un solo trabajo. Estos límites se añadieron para una PC de 7.5 GiB de RAM. No ejecutar tareas de Flutter por fuera del script al mismo tiempo que se genera el APK.
 
 La compilación Linux debe preceder a las pruebas de PDF: les proporciona la biblioteca nativa PDFium real. Requisitos de las plataformas y detalles del entorno en [compilación](docs/build-notes.md).
 

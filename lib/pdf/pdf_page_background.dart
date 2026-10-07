@@ -112,7 +112,7 @@ class _PdfPageBackgroundState extends State<PdfPageBackground> {
                   else
                     const Icon(
                       Icons.picture_as_pdf_outlined,
-                      color: Color(0xff73786f),
+                      color: Color(0xff737373),
                       size: 32,
                     ),
                   const SizedBox(height: 12),

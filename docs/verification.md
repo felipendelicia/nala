@@ -120,3 +120,9 @@ Las pruebas enfocadas pasaron 11/11 y la suite completa posterior pasó 106/106;
 La revisión de capturas detectó que limitar el filtro de materia a 260 px agregaba una fila y cortaba inicialmente los metadatos de las tarjetas a 1280×720. Una reproducción con la fuente Manrope real observó un título debajo del área visible (707 frente a 692 px). El filtro compacto mantiene los nombres completos en su descripción; la prueba de títulos/materias visibles y las de texto ampliado pasaron 5/5. La suite final pasó 107/107. El recorrido nativo PDF y el de apariencia/compartir/mover volvieron a pasar después de corregir la cámara y la instantánea.
 
 El primer intento Android de esta etapa fue detenido por systemd-oomd al alcanzar presión de memoria en su servicio aislado; se detuvieron sólo sus procesos. Se redujo el heap Gradle de 768 a 512 MiB conservando metaspace 384 MiB, los workers secuenciales y el límite global de 2300 MiB. Los binarios sólo se entregan después de una compilación exitosa.
+
+### Paleta blanco/negro solicitada por Felipe
+
+La indicación posterior reemplaza la paleta verde de la interfaz por blanco, negro y grises. El tema oscuro tiene fondo negro real; claro usa blanco, con controles de contraste alto, paneles y avisos neutros. Las muestras de tinta mantienen sus colores seleccionables y el tema no recolorea los apuntes ni sus PDF. La prueba de colores reprodujo el tinte anterior y después pasó comprobando roles neutros y contraste de controles de al menos 7:1; las pruebas enfocadas de apariencia y layouts pasaron 14/14. La entrega se vuelve a compilar con esta paleta final.
+
+La suite completa de la paleta final pasó 108/108. Se mantuvieron todas las comprobaciones de trazo, presión, geometría reutilizada, guardado, compartir, carpetas y cuentas.

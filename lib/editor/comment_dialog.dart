@@ -183,7 +183,11 @@ class _CommentDialogState extends State<CommentDialog> {
                   if (session!.recording)
                     Row(
                       children: [
-                        const Icon(Icons.circle, color: Colors.red, size: 12),
+                        Icon(
+                          Icons.circle,
+                          color: Theme.of(context).colorScheme.primary,
+                          size: 12,
+                        ),
                         const SizedBox(width: 8),
                         Text(audioDuration(session!.durationMs)),
                         const Spacer(),

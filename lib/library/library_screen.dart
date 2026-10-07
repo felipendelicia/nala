@@ -274,10 +274,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 SizedBox(
                   width: 224,
                   child: Material(
-                    color: nalaForest,
+                    color: nalaSidebar,
                     child: ListTileTheme(
-                      textColor: const Color(0xffd5e6de),
-                      iconColor: const Color(0xffc0d8cc),
+                      textColor: const Color(0xffdddddd),
+                      iconColor: const Color(0xffcccccc),
                       selectedColor: Colors.white,
                       selectedTileColor: Colors.white12,
                       shape: RoundedRectangleBorder(

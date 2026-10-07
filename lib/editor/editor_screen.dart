@@ -578,8 +578,8 @@ class _EditorScreenState extends State<EditorScreen> {
         },
         child: ColoredBox(
           color: Theme.of(context).brightness == Brightness.dark
-              ? const Color(0xff11191e)
-              : const Color(0xffe8eef0),
+              ? Colors.black
+              : const Color(0xffeeeeee),
           child: Stack(
             children: [for (final index in visible) buildPage(context, index)],
           ),
@@ -627,7 +627,7 @@ class _EditorScreenState extends State<EditorScreen> {
               color: Colors.white,
               boxShadow: [
                 BoxShadow(
-                  color: Color(0x1c29424b),
+                  color: Color(0x1c000000),
                   blurRadius: 18,
                   offset: Offset(0, 5),
                 ),
@@ -1513,7 +1513,7 @@ class _SelectionPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = nalaGreen
+      ..color = nalaAnnotation
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5 / scale;
     for (final stroke in page.strokes) {
@@ -1522,7 +1522,10 @@ class _SelectionPainter extends CustomPainter {
       }
     }
     if (rectangle != null) {
-      canvas.drawRect(rectangle!, Paint()..color = nalaGreen.withAlpha(24));
+      canvas.drawRect(
+        rectangle!,
+        Paint()..color = nalaAnnotation.withAlpha(24),
+      );
       canvas.drawRect(rectangle!, paint);
     }
   }

@@ -18,9 +18,9 @@ Cada tarjeta de apunte muestra Opciones de apunte con Renombrar y Mover a…. El
 
 ## Dirección visual
 
-Paleta: bosque #183E35, verde Nala #24584B, verde claro #DCECE5, papel #FFFFFF, fondo frío #F1F5F6, tinta #20343B. Manrope (Google Fonts/OFL, incluida offline) para interfaz; DejaVu permanece para exportaciones Unicode. Tipografía de títulos 28–32 px, texto 14–16 px y controles mínimos 44 px.
+Paleta final indicada por Felipe: blanco, negro y grises neutros. Claro con fondo #FFFFFF y controles negros; oscuro con fondo #000000, superficies #101010 y controles blancos. Las muestras de tinta conservan los colores que se pueden elegir para escribir. Manrope (Google Fonts/OFL, incluida offline) para interfaz; DejaVu permanece para exportaciones Unicode. Tipografía de títulos 28–32 px, texto 14–16 px y controles mínimos 44 px.
 
-Biblioteca: navegación lateral bosque, marca con la perrita, título de carpeta y recuento, búsqueda separada, acciones claras y miniaturas grandes con aspecto de papel. Las opciones de cada apunte son visibles. Editor: cabecera blanca con título/lectura/compartir; herramientas agrupadas en un estuche con muestras de color y ancho; superficie gris fría, hojas blancas con sombra discreta y separación/número; pie compacto con estado, navegación y bloqueos. No hay animaciones durante escritura ni fondos decorativos costosos. En ventanas pequeñas las herramientas se desplazan horizontalmente y las acciones secundarias se agrupan; no desbordan con texto ampliado.
+Biblioteca: navegación lateral negra, marca con la perrita, título de carpeta y recuento, búsqueda separada, acciones claras y miniaturas grandes con aspecto de papel. Las opciones de cada apunte son visibles. Editor: cabecera blanca con título/lectura/compartir; herramientas agrupadas en un estuche con muestras de color y ancho; superficie gris neutra, hojas blancas con sombra discreta y separación/número; pie compacto con estado, navegación y bloqueos. No hay animaciones durante escritura ni fondos decorativos costosos. En ventanas pequeñas las herramientas se desplazan horizontalmente y las acciones secundarias se agrupan; no desbordan con texto ampliado.
 
 ## Validación y límites
 
@@ -33,3 +33,5 @@ Referencias de implementación: [FileProvider](https://developer.android.com/ref
 ## Ampliaciones del usuario
 
 Se agrega tema claro/oscuro/sistema con preferencia persistente. Se oscurecen biblioteca, barras, controles y superficie del editor; las hojas mantienen los colores del documento/PDF. El logo definitivo es la silueta blanca sobre negro que el usuario aprobó explícitamente (adjunto e66b4419), incorporada tal cual. Se regeneran iconos de Android y el icono Linux.
+
+La última indicación de Felipe fija toda la interfaz en blanco/negro/grises, incluyendo barras, navegación, selección y avisos. La variante oscura usa negro real. Las hojas/PDF y los colores elegidos de tinta siguen fieles al documento; el cambio de tema no recolorea apuntes.
