@@ -437,14 +437,21 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           ),
                           if (subjects.isNotEmpty)
                             SizedBox(
-                              width: math.min(260, constraints.maxWidth - 32),
+                              width: math.min(180, constraints.maxWidth - 32),
                               child: DropdownButton<String>(
                                 isExpanded: true,
                                 value: subject,
                                 items: [
                                   const DropdownMenuItem(
                                     value: '',
-                                    child: Text('Todas las materias'),
+                                    child: Tooltip(
+                                      message: 'Todas las materias',
+                                      child: Text(
+                                        'Todas las materias',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
                                   ),
                                   ...subjects.map(
                                     (s) => DropdownMenuItem(
