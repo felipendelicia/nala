@@ -31,6 +31,10 @@ android {
 
     buildTypes {
         release {
+            // ML Kit's native-code shrinking exceeds the bounded build heap.
+            // Flutter still builds Dart ahead of time and tree-shakes icons.
+            isMinifyEnabled = false
+            isShrinkResources = false
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
