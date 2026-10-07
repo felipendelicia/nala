@@ -173,3 +173,5 @@ cacce35aa2b78659b0ad6a3e76214023e4157f323a44a0078875a4904d66c5d5  Nala-Linux-x64
 ```
 
 La auditoría revisó archivos actuales e historial: ninguna ruta privada prohibida ni patrón conocido de credenciales. No se publican datos de notas ni claves de firma. Samsung, proximidad/botón y sensación punta-pantalla requieren el nuevo APK en la Tab S10. Sincronización continúa diferida; el binario público funciona localmente. Las decisiones y costes se conservan en [decisiones](decisions.md).
+
+Se publicó la [prerelease v0.4.0](https://github.com/felipendelicia/nala/releases/tag/v0.4.0), con tag en `ae8201e4aac7b0d69f4b3151154478c4bf729d59`. La API de GitHub confirmó los tres archivos subidos y sus tamaños/digests SHA-256 exactos: APK, paquete Linux y SHA256SUMS. Main recibió el historial por avance directo; el repositorio continúa público. Se revisaron 173 archivos y 400 blobs históricos antes de publicar, sin patrones conocidos de credenciales ni rutas privadas prohibidas. El cierre posterior sólo documenta esta verificación y no modifica el producto compilado.
