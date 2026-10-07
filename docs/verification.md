@@ -149,3 +149,27 @@ La comprobación física del S Pen y del selector/permisos Android queda para la
 Se publicó la [prerelease v0.3.0](https://github.com/felipendelicia/nala/releases/tag/v0.3.0), con tag en `5b973184923d7b1aa82724c391b75b06aade92e9` (el código compilado y documentación de entrega). La API de GitHub confirmó que el repositorio continúa público, los tres archivos están subidos y sus tamaños/digests SHA-256 coinciden exactamente con los locales: APK, paquete Linux y SHA256SUMS. Main recibió el historial por avance directo.
 
 La auditoría de los 164 archivos de código y los blobs históricos no encontró rutas privadas prohibidas ni patrones conocidos de credenciales. Las decisiones de este plan y sus costes están preservados en [decisiones](decisions.md); no quedaron observaciones menores diferidas. La última modificación sólo cierra documentación y el plan; no cambia los binarios verificados.
+
+
+## S Pen y botón 0.4.0
+
+Código de aplicación compilado: `30bc0d124a78d25bc2bae5210425f6ffd179f406`. Los commits posteriores sólo documentan la entrega. La suite completa pasó **130/130** unitarias/widget; análisis sin problemas. Incluye presión inmediata y sin estabilización inicial, tinta corta/directa y mosaicos a resolución de pantalla, transparencia del resaltador, antialias consistente al confirmar, límites de memoria y disposición de imágenes, botón nativo/Flutter, selección conservada, lectura/foco y preferencias guardadas.
+
+Una revisión independiente encontró dos problemas importantes y ninguno crítico o menor: borrado del segmento anterior en el inicio sintético de la goma, y herramienta temporal activa tras cerrar menús. Ambos se reprodujeron antes de corregir. También se reprodujo una pulsación sostenida contada dos veces en modo alternar después de un modal. Las pruebas comprueban los trazos después de terminar la goma y que un contacto físico nuevo sí borra; seis menús reales (grosor, cuaderno, hoja, zoom, color y apariencia), mantener/alternar y liberación durante el modal. El grupo de botón/preferencias pasó 17/17, y la suite final 130/130 después de la única pasada de correcciones. No quedaron menores diferidos.
+
+Los recorridos Linux nativos de presión/ajustes y PDF pasaron. El primero guardó más de 360 muestras variables y reabrió nota/preferencias; se inspeccionaron las capturas de ajustes y tinta. Se corrigió la entrada sintética para incluir pressureMin=0/pressureMax=1, como Android; no se cambió la normalización de producción para compensar una simulación incorrecta. La medición nativa usa 8000 muestras iniciales y 48 cuadros con ocho muestras nuevas por cuadro, orden alternado, salida 600×600 y lectura de píxeles: mediana 6846 frente a 10373 microsegundos; p95 14455 frente a 19555. Es trabajo de rasterizado/lectura en esta PC, **no latencia física del S Pen ni equivalencia con Notewise**. [Detalle reproducible](spen.md).
+
+Los bordes iniciales de las máscaras acumulaban cobertura antialias al componer imágenes anteriores; se reprodujo y corrigió con un contorno vectorial local completo por mosaico. Se conserva el dibujo directo durante las primeras 96 muestras. La goma rechaza candidatos mediante límites geométricos en caché; tinta y exportación conservan los puntos originales.
+
+Compilaciones finales consecutivas y limitadas: Android release ARM64 terminó en 59.7 segundos; Linux x64 release en 38.2 segundos. Antes, una compilación fría con heap640 fue detenida por systemd-oomd sólo dentro de su servicio propio. Se bajó el heap a512; al medir presión por el límite suave1800 se elevó a2200, dentro del techo total2300 MiB y swap256 MiB, con un worker y dos CPU. El primer build512 completo terminó en253.5 segundos. No se detuvieron procesos del usuario. El límite no garantiza un tiempo fijo de compilación.
+
+APK final: **31 063 142 bytes**, versión0.4.0+4, package com.felipe.apuntes, API mínima24, target36. Firma válida con certificado SHA-256 e92cb0c4bf598fbf0347d135efb275bfb381761f156c2984e2c796b63ff09887, idéntico a0.3.0; actualización sin desinstalar. Firma de desarrollo para pruebas. Se verificaron biblioteca ARM64 y logo exacto dentro del APK, y que el código nativo de la app difiere del anterior.
+
+Paquete Linux: **17 565 691 bytes**, 40 entradas, lanzador y binario ejecutables, todas las bibliotecas resueltas y logo exacto. El binario release abrió en una ventana real con datos temporales aislados; SQLite quick_check devolvió ok y el proceso siguió activo. Se detuvo sólo el servicio propio de verificación. El acceso Nala del menú mantiene su ruta y abre0.4; se conserva0.3 como respaldo local. La primera comprobación de sumas se ejecutó desde el directorio equivocado y no encontró los archivos; se repitió desde dist y ambos hashes fueron correctos.
+
+```text
+e41578706fb14a5c10f7aaa8b0a0d21efdc28a4264a41d8cb2c2fbf6e73f2339  Nala.apk
+cacce35aa2b78659b0ad6a3e76214023e4157f323a44a0078875a4904d66c5d5  Nala-Linux-x64.tar.gz
+```
+
+La auditoría revisó archivos actuales e historial: ninguna ruta privada prohibida ni patrón conocido de credenciales. No se publican datos de notas ni claves de firma. Samsung, proximidad/botón y sensación punta-pantalla requieren el nuevo APK en la Tab S10. Sincronización continúa diferida; el binario público funciona localmente. Las decisiones y costes se conservan en [decisiones](decisions.md).

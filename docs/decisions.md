@@ -34,3 +34,20 @@ La revisión nueva encontró dos problemas importantes y ninguno crítico o meno
 No quedaron observaciones menores diferidas. Los binarios y sus hashes se comprueban después de esta revisión; los resultados finales están en [verificación](verification.md).
 
 - El compilador Android usa un heap reducido a 640 MiB y mantiene los límites globales y las tareas secuenciales. Una compilación fue detenida por la protección de memoria de su servicio; el coste es que compilar puede tardar más.
+
+
+## S Pen 0.4.0: decisiones y costes
+
+- La mejora se comprueba con el renderizador nativo y píxeles, sin agregar un contador de producción sólo para tests. Coste si la evidencia de escritorio no se traslada: será necesario medir y ajustar en la tablet.
+- Android no trata la salida de hover como liberación del botón, porque también precede al contacto; vuelve a muestrear al tocar. Coste: Samsung puede necesitar ajustes de proximidad propios.
+- Cada mosaico modificado vuelve a dibujar su contorno local completo; usa 128 píxeles físicos, y los trazos de menos de 96 muestras se dibujan directamente. Evita bordes que engordan y cambian al soltar. Coste: insistir dentro de un mismo mosaico puede demandar más trabajo que los casos medidos.
+- La compilación conserva su techo de 2300 MiB y eleva el límite suave de 1800 a 2200 MiB tras medir presión de memoria; Gradle baja a 512 MiB y continúa con un worker. Coste: más memoria residente antes de reclamarla y compilaciones más lentas. Sólo se operaron servicios propios de Nala.
+- Entrega física del botón, proximidad y latencia punta-pantalla quedan pendientes de la Tab S10. La compilación Android y eventos de Linux verifican software. Coste: pueden necesitarse ajustes específicos de Samsung.
+- Notewise permanece como referencia subjetiva; la mejora medida de rasterizado no afirma equivalencia. Coste: la sensación puede diferir aun con menos trabajo en escritorio.
+- Sincronización sigue diferida, con funcionamiento local y sin clientes OAuth configurados. Coste: esta descarga no sincroniza entre dispositivos.
+
+La revisión independiente encontró dos problemas importantes y ninguno crítico o menor. Se reprodujeron antes de corregir: la goma sintética borraba el segmento recién confirmado, y cerrar menús podía dejarla activa. También se reprodujo una pulsación sostenida contada dos veces en modo alternar. La goma ahora empieza a borrar al mover o hacer un contacto físico nuevo; todos los menús restauran la herramienta temporal; los modales conservan el estado físico de alternar y reciben las liberaciones. Las pruebas verifican las notas después de finalizar el gesto, no sólo al confirmar el segmento inicial.
+
+No quedaron observaciones menores diferidas. Los resultados finales y la decisión de publicación están en [verificación](verification.md).
+
+- Los binarios y publicación que el revisor no certificó se verifican por el ejecutor: versión, firma/ID preservados, logo exacto, apertura Linux aislada y hashes locales/remotos. Coste: un problema específico del dispositivo o de distribución aún podría requerir una versión correctiva.
