@@ -12,6 +12,7 @@ import java.io.File
 import java.util.concurrent.Executors
 
 class MainActivity : FlutterActivity() {
+    private lateinit var inkRecognition: InkRecognitionBridge
     private lateinit var audio: AudioBridge
     private var stylusChannel: MethodChannel? = null
     private var stylusListening = false
@@ -97,6 +98,8 @@ class MainActivity : FlutterActivity() {
                 } catch (_: Exception) { result.error("SHARE_FAILED", "No se pudo abrir Compartir PDF.", null) }
             }
         }
+        inkRecognition = InkRecognitionBridge()
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nala/ink-recognition").setMethodCallHandler(inkRecognition)
         audio = AudioBridge(this)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nala/audio").setMethodCallHandler(audio)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nala/files").setMethodCallHandler { call, result ->
@@ -156,6 +159,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        if (::inkRecognition.isInitialized) inkRecognition.close()
         if (::audio.isInitialized) audio.close()
         pending?.result?.error("ACTIVITY_CLOSED", "Se cerró el selector de archivos.", null)
         pending = null

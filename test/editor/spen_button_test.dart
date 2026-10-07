@@ -335,6 +335,8 @@ void main() {
     'Porcentaje de zoom',
     'Color de tinta',
     'Apariencia',
+    'Formas',
+    'Lápices favoritos',
   ]) {
     testWidgets('abrir y cancelar $menu restaura el botón mantenido', (
       tester,

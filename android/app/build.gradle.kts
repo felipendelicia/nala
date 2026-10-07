@@ -47,3 +47,8 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+// Official ML Kit digital ink API; language model download is user initiated.
+dependencies {
+    implementation("com.google.mlkit:digital-ink-recognition:19.0.0")
+}

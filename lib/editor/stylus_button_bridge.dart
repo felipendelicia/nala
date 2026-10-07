@@ -5,12 +5,15 @@ import 'package:flutter/services.dart';
 /// Coordinates remain on Flutter's pointer stream; no channel roundtrip per dot.
 class StylusButtonBridge {
   static const _channel = MethodChannel('nala/stylus');
+  static StylusButtonBridge? _owner;
   bool _active = false;
   void start({
     required void Function(bool) onButton,
     required void Function() onReset,
     required void Function(bool) onAvailability,
   }) {
+    _owner?._active = false;
+    _owner = this;
     _active = true;
     _channel.setMethodCallHandler((call) async {
       if (!_active) return;
@@ -29,6 +32,8 @@ class StylusButtonBridge {
 
   void dispose() {
     _active = false;
+    if (!identical(_owner, this)) return;
+    _owner = null;
     _channel.setMethodCallHandler(null);
     unawaited(_listen(false).then((_) {}));
   }

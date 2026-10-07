@@ -51,3 +51,15 @@ La revisión independiente encontró dos problemas importantes y ninguno crític
 No quedaron observaciones menores diferidas. Los resultados finales y la decisión de publicación están en [verificación](verification.md).
 
 - Los binarios y publicación que el revisor no certificó se verifican por el ejecutor: versión, firma/ID preservados, logo exacto, apertura Linux aislada y hashes locales/remotos. Coste: un problema específico del dispositivo o de distribución aún podría requerir una versión correctiva.
+
+## Herramientas de estudio 0.5 — pedido autónomo del 7 de octubre
+
+Felipe pidió agregar las nueve funciones propuestas tomando Goodnotes/Notewise como referencia. Se conservaron el editor y los datos existentes; los nuevos objetos, portadas, grabaciones y tarjetas son campos opcionales del documento, con recursos identificados por SHA-256. Las versiones anteriores siguen siendo legibles; para editar los campos nuevos entre dispositivos se debe actualizar ambos a0.5.
+
+Las formas usan tinta vectorial y la regla restringe el ángulo. La selección transforma tinta/objetos y el portapapeles se limita a la biblioteca de la cuenta. Los favoritos y la biblioteca de plantillas se guardan en el dispositivo. Pestañas y paneles conservan estados independientes; teclado, S Pen y audio cambian de propietario al activar el panel. Las tarjetas usan una programación local, sin servicios pagos.
+
+Se eligió ML Kit Digital Ink español en Android: la descarga del modelo es explícita y después el reconocimiento es local. Linux usa Tesseract con español cuando está instalado, para impresos/escaneos; el equipo de desarrollo no lo tiene y la interfaz informa esa disponibilidad. La caché reconocida guarda una huella de la página para rechazar resultados atrasados y viaja con el apunte. Esto no garantiza precisión manuscrita equivalente a las aplicaciones de referencia.
+
+El audio de clase empieza por una acción explícita y marca cada nuevo trazo con el instante de inicio. La reproducción recorta un WAV temporal sin alterar el original. Un fallo de almacenamiento conserva captura/vínculos, permite reintentar o descartar y bloquea el cierre hasta resolverlo. La revisión independiente encontró y permitió reproducir errores en esa recuperación, foco inicial/teclado y plantillas pequeñas; se corrigieron antes de entregar. Las verificaciones usan audio sintético y apuntes temporales, nunca el micrófono ni la biblioteca personal.
+
+La entrega de esta etapa es local (APK ARM64 y Linux x64); no se publica una nueva release externa ni se configura OAuth como parte de este pedido. Las pruebas físicas de S Pen, micrófono y descarga/calidad del modelo Android requieren la tablet; la configuración y sincronización real de Drive continúan como pendiente previo.

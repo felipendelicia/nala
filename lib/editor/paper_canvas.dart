@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:uuid/uuid.dart';
+import 'dart:typed_data';
+import '../document/asset_store.dart';
 import '../document/notebook.dart';
+import '../document/page_object.dart';
 import 'paper_background.dart';
 import 'stroke_geometry.dart';
 import 'draft_ink.dart';
@@ -16,6 +19,7 @@ class PaperCanvas extends StatefulWidget {
     this.width = 2,
     this.background,
     this.externalInput = false,
+    this.assets,
   });
   final NotebookPage page;
   final ValueChanged<InkStroke> onStroke;
@@ -24,6 +28,7 @@ class PaperCanvas extends StatefulWidget {
   final double width;
   final Widget? background;
   final bool externalInput;
+  final AssetStore? assets;
   @override
   State<PaperCanvas> createState() => _PaperCanvasState();
 }
@@ -31,6 +36,64 @@ class PaperCanvas extends StatefulWidget {
 class _PaperCanvasState extends State<PaperCanvas> {
   int? pointer;
   final ink = DraftInk();
+  final _images = <String, Future<Uint8List>>{};
+
+  Widget storedImage(String assetId) {
+    final assets = widget.assets;
+    if (assets == null) {
+      return const Center(child: Icon(Icons.broken_image_outlined));
+    }
+    return FutureBuilder<Uint8List>(
+      future: _images.putIfAbsent(assetId, () => assets.read(assetId)),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Center(child: Icon(Icons.broken_image_outlined));
+        }
+        if (!snapshot.hasData) return const SizedBox.shrink();
+        return Image.memory(
+          snapshot.data!,
+          fit: BoxFit.fill,
+          gaplessPlayback: true,
+          errorBuilder: (_, _, _) =>
+              const Center(child: Icon(Icons.broken_image_outlined)),
+        );
+      },
+    );
+  }
+
+  Widget pageBackground() => widget.page.background.isImage
+      ? ColoredBox(
+          color: Colors.white,
+          child: storedImage(widget.page.background.assetId!),
+        )
+      : CustomPaint(
+          painter: PaperBackgroundPainter(
+            widget.page.background.pattern ?? PaperPattern.blank,
+          ),
+        );
+
+  Widget pageObject(PageObject object) => Positioned(
+    left: object.x,
+    top: object.y,
+    width: object.width,
+    height: object.height,
+    child: Transform.rotate(
+      angle: object.rotation,
+      child: ClipRect(
+        child: object.kind == PageObjectKind.image
+            ? storedImage(object.assetId!)
+            : Text(
+                object.text,
+                textScaler: TextScaler.noScaling,
+                style: TextStyle(
+                  color: Color(object.argb),
+                  fontSize: object.fontSize,
+                  height: 1.2,
+                ),
+              ),
+      ),
+    ),
+  );
   InkPoint point(PointerEvent event) {
     final range = event.pressureMax - event.pressureMin;
     return InkPoint(
@@ -83,6 +146,13 @@ class _PaperCanvasState extends State<PaperCanvas> {
   @override
   void didUpdateWidget(PaperCanvas oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.assets != widget.assets) _images.clear();
+    final used = {
+      if (widget.page.background.isImage) widget.page.background.assetId!,
+      for (final object in widget.page.objects)
+        if (object.assetId != null) object.assetId!,
+    };
+    _images.removeWhere((id, _) => !used.contains(id));
     if (oldWidget.page.id != widget.page.id || oldWidget.tool != widget.tool) {
       pointer = null;
       ink.cancel();
@@ -115,15 +185,15 @@ class _PaperCanvasState extends State<PaperCanvas> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          RepaintBoundary(
-            child:
-                widget.background ??
-                CustomPaint(
-                  painter: PaperBackgroundPainter(
-                    widget.page.background.pattern ?? PaperPattern.blank,
-                  ),
+          RepaintBoundary(child: widget.background ?? pageBackground()),
+          if (widget.page.objects.isNotEmpty)
+            RepaintBoundary(
+              child: IgnorePointer(
+                child: Stack(
+                  children: widget.page.objects.map(pageObject).toList(),
                 ),
-          ),
+              ),
+            ),
           RepaintBoundary(
             child: CustomPaint(painter: InkPainter(widget.page.strokes)),
           ),

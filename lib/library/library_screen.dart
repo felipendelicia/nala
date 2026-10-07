@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import 'package:pdfrx_engine/pdfrx_engine.dart' show PdfPasswordException;
@@ -7,8 +8,10 @@ import '../document/notebook.dart';
 import '../document/revision.dart';
 import '../document/folders.dart';
 import 'folder_dialog.dart';
-import '../editor/editor_controller.dart';
-import '../editor/editor_screen.dart';
+import '../document/asset_store.dart';
+import '../workspace/document_workspace.dart';
+import '../search/notebook_search_dialog.dart';
+import '../search/search_service.dart';
 import '../editor/paper_canvas.dart';
 import '../ui/app_theme.dart';
 import '../ui/appearance.dart';
@@ -30,32 +33,80 @@ class LibraryScreen extends StatefulWidget {
 class _LibraryScreenState extends State<LibraryScreen> {
   String query = '', subject = '';
   bool importing = false;
-  Future<void> _open(DocumentEntry entry) async {
-    final editor = EditorController(
-      notebook: entry.notebook,
-      headId: entry.headId,
-      repository: widget.services.repository,
-      deviceId: widget.services.deviceId,
-      newId: const Uuid().v4,
-      now: DateTime.now,
-    );
+  Future<void> _open(DocumentEntry entry, {int initialPageIndex = 0}) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => EditorScreen(
-          controller: editor,
-          penPreferences: widget.services.penPreferences,
-          pdf: widget.services.pdf,
-          files: widget.services.files,
-          share: widget.services.share,
-          assets: widget.services.assets,
-          audio: widget.services.audio,
-          audioDirectory: '${widget.services.root}/audio-temp',
+        builder: (_) => WorkspaceScreen(
+          services: widget.services,
+          initialEntry: entry,
+          initialPageIndex: initialPageIndex,
           cloud: widget.cloud,
         ),
       ),
     );
-    editor.dispose();
     if (mounted) await widget.services.library.refresh();
+  }
+
+  Future<bool> _saveRecognized(
+    String notebookId,
+    String pageId,
+    String fingerprint,
+    String text,
+  ) async {
+    final heads = (await widget.services.repository.list())
+        .where((e) => e.notebook.id == notebookId)
+        .toList();
+    if (heads.length != 1) return false;
+    final entry = heads.single;
+    final page = entry.notebook.pages.where((p) => p.id == pageId).firstOrNull;
+    if (page == null || await pageRecognitionFingerprint(page) != fingerprint) {
+      return false;
+    }
+    // Hashing is asynchronous. Recheck the revision before committing the cache.
+    final latest = (await widget.services.repository.list())
+        .where((e) => e.notebook.id == notebookId)
+        .toList();
+    if (latest.length != 1 || latest.single.headId != entry.headId) {
+      return false;
+    }
+    await widget.services.library.updateNotebook(
+      entry,
+      entry.notebook.copyWith(
+        pages: [
+          for (final p in entry.notebook.pages)
+            p.id != pageId
+                ? p
+                : p.copyWith(
+                    recognizedText: text,
+                    recognitionFingerprint: fingerprint,
+                  ),
+        ],
+      ),
+    );
+    return true;
+  }
+
+  Future<void> _search() async {
+    await widget.services.library.refresh();
+    if (!mounted) return;
+    final notebooks = {
+      for (final e in widget.services.library.entries)
+        e.notebook.id: e.notebook,
+    }.values.toList();
+    final hit = await showDialog<SearchHit>(
+      context: context,
+      builder: (_) => NotebookSearchDialog(
+        notebooks: notebooks,
+        pdf: widget.services.pdf,
+        assets: widget.services.assets,
+        onRecognized: _saveRecognized,
+      ),
+    );
+    if (hit == null || !mounted) return;
+    final entry = widget.services.library.entries
+        .where((e) => e.notebook.id == hit.notebookId)
+        .firstOrNull;
+    if (entry != null) await _open(entry, initialPageIndex: hit.pageIndex);
   }
 
   Future<void> _create() async {
@@ -243,6 +294,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
             ],
           ),
           actions: [
+            IconButton(
+              tooltip: 'Buscar en todos los apuntes',
+              onPressed: _search,
+              icon: const Icon(Icons.manage_search_outlined),
+            ),
             const AppearanceButton(),
             if (widget.cloud != null)
               CloudControls(cloud: widget.cloud!)
@@ -566,6 +622,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 itemBuilder: (_, index) => _NotebookTile(
                                   entry: entries[index],
                                   pdf: widget.services.pdf,
+                                  assets: widget.services.assets,
                                   onTap: () => _open(entries[index]),
                                   onAction: (a) =>
                                       _noteAction(entries[index], a),
@@ -589,17 +646,20 @@ class _NotebookTile extends StatelessWidget {
     required this.entry,
     required this.onTap,
     required this.pdf,
+    required this.assets,
     required this.onAction,
   });
   final DocumentEntry entry;
   final VoidCallback onTap;
   final PdfService pdf;
+  final AssetStore assets;
   final ValueChanged<String> onAction;
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final page = entry.notebook.pages.first;
-    final isPdf = page.background.assetId != null;
+    final isPdf = page.background.pageNumber != null;
+    final cover = entry.notebook.coverAssetId;
     return Material(
       color: scheme.surface,
       borderRadius: BorderRadius.circular(16),
@@ -639,18 +699,41 @@ class _NotebookTile extends StatelessWidget {
                               ],
                             ),
                             child: IgnorePointer(
-                              child: PaperCanvas(
-                                page: page,
-                                tool: EditorTool.pen,
-                                onStroke: (_) {},
-                                background: isPdf
-                                    ? PdfPageBackground(
-                                        pdf: pdf,
-                                        page: page,
-                                        scale: .25,
-                                      )
-                                    : null,
-                              ),
+                              child: cover != null
+                                  ? SizedBox(
+                                      width: page.width,
+                                      height: page.height,
+                                      child: FutureBuilder<Uint8List>(
+                                        future: assets.read(cover),
+                                        builder: (context, state) =>
+                                            state.hasData
+                                            ? Image.memory(
+                                                state.data!,
+                                                fit: BoxFit.cover,
+                                              )
+                                            : const ColoredBox(
+                                                color: Colors.white,
+                                                child: Center(
+                                                  child: Icon(
+                                                    Icons.image_outlined,
+                                                  ),
+                                                ),
+                                              ),
+                                      ),
+                                    )
+                                  : PaperCanvas(
+                                      assets: assets,
+                                      page: page,
+                                      tool: EditorTool.pen,
+                                      onStroke: (_) {},
+                                      background: isPdf
+                                          ? PdfPageBackground(
+                                              pdf: pdf,
+                                              page: page,
+                                              scale: .25,
+                                            )
+                                          : null,
+                                    ),
                             ),
                           ),
                         ),

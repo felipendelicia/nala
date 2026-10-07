@@ -109,5 +109,11 @@ ThemeData nalaTheme({Brightness brightness = Brightness.light}) {
   );
 }
 
-String paperLabel(int index) =>
-    ['Blanca', 'Rayada', 'Cuadriculada', 'Punteada'][index];
+String paperLabel(int index) => [
+  'Blanca',
+  'Rayada',
+  'Cuadriculada',
+  'Punteada',
+  'Cornell',
+  'Agenda semanal',
+][index];

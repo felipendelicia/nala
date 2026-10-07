@@ -12,9 +12,11 @@ La biblioteca y el editor usan un diseño nuevo con Manrope y el logo minimalist
 
 Se pueden anclar comentarios de texto y notas de voz a la hoja. El audio comienza únicamente al pulsar Grabar, se puede escuchar o descartar y se detiene al pasar la app al fondo. Android usa su micrófono y Linux necesita PipeWire (pw-record/pw-play) o ALSA (arecord/aplay); los recursos se guardan como WAV mono de 16 kHz. Los comentarios permanecen editables en Nala. El PDF exportado incluye marcadores numerados y un anexo con el texto; las notas de voz se identifican con su duración y se escuchan desde Nala.
 
+El código 0.5 incorpora formas y regla, copiar/cortar/pegar entre cuadernos, texto e imágenes editables, lápices favoritos, pestañas y vista dividida, plantillas Cornell/semanales o propias y portadas. La búsqueda incluye texto del PDF, textos insertados y manuscritos reconocidos; Android ofrece un modelo español local de descarga explícita y Linux indica la disponibilidad de Tesseract. El audio de clase se vincula a los trazos y se puede escuchar desde ese momento; las tarjetas guardan preguntas, respuestas y próximas fechas de repaso. Instrucciones en [herramientas y estudio](docs/study-tools.md).
+
 La sincronización automática con Drive está incorporada al código: carpetas, revisiones, PDF y voz, con reintentos y bibliotecas separadas por cuenta. La versión pública conserva el guardado local porque todavía necesita registrar los clientes OAuth en Google Cloud. Ver [configuración de Drive](docs/drive-setup.md) y [estado](docs/status.md).
 
-La [versión de prueba 0.4.0](https://github.com/felipendelicia/nala/releases/tag/v0.4.0) incluye estas mejoras. Descargas: [APK para la Tab S10 (Android ARM64)](https://github.com/felipendelicia/nala/releases/download/v0.4.0/Nala.apk), [Linux x64](https://github.com/felipendelicia/nala/releases/download/v0.4.0/Nala-Linux-x64.tar.gz) y [sumas de comprobación](https://github.com/felipendelicia/nala/releases/download/v0.4.0/SHA256SUMS). La primera versión corresponde al editor previo al trabajo de PDF; su APK fue probado en la tablet. Los archivos compilados se distribuyen en Releases y no se incluyen en el historial de código.
+La última [versión publicada, 0.4.0](https://github.com/felipendelicia/nala/releases/tag/v0.4.0), incluye las mejoras previas de S Pen. La entrega 0.5 con herramientas de estudio se genera localmente en `dist/`. Descargas de 0.4: [APK para la Tab S10 (Android ARM64)](https://github.com/felipendelicia/nala/releases/download/v0.4.0/Nala.apk), [Linux x64](https://github.com/felipendelicia/nala/releases/download/v0.4.0/Nala-Linux-x64.tar.gz) y [sumas de comprobación](https://github.com/felipendelicia/nala/releases/download/v0.4.0/SHA256SUMS). La primera versión corresponde al editor previo al trabajo de PDF; su APK fue probado en la tablet. Los archivos compilados no se incluyen en el historial de código.
 
 En Linux, descomprimí el paquete y ejecutá `Abrir-Nala.sh` manteniéndolo junto a `Nala-Linux/`. En Android, copiá `Nala.apk`, abrilo y permití la instalación desde la aplicación que lo abre. Es un APK de prueba firmado con una clave de desarrollo.
 
@@ -30,6 +32,7 @@ tool/flutter-safe test --no-pub integration_test/local_notebook_test.dart -d lin
 tool/flutter-safe test --no-pub integration_test/pdf_round_trip_test.dart -d linux
 tool/flutter-safe test --no-pub integration_test/appearance_share_test.dart -d linux
 tool/flutter-safe test --no-pub integration_test/spen_fluency_test.dart -d linux
+tool/flutter-safe test --no-pub integration_test/study_tools_test.dart -d linux
 tool/flutter-safe build apk --release --target-platform android-arm64
 ```
 

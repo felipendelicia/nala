@@ -59,11 +59,12 @@ class PagePanel extends StatelessWidget {
                             child: IgnorePointer(
                               child: PaperCanvas(
                                 page: pages[index],
+                                assets: pdf?.assets,
                                 tool: EditorTool.pen,
                                 onStroke: (_) {},
                                 background:
                                     pdf == null ||
-                                        pages[index].background.assetId == null
+                                        !pages[index].background.isPdf
                                     ? null
                                     : PdfPageBackground(
                                         pdf: pdf!,

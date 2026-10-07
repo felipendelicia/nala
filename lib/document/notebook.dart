@@ -1,6 +1,9 @@
 import 'page_comment.dart';
+import 'page_object.dart';
+import 'notebook_recording.dart';
+import '../study/study_card.dart';
 
-enum PaperPattern { blank, ruled, grid, dots }
+enum PaperPattern { blank, ruled, grid, dots, cornell, weekly }
 
 enum InkTool { pen, highlighter }
 
@@ -28,7 +31,15 @@ class InkStroke {
     required List<InkPoint> points,
     this.pressureCurve = PressureCurve.legacy,
     this.sensitivity = 1,
-  }) : points = List.unmodifiable(points);
+    this.audioRecordingId,
+    this.audioOffsetMs,
+  }) : points = List.unmodifiable(points) {
+    if ((audioRecordingId == null) != (audioOffsetMs == null) ||
+        (audioOffsetMs != null && audioOffsetMs! < 0)) {
+      throw const FormatException('Referencia de grabación inválida');
+    }
+    if (audioRecordingId != null) nonEmpty(audioRecordingId);
+  }
   final String id;
   final InkTool tool;
   final int argb;
@@ -36,14 +47,29 @@ class InkStroke {
   final PressureCurve pressureCurve;
   final double sensitivity;
   final List<InkPoint> points;
-  InkStroke copyWith({List<InkPoint>? points}) => InkStroke(
-    id: id,
+  final String? audioRecordingId;
+  final int? audioOffsetMs;
+  InkStroke copyWith({
+    String? id,
+    int? argb,
+    double? width,
+    List<InkPoint>? points,
+    Object? audioRecordingId = _keepAudioMetadata,
+    Object? audioOffsetMs = _keepAudioMetadata,
+  }) => InkStroke(
+    id: id ?? this.id,
     tool: tool,
-    argb: argb,
-    width: width,
+    argb: argb ?? this.argb,
+    width: width ?? this.width,
     points: points ?? this.points,
     pressureCurve: pressureCurve,
     sensitivity: sensitivity,
+    audioRecordingId: identical(audioRecordingId, _keepAudioMetadata)
+        ? this.audioRecordingId
+        : audioRecordingId as String?,
+    audioOffsetMs: identical(audioOffsetMs, _keepAudioMetadata)
+        ? this.audioOffsetMs
+        : audioOffsetMs as int?,
   );
   Map<String, Object> toJson() => {
     'id': id,
@@ -54,6 +80,8 @@ class InkStroke {
     if (pressureCurve != PressureCurve.legacy)
       'pressureCurve': pressureCurve.name,
     if (sensitivity != 1) 'sensitivity': sensitivity,
+    'audioRecordingId': ?audioRecordingId,
+    'audioOffsetMs': ?audioOffsetMs,
   };
   factory InkStroke.fromJson(Map<String, dynamic> json) {
     final points = (json['points'] as List)
@@ -74,9 +102,13 @@ class InkStroke {
           ? PressureCurve.legacy
           : PressureCurve.values.byName(json['pressureCurve'] as String),
       sensitivity: finiteNumber(json['sensitivity'] ?? 1, min: 0, max: 1),
+      audioRecordingId: json['audioRecordingId'] as String?,
+      audioOffsetMs: json['audioOffsetMs'] as int?,
     );
   }
 }
+
+const _keepAudioMetadata = Object();
 
 class PageBackground {
   const PageBackground.paper(PaperPattern this.pattern)
@@ -84,12 +116,22 @@ class PageBackground {
       pageNumber = null;
   const PageBackground.pdf(String this.assetId, int this.pageNumber)
     : pattern = null;
+  const PageBackground.image(String this.assetId)
+    : pattern = null,
+      pageNumber = null;
   final PaperPattern? pattern;
   final String? assetId;
   final int? pageNumber;
+  bool get isImage => assetId != null && pageNumber == null;
+  bool get isPdf => assetId != null && pageNumber != null;
+  String get kind => pattern != null
+      ? 'paper'
+      : isPdf
+      ? 'pdf'
+      : 'image';
   Map<String, Object> toJson() => pattern != null
       ? {'kind': 'paper', 'pattern': pattern!.name}
-      : {'kind': 'pdf', 'assetId': assetId!, 'pageNumber': pageNumber!};
+      : {'kind': kind, 'assetId': assetId!, 'pageNumber': ?pageNumber};
   factory PageBackground.fromJson(Map<String, dynamic> json) {
     if (json['kind'] == 'paper' &&
         !json.containsKey('assetId') &&
@@ -99,14 +141,17 @@ class PageBackground {
       );
     }
     if (json['kind'] == 'pdf' && !json.containsKey('pattern')) {
-      final asset = nonEmpty(json['assetId']);
+      final asset = validAssetId(json['assetId']);
       final number = json['pageNumber'];
-      if (!RegExp(r'^[a-f0-9]{64}$').hasMatch(asset) ||
-          number is! int ||
-          number < 1) {
+      if (number is! int || number < 1) {
         throw const FormatException('Fondo PDF inválido');
       }
       return PageBackground.pdf(asset, number);
+    }
+    if (json['kind'] == 'image' &&
+        !json.containsKey('pattern') &&
+        !json.containsKey('pageNumber')) {
+      return PageBackground.image(validAssetId(json['assetId']));
     }
     throw const FormatException('Fondo de hoja inválido');
   }
@@ -120,24 +165,43 @@ class NotebookPage {
     required this.background,
     List<InkStroke> strokes = const [],
     List<PageComment> comments = const [],
+    List<PageObject> objects = const [],
+    this.recognizedText = '',
+    this.recognitionFingerprint,
   }) : strokes = List.unmodifiable(strokes),
-       comments = List.unmodifiable(comments);
+       comments = List.unmodifiable(comments),
+       objects = List.unmodifiable(objects) {
+    if (recognitionFingerprint != null) validAssetId(recognitionFingerprint);
+  }
   final String id;
   final double width, height;
   final PageBackground background;
   final List<InkStroke> strokes;
   final List<PageComment> comments;
+  final List<PageObject> objects;
+  final String recognizedText;
+  final String? recognitionFingerprint;
   NotebookPage copyWith({
     PageBackground? background,
     List<InkStroke>? strokes,
     List<PageComment>? comments,
+    List<PageObject>? objects,
+    double? width,
+    double? height,
+    String? recognizedText,
+    Object? recognitionFingerprint = _keepRecognition,
   }) => NotebookPage(
     id: id,
-    width: width,
-    height: height,
+    width: width ?? this.width,
+    height: height ?? this.height,
     background: background ?? this.background,
     strokes: strokes ?? this.strokes,
     comments: comments ?? this.comments,
+    objects: objects ?? this.objects,
+    recognizedText: recognizedText ?? this.recognizedText,
+    recognitionFingerprint: identical(recognitionFingerprint, _keepRecognition)
+        ? this.recognitionFingerprint
+        : recognitionFingerprint as String?,
   );
   Map<String, Object> toJson() => {
     'id': id,
@@ -147,8 +211,18 @@ class NotebookPage {
     'strokes': strokes.map((s) => s.toJson()).toList(),
     if (comments.isNotEmpty)
       'comments': comments.map((c) => c.toJson()).toList(),
+    if (objects.isNotEmpty) 'objects': objects.map((o) => o.toJson()).toList(),
+    if (recognizedText.isNotEmpty) 'recognizedText': recognizedText,
+    'recognitionFingerprint': ?recognitionFingerprint,
   };
   factory NotebookPage.fromJson(Map<String, dynamic> json) => NotebookPage(
+    recognizedText: json['recognizedText'] as String? ?? '',
+    recognitionFingerprint: json['recognitionFingerprint'] == null
+        ? null
+        : validAssetId(json['recognitionFingerprint']),
+    objects: (json['objects'] as List? ?? [])
+        .map((o) => PageObject.fromJson(o as Map<String, dynamic>))
+        .toList(),
     comments: (json['comments'] as List? ?? [])
         .map((c) => PageComment.fromJson(c as Map<String, dynamic>))
         .toList(),
@@ -164,6 +238,8 @@ class NotebookPage {
   );
 }
 
+const _keepRecognition = Object();
+
 const _keepFolder = Object();
 
 class Notebook {
@@ -174,11 +250,21 @@ class Notebook {
     this.folderId,
     required List<NotebookPage> pages,
     required this.updatedAt,
-  }) : pages = List.unmodifiable(pages);
+    List<NotebookRecording> recordings = const [],
+    List<StudyCard> studyCards = const [],
+    this.coverAssetId,
+  }) : pages = List.unmodifiable(pages),
+       recordings = List.unmodifiable(recordings),
+       studyCards = List.unmodifiable(studyCards) {
+    if (coverAssetId != null) validAssetId(coverAssetId);
+  }
   final String id, title, subject;
   final String? folderId;
   final List<NotebookPage> pages;
   final DateTime updatedAt;
+  final List<NotebookRecording> recordings;
+  final List<StudyCard> studyCards;
+  final String? coverAssetId;
   factory Notebook.blank({
     required String id,
     required String pageId,
@@ -208,6 +294,9 @@ class Notebook {
     Object? folderId = _keepFolder,
     List<NotebookPage>? pages,
     DateTime? updatedAt,
+    List<NotebookRecording>? recordings,
+    List<StudyCard>? studyCards,
+    Object? coverAssetId = _keepCover,
   }) => Notebook(
     id: id,
     title: title ?? this.title,
@@ -217,7 +306,22 @@ class Notebook {
         : folderId as String?,
     pages: pages ?? this.pages,
     updatedAt: updatedAt ?? this.updatedAt,
+    recordings: recordings ?? this.recordings,
+    studyCards: studyCards ?? this.studyCards,
+    coverAssetId: identical(coverAssetId, _keepCover)
+        ? this.coverAssetId
+        : coverAssetId as String?,
   );
+}
+
+const _keepCover = Object();
+
+String validAssetId(Object? value) {
+  final id = nonEmpty(value);
+  if (!RegExp(r'^[a-f0-9]{64}$').hasMatch(id)) {
+    throw const FormatException('Identificador de recurso inválido');
+  }
+  return id;
 }
 
 String nonEmpty(Object? value) {

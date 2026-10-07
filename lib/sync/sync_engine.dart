@@ -10,10 +10,14 @@ import 'remote_store.dart';
 import 'sync_state.dart';
 
 Set<String> notebookAssets(Notebook notebook) => {
+  if (notebook.coverAssetId != null) notebook.coverAssetId!,
+  for (final recording in notebook.recordings) recording.assetId,
   for (final page in notebook.pages) ...[
     if (page.background.assetId != null) page.background.assetId!,
     for (final comment in page.comments)
       if (comment.audioAssetId != null) comment.audioAssetId!,
+    for (final object in page.objects)
+      if (object.assetId != null) object.assetId!,
   ],
 };
 

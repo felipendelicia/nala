@@ -73,7 +73,10 @@ void main() {
     await tester.pumpAndSettle();
     debugPrint('pdf-flow: editor ready');
     expect(
-      find.text('Guía'),
+      find.descendant(
+        of: find.byType(EditorScreen),
+        matching: find.text('Guía'),
+      ),
       findsOneWidget,
       reason: tester
           .widgetList<Text>(find.byType(Text))

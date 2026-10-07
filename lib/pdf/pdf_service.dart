@@ -219,6 +219,46 @@ class PdfService {
     }
   }
 
+  /// Uses the same queue and native document lifecycle as background rendering.
+  /// A cancelled search discards its result; every opened document is disposed.
+  Future<String> extractText(
+    String assetId,
+    int pageNumber, {
+    PdfRenderCancellation? cancellation,
+  }) async {
+    final token = cancellation ?? PdfRenderCancellation();
+    token._check();
+    _active.add(token);
+    final result = _renderTail.then((_) async {
+      token._check();
+      await initialize();
+      final document = await PdfDocument.openData(
+        await assets.read(assetId),
+        passwordProvider: createSimplePasswordProvider(_passwords[assetId]),
+      );
+      try {
+        token._check();
+        if (pageNumber < 1 || pageNumber > document.pages.length) {
+          throw RangeError('Página fuera del PDF');
+        }
+        final text = await document.pages[pageNumber - 1].loadText();
+        token._check();
+        return text?.fullText ?? '';
+      } finally {
+        await document.dispose();
+      }
+    });
+    _renderTail = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    try {
+      return await result;
+    } finally {
+      _active.remove(token);
+    }
+  }
+
   void dispose() {
     _disposed = true;
     for (final token in _active) {

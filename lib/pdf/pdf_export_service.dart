@@ -1,4 +1,5 @@
 import 'dart:isolate';
+import 'dart:ui' show Size;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:image/image.dart' as img;
@@ -7,6 +8,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:pdfrx_engine/pdfrx_engine.dart';
 import '../document/notebook.dart';
 import '../document/notebook_codec.dart';
+import '../document/page_object.dart';
+import '../editor/paper_background.dart';
 import '../editor/stroke_geometry.dart';
 import 'pdf_service.dart';
 
@@ -34,24 +37,27 @@ class PdfExportService {
     // separate compute isolate. Reinitializing PDFium there invalidates the
     // editor's font callbacks and can terminate the application.
     final backgrounds = <String, Uint8List>{};
+    final images = <String, Uint8List>{};
     PdfDocument? original;
     String? openAssetId;
     try {
       for (final page in notebook.pages) {
         final assetId = page.background.assetId;
-        if (assetId != null) {
+        if (page.background.isImage) {
+          backgrounds[page.id] = await pdf.assets.read(assetId!);
+        } else if (page.background.isPdf) {
           if (openAssetId != assetId) {
             await original?.dispose();
             original = null;
             try {
               original = await PdfDocument.openData(
-                await pdf.assets.read(assetId),
+                await pdf.assets.read(assetId!),
                 passwordProvider: createSimplePasswordProvider(
                   pdf.sessionPasswords[assetId],
                 ),
               );
             } on PdfPasswordException {
-              throw PdfExportPasswordRequired(assetId);
+              throw PdfExportPasswordRequired(assetId!);
             }
             openAssetId = assetId;
           }
@@ -83,6 +89,12 @@ class PdfExportService {
             raster.dispose();
           }
         }
+        for (final object in page.objects) {
+          if (object.kind == PageObjectKind.image &&
+              !images.containsKey(object.assetId)) {
+            images[object.assetId!] = await pdf.assets.read(object.assetId!);
+          }
+        }
       }
     } finally {
       await original?.dispose();
@@ -90,6 +102,7 @@ class PdfExportService {
     return compute(_composePdf, (
       notebook: notebook,
       backgrounds: backgrounds,
+      images: images,
       font: (await rootBundle.load(
         'assets/fonts/NalaSans.ttf',
       )).buffer.asUint8List(),
@@ -119,6 +132,7 @@ Future<Uint8List> _composePdf(
   ({
     Notebook notebook,
     Map<String, Uint8List> backgrounds,
+    Map<String, Uint8List> images,
     Uint8List font,
     SendPort? events,
   })
@@ -135,15 +149,55 @@ Future<Uint8List> _composePdf(
   );
   for (final page in notebook.pages) {
     final background = request.backgrounds[page.id];
-    final svg = StrokeGeometry.svg(page);
+    final svg = _inkSvg(page);
     final image = background == null ? null : pw.MemoryImage(background);
     output.addPage(
       pw.Page(
         pageFormat: PdfPageFormat(page.width, page.height, marginAll: 0),
         build: (_) => pw.Stack(
           children: [
+            if (page.background.pattern != null)
+              pw.Positioned.fill(
+                child: pw.SvgImage(
+                  svg: paperBackgroundSvg(
+                    page.background.pattern!,
+                    Size(page.width, page.height),
+                  ),
+                  fit: pw.BoxFit.fill,
+                ),
+              ),
             if (image != null)
               pw.Positioned.fill(child: pw.Image(image, fit: pw.BoxFit.fill)),
+            for (final object in page.objects)
+              pw.Positioned(
+                left: object.x,
+                top: object.y,
+                child: pw.Transform.rotate(
+                  // PDF coordinates point upward; canvas coordinates downward.
+                  angle: -object.rotation,
+                  child: pw.SizedBox(
+                    width: object.width,
+                    height: object.height,
+                    child: pw.ClipRect(
+                      child: object.kind == PageObjectKind.image
+                          ? pw.Image(
+                              pw.MemoryImage(request.images[object.assetId]!),
+                              fit: pw.BoxFit.fill,
+                            )
+                          : pw.Align(
+                              alignment: pw.Alignment.topLeft,
+                              child: pw.Text(
+                                object.text,
+                                style: pw.TextStyle(
+                                  fontSize: object.fontSize,
+                                  color: PdfColor.fromInt(object.argb),
+                                ),
+                              ),
+                            ),
+                    ),
+                  ),
+                ),
+              ),
             pw.Positioned.fill(
               child: pw.SvgImage(svg: svg, fit: pw.BoxFit.fill),
             ),
@@ -210,6 +264,22 @@ Future<Uint8List> _composePdf(
     );
   }
   return output.save();
+}
+
+String _inkSvg(NotebookPage page) {
+  final out = StringBuffer(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="${page.width}" height="${page.height}" viewBox="0 0 ${page.width} ${page.height}">',
+  );
+  for (final stroke in page.strokes) {
+    final color = (stroke.argb & 0xffffff).toRadixString(16).padLeft(6, '0');
+    final alpha = stroke.tool == InkTool.highlighter
+        ? 1 / 3
+        : ((stroke.argb >> 24) & 0xff) / 255;
+    out.write(
+      '<path d="${StrokeGeometry.outline(stroke).svgPath}" fill="#$color" fill-opacity="$alpha"/>',
+    );
+  }
+  return '$out</svg>';
 }
 
 String _duration(int ms) =>

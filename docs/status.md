@@ -1,4 +1,4 @@
-# Estado de Nala — 2026-10-06
+# Estado de Nala — 2026-10-07
 
 Nala se desarrolla para tomar apuntes universitarios con S Pen en Samsung Tab S10 y continuar en Linux. El nombre y el icono se basan en la perrita de Felipe.
 
@@ -18,6 +18,10 @@ La verificación actual y los límites se detallan en [verificación](verificati
 ## S Pen y botón 0.4.0
 
 Presión inmediata y suavizado inicial 0%; caché de tinta activa por mosaicos con bordes estables y geometría vectorial conservada. Ajustes guardados de presión/suavizado y herramienta del botón: goma, resaltador, lápiz, selección o desactivado. Mantener y alternar disponibles; goma por defecto. Cambios de herramienta durante contacto, cancelaciones y ventanas protegidos por pruebas reales de editor. Guía y medida de rasterizado en [S Pen](spen.md).
+
+## Herramientas y estudio 0.5.0
+
+Formas/regla, selección con copiar/cortar/duplicar/pegar/escala/giro/color, imágenes y texto, favoritos persistidos, pestañas/vista dividida, plantillas propias y portadas, búsqueda, audio temporal y tarjetas con repetición espaciada. Los nuevos datos conservan la compatibilidad con los cuadernos anteriores y sus medios se incluyen en guardado/sync/exportación. Los apuntes manuscritos se reconocen localmente en Android después de descargar explícitamente el modelo español; Linux requiere Tesseract con español para OCR de impresos y puede buscar el texto reconocido guardado en Android. Ver [guía de uso](study-tools.md) y [revisión](study-tools-review.md).
 
 ## Verificación física pendiente
 

@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:isolate';
 import 'notebook.dart';
 import 'revision.dart';
+import 'notebook_recording.dart';
+import '../study/study_card.dart';
 
 class NotebookCodec {
   // Optional diagnostic port for deterministic UI-isolate regression tests.
@@ -16,6 +18,11 @@ class NotebookCodec {
     if (book.folderId != null) 'folderId': book.folderId!,
     'updatedAt': book.updatedAt.toUtc().toIso8601String(),
     'pages': book.pages.map((p) => p.toJson()).toList(),
+    if (book.recordings.isNotEmpty)
+      'recordings': book.recordings.map((r) => r.toJson()).toList(),
+    if (book.studyCards.isNotEmpty)
+      'studyCards': book.studyCards.map((c) => c.toJson()).toList(),
+    'coverAssetId': ?book.coverAssetId,
   };
   static String encode(Notebook book) {
     reportWork('encode-notebook');
@@ -68,6 +75,25 @@ class NotebookCodec {
     final pageIds = <String>{};
     final strokeIds = <String>{};
     final commentIds = <String>{};
+    final objectIds = <String>{};
+    final recordings = (map['recordings'] as List? ?? [])
+        .map((r) => NotebookRecording.fromJson(r as Map<String, dynamic>))
+        .toList();
+    final studyCards = (map['studyCards'] as List? ?? [])
+        .map((c) => StudyCard.fromJson(c as Map<String, dynamic>))
+        .toList();
+    final recordingIds = <String>{};
+    final cardIds = <String>{};
+    for (final recording in recordings) {
+      if (!recordingIds.add(recording.id)) {
+        throw const FormatException('Grabación duplicada');
+      }
+    }
+    for (final card in studyCards) {
+      if (!cardIds.add(card.id)) {
+        throw const FormatException('Tarjeta duplicada');
+      }
+    }
     for (final page in pages) {
       if (!pageIds.add(page.id)) {
         throw const FormatException('Página duplicada');
@@ -86,6 +112,11 @@ class NotebookCodec {
           throw const FormatException('Trazo duplicado');
         }
       }
+      for (final object in page.objects) {
+        if (!objectIds.add(object.id)) {
+          throw const FormatException('Objeto duplicado');
+        }
+      }
     }
     return Notebook(
       id: nonEmpty(map['id']),
@@ -94,6 +125,11 @@ class NotebookCodec {
       folderId: map['folderId'] == null ? null : nonEmpty(map['folderId']),
       pages: pages,
       updatedAt: DateTime.parse(map['updatedAt'] as String).toUtc(),
+      recordings: recordings,
+      studyCards: studyCards,
+      coverAssetId: map['coverAssetId'] == null
+          ? null
+          : validAssetId(map['coverAssetId']),
     );
   }
 
