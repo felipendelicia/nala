@@ -143,7 +143,7 @@ class InkPainter extends CustomPainter {
           ? 0x55
           : ((stroke.argb >> 24) & 0xff);
       canvas.drawPath(
-        StrokeGeometry.outline(stroke).path,
+        StrokeGeometry.canvasPath(stroke),
         Paint()..color = Color(stroke.argb).withAlpha(alpha),
       );
     }

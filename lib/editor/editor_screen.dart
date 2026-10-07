@@ -20,6 +20,7 @@ import 'pen_settings_dialog.dart';
 import 'zoom_controls.dart';
 import 'input_router.dart';
 import 'page_panel.dart';
+import 'page_layout.dart';
 import 'paper_canvas.dart';
 import 'stroke_geometry.dart';
 import 'viewport.dart' as paper;
@@ -129,8 +130,37 @@ class _EditorScreenState extends State<EditorScreen> {
   final neighborTokens = <PdfRenderCancellation>[];
   int pageIndex = 0;
   EditorTool tool = EditorTool.pen, gestureTool = EditorTool.pen;
-  int argb = 0xff202020;
-  double width = 2.5;
+  int penColor = 0xff202020, markerColor = 0xffe9ba3b;
+  double penWidth = 2.5, markerWidth = 14;
+  int get argb => tool == EditorTool.highlighter ? markerColor : penColor;
+  set argb(int value) {
+    if (tool == EditorTool.highlighter) {
+      markerColor = value;
+    } else {
+      penColor = value;
+    }
+  }
+
+  double get width => tool == EditorTool.highlighter ? markerWidth : penWidth;
+  set width(double value) {
+    if (tool == EditorTool.highlighter) {
+      markerWidth = value;
+    } else {
+      penWidth = value;
+    }
+  }
+
+  List<NotebookPage>? layoutPages;
+  PageLayout? cachedLayout;
+  PageLayout get layout {
+    final pages = widget.controller.notebook.pages;
+    if (!identical(pages, layoutPages)) {
+      layoutPages = pages;
+      cachedLayout = PageLayout(pages);
+    }
+    return cachedLayout!;
+  }
+
   final view = paper.Viewport();
   Size? viewSize;
   String? fittedPage;
@@ -145,12 +175,7 @@ class _EditorScreenState extends State<EditorScreen> {
     onUpdate: update,
     onEnd: end,
     onCancel: cancel,
-    onNavigate: (dx, dy, factor, anchor) {
-      setState(() {
-        view.zoom(factor, anchor);
-        view.pan(dx, dy);
-      });
-    },
+    onNavigate: navigate,
   );
   NotebookPage get page =>
       widget.controller.notebook.pages[pageIndex.clamp(
@@ -158,8 +183,12 @@ class _EditorScreenState extends State<EditorScreen> {
         widget.controller.notebook.pages.length - 1,
       )];
   InkPoint inkPoint(InputSample event) {
-    final p = view.pagePoint(event.position);
-    return InkPoint(x: p.x, y: p.y, pressure: event.pressure);
+    final p = view.pagePoint(event.position), bounds = layout.rect(pageIndex);
+    return InkPoint(
+      x: p.x - bounds.left,
+      y: p.y - bounds.top,
+      pressure: event.pressure,
+    );
   }
 
   Offset offset(InputSample event) {
@@ -206,6 +235,8 @@ class _EditorScreenState extends State<EditorScreen> {
             ? PressureCurve.uniform
             : PressureCurve.expressive,
       );
+      // The live painter is already mounted: first contact needs no UI rebuild.
+      return;
     }
     if (tool == EditorTool.eraser) eraseAt(p);
     if (tool == EditorTool.selection) {
@@ -353,7 +384,12 @@ class _EditorScreenState extends State<EditorScreen> {
       placingComment = false;
       pageIndex = index;
       selected = {};
-      fittedPage = null;
+      if (viewSize != null) {
+        final bounds = layout.rect(index);
+        view.ty = 24 - bounds.top * view.scale;
+        if (!view.horizontalLocked)
+          view.tx = (viewSize!.width - layout.width * view.scale) / 2;
+      }
       pdfError = null;
     });
   }
@@ -392,6 +428,209 @@ class _EditorScreenState extends State<EditorScreen> {
         ),
       );
     }
+  }
+
+  void navigate(
+    double dx,
+    double dy,
+    double factor,
+    math.Point<double> anchor,
+  ) {
+    if (router.isWriting || commentOpen) return;
+    setState(() {
+      view.zoom(factor, anchor);
+      view.pan(dx, dy);
+      if (viewSize != null) {
+        // A small elastic margin lets users position the first/last line comfortably.
+        final margin = viewSize!.height / 3;
+        view.ty = view.ty.clamp(
+          math.min(
+            -margin,
+            viewSize!.height - layout.height * view.scale - margin,
+          ),
+          margin,
+        );
+        final index = layout.nearest(
+          (viewSize!.height / 2 - view.ty) / view.scale,
+        );
+        if (index != pageIndex) {
+          pageIndex = index;
+          selected = {};
+          pdfError = null;
+          audioPlayer?.stop();
+        }
+      }
+    });
+  }
+
+  Widget buildDocument(BuildContext context, BoxConstraints constraints) {
+    if (viewSize == null || fittedPage == null) {
+      view.fit(
+        constraints.maxWidth,
+        constraints.maxHeight,
+        page.width,
+        page.height,
+      );
+      final bounds = layout.rect(pageIndex);
+      view.tx -= bounds.left * view.scale;
+      view.ty -= bounds.top * view.scale;
+      fittedPage = page.id;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !disposing) setState(() {});
+      });
+    }
+    viewSize = constraints.biggest;
+    final visible = layout.visible(
+      Rect.fromLTWH(
+        -view.tx / view.scale,
+        -view.ty / view.scale,
+        constraints.maxWidth / view.scale,
+        constraints.maxHeight / view.scale,
+      ),
+    );
+    return ClipRect(
+      child: Listener(
+        key: const ValueKey('document-viewport'),
+        behavior: HitTestBehavior.opaque,
+        onPointerDown: pointerDown,
+        onPointerMove: (e) => router.move(sample(e)),
+        onPointerUp: (e) => router.up(sample(e)),
+        onPointerCancel: (e) => router.cancel(e.pointer),
+        onPointerHover: (e) => router.hover(sample(e)),
+        onPointerPanZoomUpdate: (e) {
+          navigate(
+            e.panDelta.dx,
+            e.panDelta.dy,
+            e.scale / trackpadScale,
+            math.Point(e.localPosition.dx, e.localPosition.dy),
+          );
+          trackpadScale = e.scale;
+        },
+        onPointerPanZoomStart: (_) {
+          trackpadScale = 1;
+        },
+        onPointerPanZoomEnd: (_) {
+          trackpadScale = 1;
+        },
+        onPointerSignal: (e) {
+          if (e is! PointerScrollEvent || router.isWriting) return;
+          final zooming = HardwareKeyboard.instance.isControlPressed;
+          navigate(
+            zooming ? 0 : -e.scrollDelta.dx,
+            zooming ? 0 : -e.scrollDelta.dy,
+            zooming ? math.exp(-e.scrollDelta.dy / 500) : 1,
+            math.Point(e.localPosition.dx, e.localPosition.dy),
+          );
+        },
+        child: ColoredBox(
+          color: const Color(0xffe8eef0),
+          child: Stack(
+            children: [for (final index in visible) buildPage(context, index)],
+          ),
+        ),
+      ),
+    );
+  }
+
+  double trackpadScale = 1;
+
+  Widget buildPage(BuildContext context, int index) {
+    final source = widget.controller.notebook.pages[index],
+        bounds = layout.rect(index);
+    final active = index == pageIndex;
+    var display = source;
+    if (active && erased.isNotEmpty)
+      display = display.copyWith(
+        strokes: display.strokes.where((s) => !erased.contains(s.id)).toList(),
+      );
+    if (active && movingSelection && start != null && latest != null) {
+      final delta = latest! - start!;
+      display = display.copyWith(
+        strokes: display.strokes
+            .map(
+              (s) => selected.contains(s.id)
+                  ? StrokeGeometry.translate(s, delta.dx, delta.dy)
+                  : s,
+            )
+            .toList(),
+      );
+    }
+    return Positioned(
+      key: ValueKey('sheet-${source.id}'),
+      left: view.tx + bounds.left * view.scale,
+      top: view.ty + bounds.top * view.scale,
+      width: source.width,
+      height: source.height,
+      child: Transform.scale(
+        scale: view.scale,
+        alignment: Alignment.topLeft,
+        child: IgnorePointer(
+          child: DecoratedBox(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Color(0x1c29424b),
+                  blurRadius: 18,
+                  offset: Offset(0, 5),
+                ),
+              ],
+            ),
+            child: ClipRect(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  PaperCanvas(
+                    key: ValueKey('canvas-${source.id}'),
+                    page: display,
+                    externalInput: true,
+                    tool: tool,
+                    onStroke: (_) {},
+                    background:
+                        widget.pdf == null || source.background.assetId == null
+                        ? null
+                        : PdfPageBackground(
+                            key: ValueKey('${source.id}-$pdfRenderVersion'),
+                            pdf: widget.pdf!,
+                            page: source,
+                            scale:
+                                view.scale *
+                                MediaQuery.devicePixelRatioOf(context),
+                            onError: (error) {
+                              if (mounted && source.id == page.id)
+                                setState(() => pdfError = error);
+                            },
+                            onRendered: preloadNeighbors,
+                          ),
+                  ),
+                  if (active)
+                    RepaintBoundary(
+                      child: CustomPaint(painter: DraftInkPainter(draft)),
+                    ),
+                  CustomPaint(
+                    painter: CommentPinsPainter(source.comments, view.scale),
+                  ),
+                  if (active)
+                    CustomPaint(
+                      painter: _SelectionPainter(
+                        display,
+                        selected,
+                        gestureTool == EditorTool.selection &&
+                                !movingSelection &&
+                                start != null &&
+                                latest != null
+                            ? Rect.fromPoints(start!, latest!)
+                            : null,
+                        view.scale,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> close() async {
@@ -474,9 +713,23 @@ class _EditorScreenState extends State<EditorScreen> {
 
   void pointerDown(PointerDownEvent event) {
     if (commentOpen) return;
-    final position = view.pagePoint(
+    final documentPoint = view.pagePoint(
       math.Point(event.localPosition.dx, event.localPosition.dy),
     );
+    final hit = layout.hit(Offset(documentPoint.x, documentPoint.y));
+    if (!router.isWriting && hit != null && hit != pageIndex) {
+      setState(() {
+        pageIndex = hit;
+        selected = {};
+        pdfError = null;
+      });
+    }
+    final bounds = layout.rect(pageIndex);
+    final position = math.Point(
+      documentPoint.x - bounds.left,
+      documentPoint.y - bounds.top,
+    );
+    if (hit == null && placingComment) return;
     if (placingComment && !reading) {
       if (position.x < 0 ||
           position.y < 0 ||
@@ -838,172 +1091,7 @@ class _EditorScreenState extends State<EditorScreen> {
                                 pdf: widget.pdf,
                               ),
                             Expanded(
-                              child: LayoutBuilder(
-                                builder: (context, constraints) {
-                                  if (viewSize == null ||
-                                      fittedPage != currentPage.id) {
-                                    viewSize = constraints.biggest;
-                                    fittedPage = currentPage.id;
-                                    view.fit(
-                                      constraints.maxWidth,
-                                      constraints.maxHeight,
-                                      currentPage.width,
-                                      currentPage.height,
-                                    );
-                                  }
-                                  viewSize = constraints.biggest;
-                                  var displayPage = currentPage;
-                                  if (erased.isNotEmpty) {
-                                    displayPage = displayPage.copyWith(
-                                      strokes: displayPage.strokes
-                                          .where((s) => !erased.contains(s.id))
-                                          .toList(),
-                                    );
-                                  }
-                                  if (movingSelection &&
-                                      start != null &&
-                                      latest != null) {
-                                    final delta = latest! - start!;
-                                    displayPage = displayPage.copyWith(
-                                      strokes: displayPage.strokes
-                                          .map(
-                                            (s) => selected.contains(s.id)
-                                                ? StrokeGeometry.translate(
-                                                    s,
-                                                    delta.dx,
-                                                    delta.dy,
-                                                  )
-                                                : s,
-                                          )
-                                          .toList(),
-                                    );
-                                  }
-                                  return ClipRect(
-                                    child: Listener(
-                                      behavior: HitTestBehavior.opaque,
-                                      onPointerDown: pointerDown,
-                                      onPointerMove: (e) =>
-                                          router.move(sample(e)),
-                                      onPointerUp: (e) => router.up(sample(e)),
-                                      onPointerCancel: (e) =>
-                                          router.cancel(e.pointer),
-                                      onPointerHover: (e) =>
-                                          router.hover(sample(e)),
-                                      onPointerSignal: (e) {
-                                        if (e is PointerScrollEvent &&
-                                            !router.isWriting) {
-                                          setState(
-                                            () => view.zoom(
-                                              math.exp(-e.scrollDelta.dy / 500),
-                                              math.Point(
-                                                e.localPosition.dx,
-                                                e.localPosition.dy,
-                                              ),
-                                            ),
-                                          );
-                                        }
-                                      },
-                                      child: ColoredBox(
-                                        color: const Color(0xffe8ece6),
-                                        child: Stack(
-                                          children: [
-                                            Positioned(
-                                              left: 0,
-                                              top: 0,
-                                              width: currentPage.width,
-                                              height: currentPage.height,
-                                              child: Transform(
-                                                transform: view.matrix,
-                                                alignment: Alignment.topLeft,
-                                                child: IgnorePointer(
-                                                  child: Stack(
-                                                    fit: StackFit.expand,
-                                                    children: [
-                                                      PaperCanvas(
-                                                        page: displayPage,
-                                                        externalInput: true,
-                                                        tool: tool,
-                                                        onStroke: (_) {},
-                                                        background:
-                                                            widget.pdf ==
-                                                                    null ||
-                                                                currentPage
-                                                                        .background
-                                                                        .assetId ==
-                                                                    null
-                                                            ? null
-                                                            : PdfPageBackground(
-                                                                key: ValueKey(
-                                                                  '${currentPage.id}-$pdfRenderVersion',
-                                                                ),
-                                                                pdf:
-                                                                    widget.pdf!,
-                                                                page:
-                                                                    currentPage,
-                                                                scale:
-                                                                    view.scale *
-                                                                    MediaQuery.devicePixelRatioOf(
-                                                                      context,
-                                                                    ),
-                                                                onError: (error) {
-                                                                  if (mounted) {
-                                                                    setState(
-                                                                      () => pdfError =
-                                                                          error,
-                                                                    );
-                                                                  }
-                                                                },
-                                                                onRendered:
-                                                                    preloadNeighbors,
-                                                              ),
-                                                      ),
-                                                      RepaintBoundary(
-                                                        child: CustomPaint(
-                                                          painter:
-                                                              DraftInkPainter(
-                                                                draft,
-                                                              ),
-                                                        ),
-                                                      ),
-                                                      CustomPaint(
-                                                        painter:
-                                                            CommentPinsPainter(
-                                                              currentPage
-                                                                  .comments,
-                                                              view.scale,
-                                                            ),
-                                                      ),
-                                                      CustomPaint(
-                                                        painter: _SelectionPainter(
-                                                          displayPage,
-                                                          selected,
-                                                          gestureTool ==
-                                                                      EditorTool
-                                                                          .selection &&
-                                                                  !movingSelection &&
-                                                                  start !=
-                                                                      null &&
-                                                                  latest != null
-                                                              ? Rect.fromPoints(
-                                                                  start!,
-                                                                  latest!,
-                                                                )
-                                                              : null,
-                                                          view.scale,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
+                              child: LayoutBuilder(builder: buildDocument),
                             ),
                             if (showComments)
                               CommentsPanel(
@@ -1121,6 +1209,14 @@ class _EditorScreenState extends State<EditorScreen> {
                           ZoomControls(
                             scale: view.scale,
                             locked: view.zoomLocked,
+                            horizontalLocked: view.horizontalLocked,
+                            onHorizontalLock: () {
+                              router.reset();
+                              setState(
+                                () => view.horizontalLocked =
+                                    !view.horizontalLocked,
+                              );
+                            },
                             onZoom: zoom,
                             onScale: (value) {
                               if (viewSize != null && !router.isWriting) {
@@ -1135,17 +1231,24 @@ class _EditorScreenState extends State<EditorScreen> {
                                 );
                               }
                             },
-                            onFit: () => setState(() => fittedPage = null),
+                            onFit: () {
+                              router.reset();
+                              setState(() => fittedPage = null);
+                            },
                             onFitWidth: () {
                               if (viewSize != null && !router.isWriting) {
-                                setState(
-                                  () => view.fitWidth(
+                                setState(() {
+                                  view.fitWidth(
                                     viewSize!.width,
                                     viewSize!.height,
                                     page.width,
                                     page.height,
-                                  ),
-                                );
+                                  );
+                                  view.tx -=
+                                      layout.rect(pageIndex).left * view.scale;
+                                  view.ty -=
+                                      layout.rect(pageIndex).top * view.scale;
+                                });
                               }
                             },
                             onLock: () {

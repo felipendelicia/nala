@@ -29,18 +29,18 @@
 **Files:** lib/editor/page_layout.dart (nuevo), viewport.dart, editor_screen.dart, zoom_controls.dart; test/editor/continuous_editor_test.dart y viewport_test.dart.
 **Interfaces:** PageLayout(List<NotebookPage>), width/height, rect(int), visible(Rect), hit(Offset), nearest(double); Viewport.horizontalLocked bool. Editor traduce documentPoint - rect.topLeft y mantiene pageIndex estable durante un trazo.
 
-- [ ] RED: probar scroll rueda hasta segunda hoja y escribir allí; combinar bloqueos y gesto diagonal; documento 1000 páginas monta <5 PaperCanvas; cambiar resaltador/lápiz conserva ancho/color. Run tool/flutter-safe test --no-pub --concurrency=1 test/editor/continuous_editor_test.dart. Expected: scroll hace zoom, bloqueo ausente, ancho compartido.
+- [x] RED: probar scroll rueda hasta segunda hoja y escribir allí; combinar bloqueos y gesto diagonal; documento 1000 páginas monta <5 PaperCanvas; cambiar resaltador/lápiz conserva ancho/color. Run tool/flutter-safe test --no-pub --concurrency=1 test/editor/continuous_editor_test.dart. Expected: scroll hace zoom, bloqueo ausente, ancho compartido.
 ```dart
 expect(controller.notebook.pages[0].strokes.length, 1);
 expect(controller.notebook.pages[1].strokes.single.tool, InkTool.highlighter);
 expect(tester.widgetList<PaperCanvas>(find.byType(PaperCanvas)).length, lessThan(5));
 ```
-- [ ] GREEN: layout con búsqueda binaria; render sólo visible; cámara global con bloqueos; cada inicio selecciona hit válido y se conserva origen; rueda pan, Ctrl rueda zoom, trackpad pan/zoom; saltos explícitos; parámetros por herramienta.
+- [x] GREEN: layout con búsqueda binaria; render sólo visible; cámara global con bloqueos; cada inicio selecciona hit válido y se conserva origen; rueda pan, Ctrl rueda zoom, trackpad pan/zoom; saltos explícitos; parámetros por herramienta.
 ```dart
 final local = view.pagePoint(sample.position) - pageRect.topLeft;
 view.pan(-event.scrollDelta.dx, -event.scrollDelta.dy);
 ```
-- [ ] Verificar tests nuevos y regresiones de fluidez/selección/lectura. Actualizar expectativas de rueda a desplazamiento y usar canvas de página explícita en documentos multipágina. Commit.
+- [x] Verificar tests nuevos y regresiones de fluidez/selección/lectura. Actualizar expectativas de rueda a desplazamiento y usar canvas de página explícita en documentos multipágina. Commit.
 
 ### Task 2: Compartir y mover
 

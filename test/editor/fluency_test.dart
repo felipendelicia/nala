@@ -117,6 +117,42 @@ void main() {
     expect(ink.finish('cancelled'), isNull);
     ink.dispose();
   });
+  test('soltar un trazo largo reutiliza su geometría ya dibujada', () {
+    final ink = DraftInk();
+    ink.begin(
+      const InkPoint(x: 0, y: 0, pressure: .5),
+      tool: InkTool.pen,
+      argb: 0xff202020,
+      width: 2.5,
+      stabilization: 0,
+    );
+    for (var i = 1; i <= 5000; i++) {
+      ink.add(InkPoint(x: i.toDouble(), y: 100, pressure: .8));
+    }
+    final renderedPath = ink.path;
+    final stroke = ink.finish('long-cached')!;
+    expect(
+      identical(StrokeGeometry.canvasPath(stroke), renderedPath),
+      isTrue,
+      reason:
+          'Soltar no debe calcular de nuevo 5000 segmentos en el hilo de escritura.',
+    );
+    expect(
+      StrokeGeometry.canvasPath(stroke).getBounds().right,
+      greaterThan(5000),
+    );
+    ink.begin(
+      const InkPoint(x: 1, y: 2, pressure: 1),
+      tool: InkTool.pen,
+      argb: 0xff202020,
+      width: 2.5,
+    );
+    expect(
+      StrokeGeometry.canvasPath(stroke).getBounds().right,
+      greaterThan(5000),
+    );
+    ink.dispose();
+  });
   testWidgets('las muestras del lápiz no reconstruyen hoja ni barra', (
     tester,
   ) async {

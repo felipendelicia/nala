@@ -3,11 +3,11 @@ import 'package:vector_math/vector_math_64.dart';
 
 class Viewport {
   double scale = 1, tx = 0, ty = 0;
-  bool zoomLocked = false;
+  bool zoomLocked = false, horizontalLocked = false;
   Point<double> pagePoint(Point<double> point) =>
       Point((point.x - tx) / scale, (point.y - ty) / scale);
   void pan(double dx, double dy) {
-    tx += dx;
+    if (!horizontalLocked) tx += dx;
     ty += dy;
   }
 
@@ -15,7 +15,7 @@ class Viewport {
     if (zoomLocked) return;
     final fixed = pagePoint(anchor);
     scale = (scale * factor).clamp(.25, 6.0);
-    tx = anchor.x - fixed.x * scale;
+    if (!horizontalLocked) tx = anchor.x - fixed.x * scale;
     ty = anchor.y - fixed.y * scale;
   }
 

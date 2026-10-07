@@ -10,8 +10,12 @@ class ZoomControls extends StatelessWidget {
     required this.onFit,
     required this.onFitWidth,
     required this.onLock,
+    this.horizontalLocked = false,
+    this.onHorizontalLock,
   });
   final double scale;
+  final bool horizontalLocked;
+  final VoidCallback? onHorizontalLock;
   final bool locked;
   final ValueChanged<double> onScale, onZoom;
   final VoidCallback onFit, onFitWidth, onLock;
@@ -19,6 +23,16 @@ class ZoomControls extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     mainAxisSize: MainAxisSize.min,
     children: [
+      IconButton(
+        tooltip: horizontalLocked
+            ? 'Desbloquear movimiento horizontal'
+            : 'Bloquear movimiento horizontal',
+        isSelected: horizontalLocked,
+        onPressed: onHorizontalLock,
+        icon: Icon(
+          horizontalLocked ? Icons.horizontal_distribute : Icons.open_with,
+        ),
+      ),
       IconButton(
         tooltip: 'Alejar',
         onPressed: locked ? null : () => onZoom(.8),

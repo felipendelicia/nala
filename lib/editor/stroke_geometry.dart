@@ -97,6 +97,13 @@ class StrokeGeometry {
   }
 
   static final Expando<StrokeOutline> _cache = Expando();
+  static final Expando<Path> _canvasPaths = Expando();
+  static Path canvasPath(InkStroke stroke) =>
+      _canvasPaths[stroke] ??= outline(stroke).path;
+
+  /// Transfer completed live geometry; it is never mutated after pointer-up.
+  static void rememberCanvasPath(InkStroke stroke, Path path) =>
+      _canvasPaths[stroke] = path;
   static double widthFor(double base, double pressure) =>
       base * (.35 + .65 * pressure.clamp(0, 1));
   static double strokeWidth(InkStroke stroke, double pressure) =>

@@ -96,6 +96,7 @@ class DraftInk extends ChangeNotifier {
       pressureCurve: style.pressureCurve,
       sensitivity: style.sensitivity,
     );
+    StrokeGeometry.rememberCanvasPath(stroke, _path);
     cancel();
     return stroke;
   }

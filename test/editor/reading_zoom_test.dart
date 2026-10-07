@@ -58,18 +58,22 @@ void main() {
     expect(
       tester.widget<ZoomControls>(find.byType(ZoomControls)).scale,
       closeTo(
-        tester
-            .renderObject<RenderBox>(find.byType(PaperCanvas))
-            .getTransformTo(null)
-            .getMaxScaleOnAxis(),
+        (tester
+                        .renderObject<RenderBox>(find.byType(PaperCanvas).first)
+                        .localToGlobal(const Offset(100, 0)) -
+                    tester
+                        .renderObject<RenderBox>(find.byType(PaperCanvas).first)
+                        .localToGlobal(Offset.zero))
+                .distance /
+            100,
         .001,
       ),
     );
     await tester.tap(find.byTooltip('Modo lectura'));
     await tester.pumpAndSettle();
     expect(find.byTooltip('Lápiz'), findsNothing);
-    final center = tester.getCenter(find.byType(PaperCanvas));
-    final before = tester.getTopLeft(find.byType(PaperCanvas));
+    final center = tester.getCenter(find.byType(PaperCanvas).first);
+    final before = tester.getTopLeft(find.byType(PaperCanvas).first);
     final pen = await tester.startGesture(
       center,
       kind: PointerDeviceKind.stylus,
@@ -78,7 +82,7 @@ void main() {
     await pen.up();
     await tester.pump();
     expect(
-      tester.getTopLeft(find.byType(PaperCanvas)),
+      tester.getTopLeft(find.byType(PaperCanvas).first),
       before + const Offset(25, 15),
     );
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
@@ -90,14 +94,17 @@ void main() {
     expect(controller.notebook.pages, hasLength(2));
     await tester.tap(find.byTooltip('Bloquear zoom'));
     await tester.pump();
-    final lockedWidth = tester.getSize(find.byType(PaperCanvas)).width;
-    final lockedOrigin = tester.getTopLeft(find.byType(PaperCanvas));
+    final lockedWidth = tester.getSize(find.byType(PaperCanvas).first).width;
+    final lockedOrigin = tester.getTopLeft(find.byType(PaperCanvas).first);
     await tester.sendEventToBinding(
       PointerScrollEvent(position: center, scrollDelta: const Offset(0, -200)),
     );
     await tester.pump();
-    expect(tester.getTopLeft(find.byType(PaperCanvas)), lockedOrigin);
-    expect(tester.getSize(find.byType(PaperCanvas)).width, lockedWidth);
+    expect(
+      tester.getTopLeft(find.byType(PaperCanvas).first),
+      lockedOrigin + const Offset(0, 200),
+    );
+    expect(tester.getSize(find.byType(PaperCanvas).first).width, lockedWidth);
     final lockedScale = tester
         .widget<ZoomControls>(find.byType(ZoomControls))
         .scale;
