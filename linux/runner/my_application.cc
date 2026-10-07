@@ -10,6 +10,7 @@
 struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
+  FlMethodChannel* share_channel;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
@@ -17,6 +18,44 @@ G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
+}
+
+// Own clipboard data until GTK releases the selection. The cache file outlives
+// the chooser/clipboard so another application can read the PDF asynchronously.
+static void clipboard_get(GtkClipboard*, GtkSelectionData* selection, guint info, gpointer data) {
+  auto* uri = static_cast<gchar*>(data);
+  if (info == 0) {
+    gchar* uris[] = {uri, nullptr};
+    gtk_selection_data_set_uris(selection, uris);
+  } else {
+    g_autofree gchar* payload = g_strconcat("copy\n", uri, nullptr);
+    gtk_selection_data_set(selection, gtk_selection_data_get_target(selection), 8,
+      reinterpret_cast<const guchar*>(payload), strlen(payload));
+  }
+}
+static void clipboard_clear(GtkClipboard*, gpointer data) { g_free(data); }
+static void share_call(FlMethodChannel*, FlMethodCall* call, gpointer) {
+  g_autoptr(FlMethodResponse) response = nullptr;
+  if (strcmp(fl_method_call_get_name(call), "copyPdf") != 0) {
+    response = FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
+  } else {
+    FlValue* args = fl_method_call_get_args(call);
+    FlValue* path = fl_value_get_type(args) == FL_VALUE_TYPE_MAP ? fl_value_lookup_string(args, "path") : nullptr;
+    const gchar* filename = path && fl_value_get_type(path) == FL_VALUE_TYPE_STRING ? fl_value_get_string(path) : nullptr;
+    if (!filename || !g_file_test(filename, G_FILE_TEST_IS_REGULAR)) {
+      response = FL_METHOD_RESPONSE(fl_method_error_response_new("SHARE_FAILED", "No se encontró el PDF.", nullptr));
+    } else {
+      gchar* uri = g_filename_to_uri(filename, nullptr, nullptr);
+      GtkTargetEntry targets[] = {{const_cast<gchar*>("text/uri-list"), 0, 0}, {const_cast<gchar*>("x-special/gnome-copied-files"), 0, 1}};
+      GtkClipboard* clipboard = gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
+      const gboolean accepted = uri && gtk_clipboard_set_with_data(clipboard, targets, 2, clipboard_get, clipboard_clear, uri);
+      if (accepted) { gtk_clipboard_set_can_store(clipboard, targets, 2); gtk_clipboard_store(clipboard); }
+      else { g_free(uri); }
+      g_autoptr(FlValue) value = fl_value_new_bool(accepted);
+      response = FL_METHOD_RESPONSE(fl_method_success_response_new(value));
+    }
+  }
+  fl_method_call_respond(call, response, nullptr);
 }
 
 // Implements GApplication::activate.
@@ -74,6 +113,9 @@ static void my_application_activate(GApplication* application) {
   gtk_widget_realize(GTK_WIDGET(view));
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
+  g_autoptr(FlStandardMethodCodec) share_codec = fl_standard_method_codec_new();
+  self->share_channel = fl_method_channel_new(fl_engine_get_binary_messenger(fl_view_get_engine(view)), "nala/share", FL_METHOD_CODEC(share_codec));
+  fl_method_channel_set_method_call_handler(self->share_channel, share_call, nullptr, nullptr);
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
@@ -120,6 +162,7 @@ static void my_application_shutdown(GApplication* application) {
 // Implements GObject::dispose.
 static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
+  g_clear_object(&self->share_channel);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }

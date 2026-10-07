@@ -10,23 +10,29 @@ import 'package:apuntes/editor/zoom_controls.dart';
 import '../support/fixtures.dart';
 import '../support/memory_repository.dart';
 
-Future<EditorController> mount(WidgetTester tester, {int count = 3}) async {
+Future<EditorController> mount(
+  WidgetTester tester, {
+  int count = 3,
+  List<NotebookPage>? pages,
+}) async {
   await tester.binding.setSurfaceSize(const Size(1200, 900));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   var id = 0;
   final first = fixtureNotebook().pages.first;
   final controller = EditorController(
     notebook: fixtureNotebook().copyWith(
-      pages: [
-        first,
-        for (var i = 1; i < count; i++)
-          NotebookPage(
-            id: 'p$i',
-            width: first.width,
-            height: first.height,
-            background: const PageBackground.paper(PaperPattern.grid),
-          ),
-      ],
+      pages:
+          pages ??
+          [
+            first,
+            for (var i = 1; i < count; i++)
+              NotebookPage(
+                id: 'p$i',
+                width: first.width,
+                height: first.height,
+                background: const PageBackground.paper(PaperPattern.grid),
+              ),
+          ],
     ),
     repository: MemoryRepository(),
     deviceId: 'pc',
@@ -132,6 +138,68 @@ void main() {
       expect(
         tester.widget<EditorToolbar>(find.byType(EditorToolbar)).width,
         highlighted.width,
+      );
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+  testWidgets(
+    'mezclar orientaciones y cruzar la separación conserva el origen del trazo',
+    (tester) async {
+      final first = fixtureNotebook().pages.first;
+      final second = NotebookPage(
+        id: 'landscape',
+        width: 841.89,
+        height: 595.28,
+        background: const PageBackground.paper(PaperPattern.blank),
+      );
+      final controller = await mount(tester, pages: [first, second]);
+      await tester.sendEventToBinding(
+        PointerScrollEvent(
+          position: tester.getCenter(
+            find.byKey(const ValueKey('document-viewport')),
+          ),
+          scrollDelta: const Offset(0, 350),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final box = tester.renderObject<RenderBox>(canvas(first.id));
+      final scale = tester
+          .widget<ZoomControls>(find.byType(ZoomControls))
+          .scale;
+      final start = box.localToGlobal(Offset(120, first.height - 10));
+      final pen = await tester.startGesture(
+        start,
+        kind: PointerDeviceKind.stylus,
+      );
+      await pen.moveBy(Offset(0, 80 * scale));
+      await pen.up();
+      await tester.pumpAndSettle();
+      expect(controller.notebook.pages.first.strokes, hasLength(2));
+      expect(controller.notebook.pages.last.strokes, isEmpty);
+      final gap = box.localToGlobal(Offset(120, first.height + 16));
+      final outside = await tester.startGesture(
+        gap,
+        kind: PointerDeviceKind.stylus,
+      );
+      await outside.up();
+      await tester.pumpAndSettle();
+      expect(controller.notebook.pages.first.strokes, hasLength(2));
+      expect(controller.notebook.pages.last.strokes, isEmpty);
+      final landscape = tester.renderObject<RenderBox>(canvas('landscape'));
+      final next = await tester.startGesture(
+        landscape.localToGlobal(const Offset(100, 130)),
+        kind: PointerDeviceKind.stylus,
+      );
+      await next.moveBy(const Offset(20, 20));
+      await next.up();
+      await tester.pumpAndSettle();
+      expect(
+        controller.notebook.pages.last.strokes.single.points.first.x,
+        closeTo(100, .001),
+      );
+      expect(
+        controller.notebook.pages.last.strokes.single.points.first.y,
+        closeTo(130, .001),
       );
       await tester.pumpWidget(const SizedBox());
     },

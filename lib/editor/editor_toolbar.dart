@@ -35,140 +35,266 @@ class EditorToolbar extends StatelessWidget {
   final VoidCallback? onApplyPattern;
   final VoidCallback? onPenSettings;
   @override
-  Widget build(BuildContext context) => Material(
-    color: Theme.of(context).colorScheme.surface,
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Wrap(
-        spacing: 4,
-        runSpacing: 4,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          for (final current in EditorTool.values)
-            IconButton.filledTonal(
-              tooltip: [
-                'Lápiz',
-                'Resaltador',
-                'Borrador',
-                'Selección',
-              ][current.index],
-              isSelected: current == tool,
-              onPressed: () => onTool(current),
-              icon: Icon(
-                [
-                  Icons.edit_outlined,
-                  Icons.brush_outlined,
-                  Icons.auto_fix_normal_outlined,
-                  Icons.select_all,
-                ][current.index],
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final wide = MediaQuery.sizeOf(context).width >= 1100;
+    const colors = [
+      0xff202020,
+      0xff24584b,
+      0xff284cad,
+      0xffc14747,
+      0xffe9ba3b,
+      0xff8553aa,
+    ];
+    const names = ['Grafito', 'Verde', 'Azul', 'Rojo', 'Amarillo', 'Violeta'];
+    const labels = ['Lápiz', 'Resaltador', 'Borrador', 'Selección'];
+    const icons = [
+      Icons.edit_outlined,
+      Icons.border_color_outlined,
+      Icons.auto_fix_normal_outlined,
+      Icons.gesture,
+    ];
+    Widget divider() => Container(
+      width: 1,
+      height: 28,
+      margin: const EdgeInsets.symmetric(horizontal: 12),
+      color: scheme.outlineVariant.withValues(alpha: .5),
+    );
+    Widget swatch(int color, String name) => Tooltip(
+      message: name,
+      child: InkResponse(
+        onTap: () => onColor(color),
+        radius: 22,
+        child: SizedBox(
+          width: 40,
+          height: 48,
+          child: Center(
+            child: Container(
+              width: color == argb ? 29 : 21,
+              height: color == argb ? 29 : 21,
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: color == argb ? scheme.primary : Colors.transparent,
+                  width: 1.5,
+                ),
               ),
-            ),
-          const SizedBox(width: 8),
-          PopupMenuButton<int>(
-            tooltip: 'Color de tinta',
-            initialValue: argb,
-            onSelected: onColor,
-            icon: Icon(Icons.circle, color: Color(argb)),
-            itemBuilder: (_) =>
-                [
-                      0xff202020,
-                      0xff24584b,
-                      0xff284cad,
-                      0xffc14747,
-                      0xffe1a51e,
-                      0xff8553aa,
-                    ]
-                    .map(
-                      (color) => PopupMenuItem(
-                        value: color,
-                        child: Row(
-                          children: [
-                            Icon(Icons.circle, color: Color(color)),
-                            const SizedBox(width: 12),
-                            Text(
-                              [
-                                'Grafito',
-                                'Verde',
-                                'Azul',
-                                'Rojo',
-                                'Amarillo',
-                                'Violeta',
-                              ][[
-                                0xff202020,
-                                0xff24584b,
-                                0xff284cad,
-                                0xffc14747,
-                                0xffe1a51e,
-                                0xff8553aa,
-                              ].indexOf(color)],
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                    .toList(),
-          ),
-          PopupMenuButton<double>(
-            tooltip: 'Grosor de tinta',
-            initialValue: width,
-            onSelected: onWidth,
-            icon: const Icon(Icons.line_weight),
-            itemBuilder: (_) => [1.5, 2.5, 4.0, 8.0, 14.0]
-                .map((w) => PopupMenuItem(value: w, child: Text('$w pt')))
-                .toList(),
-          ),
-          IconButton(
-            tooltip: 'Ajustes del lápiz',
-            onPressed: onPenSettings,
-            icon: const Icon(Icons.tune),
-          ),
-          IconButton(
-            tooltip: 'Deshacer',
-            onPressed: canUndo ? onUndo : null,
-            icon: const Icon(Icons.undo),
-          ),
-          IconButton(
-            tooltip: 'Rehacer',
-            onPressed: canRedo ? onRedo : null,
-            icon: const Icon(Icons.redo),
-          ),
-          IconButton(
-            tooltip: 'Eliminar selección',
-            onPressed: onDeleteSelection,
-            icon: const Icon(Icons.delete_outline),
-          ),
-          if (pattern != null)
-            PopupMenuButton<PaperPattern>(
-              tooltip: 'Tipo de hoja',
-              initialValue: pattern,
-              onSelected: onPattern,
-              itemBuilder: (_) => PaperPattern.values
-                  .map(
-                    (p) => PopupMenuItem(
-                      value: p,
-                      child: Text(paperLabel(p.index)),
-                    ),
-                  )
-                  .toList(),
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(paperLabel(pattern!.index)),
-                    const Icon(Icons.expand_more, size: 18),
-                  ],
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Color(color),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white24),
                 ),
               ),
             ),
-          if (onApplyPattern != null)
-            IconButton(
-              tooltip: 'Aplicar hoja a todo el cuaderno',
-              onPressed: onApplyPattern,
-              icon: const Icon(Icons.layers_outlined),
-            ),
-        ],
+          ),
+        ),
       ),
-    ),
-  );
+    );
+    return Material(
+      color: scheme.surface,
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: scheme.outlineVariant.withValues(alpha: .4),
+            ),
+          ),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  children: [
+                    for (final current in EditorTool.values)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        child: Tooltip(
+                          message: labels[current.index],
+                          child: TextButton(
+                            onPressed: () => onTool(current),
+                            style: TextButton.styleFrom(
+                              foregroundColor: current == tool
+                                  ? scheme.onPrimary
+                                  : scheme.onSurfaceVariant,
+                              backgroundColor: current == tool
+                                  ? scheme.primary
+                                  : Colors.transparent,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: wide ? 14 : 12,
+                              ),
+                              minimumSize: const Size(44, 44),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(icons[current.index], size: 21),
+                                if (wide) ...[
+                                  const SizedBox(width: 8),
+                                  Text(labels[current.index]),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              divider(),
+              if (wide) ...[
+                for (var i = 0; i < colors.length; i++)
+                  swatch(colors[i], names[i]),
+              ] else
+                PopupMenuButton<int>(
+                  tooltip: 'Color de tinta',
+                  initialValue: argb,
+                  onSelected: onColor,
+                  icon: Icon(Icons.circle, color: Color(argb)),
+                  itemBuilder: (_) => [
+                    for (var i = 0; i < colors.length; i++)
+                      PopupMenuItem(
+                        value: colors[i],
+                        child: Row(
+                          children: [
+                            Icon(Icons.circle, color: Color(colors[i])),
+                            const SizedBox(width: 12),
+                            Text(names[i]),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              PopupMenuButton<double>(
+                tooltip: 'Grosor de tinta',
+                initialValue: width,
+                onSelected: onWidth,
+                itemBuilder: (_) => [
+                  for (final w
+                      in tool == EditorTool.highlighter
+                          ? [4.0, 8.0, 14.0, 20.0, 28.0]
+                          : [1.5, 2.5, 4.0, 6.0, 8.0])
+                    PopupMenuItem(
+                      value: w,
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 56,
+                            child: Center(
+                              child: Container(
+                                height: w.clamp(1.5, 14.0),
+                                width: 40,
+                                decoration: BoxDecoration(
+                                  color: scheme.onSurface,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text('$w pt'),
+                        ],
+                      ),
+                    ),
+                ],
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 14,
+                  ),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 24,
+                        child: Container(
+                          height: width.clamp(2.0, 12.0),
+                          decoration: BoxDecoration(
+                            color: scheme.onSurface,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(width.toStringAsFixed(1)),
+                      const Icon(Icons.expand_more, size: 16),
+                    ],
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Ajustes del lápiz',
+                onPressed: onPenSettings,
+                icon: const Icon(Icons.tune, size: 21),
+              ),
+              divider(),
+              IconButton(
+                tooltip: 'Deshacer',
+                onPressed: canUndo ? onUndo : null,
+                icon: const Icon(Icons.undo, size: 21),
+              ),
+              IconButton(
+                tooltip: 'Rehacer',
+                onPressed: canRedo ? onRedo : null,
+                icon: const Icon(Icons.redo, size: 21),
+              ),
+              if (onDeleteSelection != null)
+                IconButton(
+                  tooltip: 'Eliminar selección',
+                  onPressed: onDeleteSelection,
+                  icon: const Icon(Icons.delete_outline),
+                ),
+              if (pattern != null) ...[
+                divider(),
+                PopupMenuButton<PaperPattern>(
+                  tooltip: 'Tipo de hoja',
+                  initialValue: pattern,
+                  onSelected: onPattern,
+                  itemBuilder: (_) => PaperPattern.values
+                      .map(
+                        (p) => PopupMenuItem(
+                          value: p,
+                          child: Text(paperLabel(p.index)),
+                        ),
+                      )
+                      .toList(),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 14,
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.description_outlined, size: 19),
+                        const SizedBox(width: 8),
+                        Text(paperLabel(pattern!.index)),
+                        const Icon(Icons.expand_more, size: 16),
+                      ],
+                    ),
+                  ),
+                ),
+                if (onApplyPattern != null)
+                  IconButton(
+                    tooltip: 'Aplicar hoja a todo el cuaderno',
+                    onPressed: onApplyPattern,
+                    icon: const Icon(Icons.layers_outlined, size: 21),
+                  ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

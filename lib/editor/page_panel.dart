@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../document/notebook.dart';
 import 'paper_canvas.dart';
-import '../ui/app_theme.dart';
 import '../pdf/pdf_service.dart';
 import '../pdf/pdf_page_background.dart';
 
@@ -41,12 +40,14 @@ class PagePanel extends StatelessWidget {
                 child: InkWell(
                   onTap: () => onPage(index),
                   child: Container(
-                    padding: const EdgeInsets.all(6),
+                    padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(10),
                       border: Border.all(
                         color: index == currentPage
-                            ? nalaGreen
-                            : const Color(0xffd4d8d1),
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context).colorScheme.outlineVariant,
                         width: index == currentPage ? 2 : 1,
                       ),
                     ),

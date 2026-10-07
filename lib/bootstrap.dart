@@ -7,6 +7,7 @@ import 'document/sqlite_notebook_repository.dart';
 import 'library/library_controller.dart';
 import 'pdf/pdf_service.dart';
 import 'pdf/document_files.dart';
+import 'pdf/pdf_share.dart';
 import 'audio/audio_service.dart';
 import 'sync/remote_store.dart';
 import 'sync/sync_engine.dart';
@@ -21,9 +22,11 @@ class AppServices {
     required this.library,
     PdfService? pdf,
     DocumentFiles? files,
+    PdfShare? share,
     AudioDevice? audio,
   }) : pdf = pdf ?? PdfService(assets: assets),
        files = files ?? NativeDocumentFiles(),
+       share = share ?? NativePdfShare(),
        audio = audio ?? nativeAudioDevice();
   final String root, deviceId;
   final NotebookRepository repository;
@@ -31,6 +34,7 @@ class AppServices {
   final LibraryController library;
   final PdfService pdf;
   final DocumentFiles files;
+  final PdfShare share;
   final AudioDevice audio;
   SyncEngine? sync;
   SyncCoordinator? coordinator;
@@ -61,7 +65,11 @@ class AppServices {
     await old?.idle;
   }
 
-  static Future<AppServices> open(String root, {DocumentFiles? files}) async {
+  static Future<AppServices> open(
+    String root, {
+    DocumentFiles? files,
+    PdfShare? share,
+  }) async {
     await Directory(root).create(recursive: true);
     final device = File(p.join(root, 'device-id.txt'));
     final id = await device.exists()
@@ -80,6 +88,7 @@ class AppServices {
       assets: FileAssetStore(p.join(root, 'local', 'assets')),
       library: library,
       files: files,
+      share: share,
     );
   }
 

@@ -87,3 +87,21 @@ ab221f87861c09f055a9bae2cfdc38279593d238b32f086f118bb974f0747161  Nala.apk
 Antes de publicar se revisaron 149 archivos y 264 blobs históricos: ninguna ruta privada prohibida ni patrón conocido de credenciales. El repositorio sigue público y main recibió los commits sin sobrescribir cambios remotos.
 
 La prueba física con S Pen, audio y selector Android, y una conexión Google real entre dos dispositivos, siguen pendientes. Las decisiones de alcance y sus costes están en [decisiones](decisions.md).
+
+## Editor continuo y apariencia 0.3.0
+
+La suite inicial de esta etapa pasó 101/101 pruebas unitarias/widget y analyze no encontró problemas. Incluye scroll a la segunda hoja, tinta en sus coordenadas, bloqueos X/zoom combinados, parámetros independientes del resaltador/lápiz, mil hojas con menos de cinco lienzos montados, reutilización de la geometría de un trazo de 5000 muestras y ausencia de reconstrucción de barra/hoja por muestra.
+
+Compartir se comprueba abriendo el PDF real entregado por el botón, sin invocar savePdf, doble toque y error recuperable. Los archivos temporales se sanean, tienen sesión única, permanecen disponibles para receptores y sólo se limpian sesiones anteriores a 24 horas. Mover se verifica desde el menú con SQLite y reapertura. El tema se cambia desde Apariencia y se recupera al reiniciar; archivos de preferencias incompletos o inválidos vuelven a Seguir sistema sin tocar los apuntes.
+
+Se comprobaron seis layouts de editor con texto a 1.5 en tamaños 1200×800, 800×1200 y 1440×900, para claro y oscuro, incluyendo paneles y acciones de compartir/exportar. La biblioteca también se prueba con texto ampliado.
+
+Pasaron los recorridos nativos Linux de cuadernos locales, PDF con escritura durante exportación y organización/comentarios. El recorrido nuevo de apariencia/compartir/movimiento pasó con PDFium y SQLite reales: tres hojas compartidas, trazo en la segunda, carpeta y tema persistidos. La frontera GTK respondió al archivo ausente sin modificar el portapapeles del usuario. El selector Android y pegar el archivo en aplicaciones reales todavía requieren comprobación física.
+
+Al ejecutar todos los archivos nativos en un mismo proceso Flutter, el primer caso pasó y los siguientes no llegaron a arrancar: el DesktopLogReader del SDK conserva un stream que se cierra al terminar el primer proceso. Ejecutar cada archivo en un proceso nuevo resolvió el problema, sin modificar la app ni el SDK.
+
+Capturas nativas en .dart_tool/ui-qa: biblioteca clara/oscura, editor oscuro, navegación continua y lectura; la captura clara selecciona Claro explícitamente porque el sistema de la PC está en modo oscuro. Se inspeccionaron ambas bibliotecas, el editor continuo y lectura; controles legibles y papel conservado. No se interpreta el MemoryPeak impreso por systemd-run como una medida real de consumo; cada compilación mantiene límite de memoria y CPU.
+
+La suite completa de cierre pasó 102/102 después de añadir orientaciones mixtas, separación sin tinta y origen estable al cruzarla. Se reprodujo un overflow del estado local de biblioteca con texto a 1.5 en 800×1200; ahora ese estado tiene ancho limitado o icono con descripción, como los controles de Drive. La suite posterior pasó y analyze siguió sin problemas.
+
+También se reprodujo que los permisos por defecto de un PDF temporal Linux permitían lectura a grupo/otros. Compartir ahora usa carpetas 0700, archivos 0600 y rechaza una raíz temporal que sea enlace. La prueba examina los permisos reales antes del canal de entrega y pasó junto con compartir desde el editor (2/2). Android usa su caché privada y FileProvider limitado a nala-share/. No se abrió ningún cliente de correo ni se cambió el portapapeles real durante la automatización.

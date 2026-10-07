@@ -10,6 +10,7 @@ import '../editor/editor_controller.dart';
 import '../editor/editor_screen.dart';
 import '../editor/paper_canvas.dart';
 import '../ui/app_theme.dart';
+import '../ui/appearance.dart';
 import 'notebook_dialog.dart';
 import '../pdf/password_dialog.dart';
 import '../pdf/pdf_page_background.dart';
@@ -43,6 +44,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           controller: editor,
           pdf: widget.services.pdf,
           files: widget.services.files,
+          share: widget.services.share,
           assets: widget.services.assets,
           audio: widget.services.audio,
           audioDirectory: '${widget.services.root}/audio-temp',
@@ -239,12 +241,28 @@ class _LibraryScreenState extends State<LibraryScreen> {
             ],
           ),
           actions: [
+            const AppearanceButton(),
             if (widget.cloud != null)
               CloudControls(cloud: widget.cloud!)
+            else if (MediaQuery.sizeOf(context).width >= 850)
+              const SizedBox(
+                width: 270,
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text(
+                    'Guardado en este dispositivo',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              )
             else
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: Text('Guardado en este dispositivo'),
+              const Tooltip(
+                message: 'Guardado en este dispositivo',
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Icon(Icons.offline_pin_outlined),
+                ),
               ),
           ],
         ),
@@ -253,37 +271,61 @@ class _LibraryScreenState extends State<LibraryScreen> {
             children: [
               if (constraints.maxWidth >= 1100)
                 SizedBox(
-                  width: 220,
-                  child: ListView(
-                    padding: const EdgeInsets.all(12),
-                    children: [
-                      ListTile(
-                        leading: const Icon(Icons.home_outlined),
-                        title: const Text('Mis apuntes'),
-                        selected: library.currentFolderId == null,
-                        onTap: () => _navigate(null),
+                  width: 224,
+                  child: Material(
+                    color: nalaForest,
+                    child: ListTileTheme(
+                      textColor: const Color(0xffd5e6de),
+                      iconColor: const Color(0xffc0d8cc),
+                      selectedColor: Colors.white,
+                      selectedTileColor: Colors.white12,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      for (final folder in library.folders)
-                        Padding(
-                          padding: EdgeInsets.only(
-                            left:
-                                (library.pathFor(folder.id).length - 1) * 12.0,
-                          ),
-                          child: ListTile(
-                            leading: const Icon(
-                              Icons.folder_outlined,
-                              size: 20,
+                      child: ListView(
+                        padding: const EdgeInsets.all(12),
+                        children: [
+                          const Padding(
+                            padding: EdgeInsets.fromLTRB(16, 24, 12, 20),
+                            child: Text(
+                              'Tu biblioteca',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
-                            title: Text(
-                              folder.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            selected: library.currentFolderId == folder.id,
-                            onTap: () => _navigate(folder.id),
                           ),
-                        ),
-                    ],
+                          ListTile(
+                            leading: const Icon(Icons.home_outlined),
+                            title: const Text('Mis apuntes'),
+                            selected: library.currentFolderId == null,
+                            onTap: () => _navigate(null),
+                          ),
+                          for (final folder in library.folders)
+                            Padding(
+                              padding: EdgeInsets.only(
+                                left:
+                                    (library.pathFor(folder.id).length - 1) *
+                                    12.0,
+                              ),
+                              child: ListTile(
+                                leading: const Icon(
+                                  Icons.folder_outlined,
+                                  size: 20,
+                                ),
+                                title: Text(
+                                  folder.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                selected: library.currentFolderId == folder.id,
+                                onTap: () => _navigate(folder.id),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               Expanded(
@@ -315,7 +357,23 @@ class _LibraryScreenState extends State<LibraryScreen> {
                             ),
                         ],
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 8),
+                      Text(
+                        library.breadcrumbs.isEmpty
+                            ? 'Tus apuntes'
+                            : library.breadcrumbs.last.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.headlineLarge,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${entries.length} ${entries.length == 1 ? 'apunte' : 'apuntes'} en esta carpeta',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
                       Wrap(
                         spacing: 12,
                         runSpacing: 12,
@@ -437,10 +495,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const Icon(
+                                    Icon(
                                       Icons.menu_book_outlined,
                                       size: 52,
-                                      color: nalaGreen,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.primary,
                                     ),
                                     const SizedBox(height: 16),
                                     Text(
@@ -458,9 +518,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
                               )
                             : GridView.builder(
                                 gridDelegate:
-                                    const SliverGridDelegateWithMaxCrossAxisExtent(
-                                      maxCrossAxisExtent: 400,
-                                      mainAxisExtent: 270,
+                                    SliverGridDelegateWithMaxCrossAxisExtent(
+                                      maxCrossAxisExtent: 360,
+                                      mainAxisExtent:
+                                          constraints.maxHeight < 800
+                                          ? 280
+                                          : 320,
                                       crossAxisSpacing: 20,
                                       mainAxisSpacing: 20,
                                     ),
@@ -498,65 +561,149 @@ class _NotebookTile extends StatelessWidget {
   final PdfService pdf;
   final ValueChanged<String> onAction;
   @override
-  Widget build(BuildContext context) => Material(
-    color: Colors.white,
-    borderRadius: BorderRadius.circular(8),
-    child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        decoration: const BoxDecoration(
-          border: Border(left: BorderSide(color: nalaGreen, width: 5)),
-        ),
-        padding: const EdgeInsets.all(20),
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final page = entry.notebook.pages.first;
+    final isPdf = page.background.assetId != null;
+    return Material(
+      color: scheme.surface,
+      borderRadius: BorderRadius.circular(16),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: SizedBox(
-                  width: 130,
-                  child: FittedBox(
-                    alignment: Alignment.centerLeft,
-                    child: IgnorePointer(
-                      child: PaperCanvas(
-                        page: entry.notebook.pages.first,
-                        tool: EditorTool.pen,
-                        onStroke: (_) {},
-                        background:
-                            entry.notebook.pages.first.background.assetId ==
-                                null
-                            ? null
-                            : PdfPageBackground(
-                                pdf: pdf,
-                                page: entry.notebook.pages.first,
-                                scale: .25,
-                              ),
-                      ),
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerLow,
+                  border: Border(
+                    bottom: BorderSide(
+                      color: scheme.outlineVariant.withValues(alpha: .45),
                     ),
                   ),
                 ),
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(40, 18, 40, 0),
+                        child: FittedBox(
+                          alignment: Alignment.topCenter,
+                          child: DecoratedBox(
+                            decoration: const BoxDecoration(
+                              color: Colors.white,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black12,
+                                  blurRadius: 18,
+                                  offset: Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: IgnorePointer(
+                              child: PaperCanvas(
+                                page: page,
+                                tool: EditorTool.pen,
+                                onStroke: (_) {},
+                                background: isPdf
+                                    ? PdfPageBackground(
+                                        pdf: pdf,
+                                        page: page,
+                                        scale: .25,
+                                      )
+                                    : null,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 12,
+                      left: 14,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: scheme.surface,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          isPdf ? 'PDF' : 'Cuaderno',
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 6,
+                      right: 6,
+                      child: PopupMenuButton<String>(
+                        tooltip: 'Opciones de apunte',
+                        onSelected: onAction,
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(value: 'move', child: Text('Mover a…')),
+                          PopupMenuItem(
+                            value: 'rename',
+                            child: Text('Renombrar'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 16),
-            Text(
-              entry.notebook.title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              entry.isConflict
-                  ? 'Versiones distintas · ${entry.deviceId}'
-                  : '${entry.notebook.subject.isEmpty ? 'Sin materia' : entry.notebook.subject} · ${entry.notebook.pages.length} ${entry.notebook.pages.length == 1 ? 'hoja' : 'hojas'}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    entry.notebook.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          entry.isConflict
+                              ? 'Versiones distintas'
+                              : entry.notebook.subject.isEmpty
+                              ? 'Sin materia'
+                              : entry.notebook.subject,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: scheme.onSurfaceVariant),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(
+                        Icons.description_outlined,
+                        size: 14,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${entry.notebook.pages.length}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ],
         ),
       ),
-    ),
-  );
+    );
+  }
 }

@@ -5,6 +5,9 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import android.app.Activity
 import android.content.Intent
+import android.content.ClipData
+import androidx.core.content.FileProvider
+import java.io.File
 import java.util.concurrent.Executors
 
 class MainActivity : FlutterActivity() {
@@ -16,6 +19,24 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nala/share").setMethodCallHandler { call, result ->
+            if (call.method != "sharePdf") { result.notImplemented() }
+            else {
+                try {
+                    val file = File(call.argument<String>("path") ?: "")
+                    if (!file.isFile) throw java.io.IOException()
+                    val uri = FileProvider.getUriForFile(this, "$packageName.nala.share", file)
+                    val send = Intent(Intent.ACTION_SEND).apply {
+                        type = "application/pdf"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        clipData = ClipData.newRawUri("PDF", uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    startActivity(Intent.createChooser(send, "Compartir PDF"))
+                    result.success(true)
+                } catch (_: Exception) { result.error("SHARE_FAILED", "No se pudo abrir Compartir PDF.", null) }
+            }
+        }
         audio = AudioBridge(this)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nala/audio").setMethodCallHandler(audio)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nala/files").setMethodCallHandler { call, result ->

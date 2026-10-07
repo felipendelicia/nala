@@ -13,6 +13,7 @@ import '../audio/comment_audio_player.dart';
 import 'comment_dialog.dart';
 import 'comments_panel.dart';
 import '../ui/app_theme.dart';
+import '../ui/appearance.dart';
 import 'editor_controller.dart';
 import 'editor_toolbar.dart';
 import 'draft_ink.dart';
@@ -26,6 +27,7 @@ import 'stroke_geometry.dart';
 import 'viewport.dart' as paper;
 import '../pdf/document_files.dart';
 import '../pdf/pdf_service.dart';
+import '../pdf/pdf_share.dart';
 import '../pdf/pdf_export_service.dart';
 import '../pdf/pdf_page_background.dart';
 import '../pdf/password_dialog.dart';
@@ -39,6 +41,7 @@ class EditorScreen extends StatefulWidget {
     required this.controller,
     this.pdf,
     this.files,
+    this.share,
     this.assets,
     this.audio,
     this.audioDirectory,
@@ -47,6 +50,7 @@ class EditorScreen extends StatefulWidget {
   final EditorController controller;
   final PdfService? pdf;
   final DocumentFiles? files;
+  final PdfShare? share;
   final AssetStore? assets;
   final AudioDevice? audio;
   final String? audioDirectory;
@@ -58,7 +62,9 @@ class EditorScreen extends StatefulWidget {
 class _EditorScreenState extends State<EditorScreen> {
   bool allowPop = false, closing = false, showPages = false;
   bool disposing = false, reading = false;
-  bool exporting = false;
+  bool exporting = false, choosingShare = false;
+  Notebook? exportedSnapshot;
+  Uint8List? exportedBytes;
   bool showComments = false, placingComment = false, commentOpen = false;
   bool remoteDirty = false, refreshingRemote = false;
   bool get canReceiveRemote =>
@@ -66,6 +72,7 @@ class _EditorScreenState extends State<EditorScreen> {
       !disposing &&
       !closing &&
       !exporting &&
+      !choosingShare &&
       !commentOpen &&
       !router.isWriting &&
       start == null &&
@@ -387,8 +394,9 @@ class _EditorScreenState extends State<EditorScreen> {
       if (viewSize != null) {
         final bounds = layout.rect(index);
         view.ty = 24 - bounds.top * view.scale;
-        if (!view.horizontalLocked)
+        if (!view.horizontalLocked) {
           view.tx = (viewSize!.width - layout.width * view.scale) / 2;
+        }
       }
       pdfError = null;
     });
@@ -523,7 +531,9 @@ class _EditorScreenState extends State<EditorScreen> {
           );
         },
         child: ColoredBox(
-          color: const Color(0xffe8eef0),
+          color: Theme.of(context).brightness == Brightness.dark
+              ? const Color(0xff11191e)
+              : const Color(0xffe8eef0),
           child: Stack(
             children: [for (final index in visible) buildPage(context, index)],
           ),
@@ -539,10 +549,11 @@ class _EditorScreenState extends State<EditorScreen> {
         bounds = layout.rect(index);
     final active = index == pageIndex;
     var display = source;
-    if (active && erased.isNotEmpty)
+    if (active && erased.isNotEmpty) {
       display = display.copyWith(
         strokes: display.strokes.where((s) => !erased.contains(s.id)).toList(),
       );
+    }
     if (active && movingSelection && start != null && latest != null) {
       final delta = latest! - start!;
       display = display.copyWith(
@@ -597,8 +608,9 @@ class _EditorScreenState extends State<EditorScreen> {
                                 view.scale *
                                 MediaQuery.devicePixelRatioOf(context),
                             onError: (error) {
-                              if (mounted && source.id == page.id)
+                              if (mounted && source.id == page.id) {
                                 setState(() => pdfError = error);
+                              }
                             },
                             onRendered: preloadNeighbors,
                           ),
@@ -851,30 +863,117 @@ class _EditorScreenState extends State<EditorScreen> {
     setState(() {});
   }
 
-  Future<void> exportPdf() async {
-    if (exporting || widget.pdf == null || widget.files == null) return;
+  Future<void> sharePdf() async {
+    final service = widget.share;
+    if (service == null || exporting || choosingShare) return;
+    ShareTarget? target;
+    if (service.targets.length == 1) {
+      target = service.targets.single;
+    } else {
+      choosingShare = true;
+      router.reset();
+      try {
+        target = await showModalBottomSheet<ShareTarget>(
+          context: context,
+          showDragHandle: true,
+          builder: (context) => SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Text(
+                      'Compartir PDF',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                  if (service.targets.contains(ShareTarget.copyFile))
+                    ListTile(
+                      leading: const Icon(Icons.copy_outlined),
+                      title: const Text('Copiar archivo PDF'),
+                      subtitle: const Text(
+                        'Pegalo en un chat o en otra aplicación.',
+                      ),
+                      onTap: () => Navigator.pop(context, ShareTarget.copyFile),
+                    ),
+                  if (service.targets.contains(ShareTarget.email))
+                    ListTile(
+                      leading: const Icon(Icons.mail_outline),
+                      title: const Text('Compartir por correo'),
+                      subtitle: const Text(
+                        'Abrir un mensaje con el PDF adjunto.',
+                      ),
+                      onTap: () => Navigator.pop(context, ShareTarget.email),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      } finally {
+        choosingShare = false;
+      }
+    }
+    if (mounted && target != null) await deliverPdf(shareTarget: target);
+  }
+
+  Future<void> exportPdf() => deliverPdf();
+  Future<void> deliverPdf({ShareTarget? shareTarget}) async {
+    if (exporting ||
+        widget.pdf == null ||
+        (shareTarget == null ? widget.files == null : widget.share == null)) {
+      return;
+    }
     setState(() => exporting = true);
     try {
       await widget.controller.flush();
       final snapshot = widget.controller.notebook;
-      final bytes = await PdfExportService(widget.pdf!).exportWithUnlock(
+      Uint8List? bytes;
+      if (identical(snapshot, exportedSnapshot)) bytes = exportedBytes;
+      bytes ??= await PdfExportService(widget.pdf!).exportWithUnlock(
         snapshot,
         (assetId) =>
             mounted ? unlockPdf(assetId: assetId) : Future.value(false),
       );
       if (!mounted || bytes == null) return;
-      final saved = await widget.files!.savePdf(bytes, name: snapshot.title);
-      if (mounted && saved) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('PDF guardado.')));
+      // Cache one reasonably sized snapshot, never a growing set of PDFs.
+      if (bytes.length <= 32 * 1024 * 1024) {
+        exportedSnapshot = snapshot;
+        exportedBytes = bytes;
+      }
+      if (shareTarget != null) {
+        final accepted = await widget.share!.share(
+          bytes,
+          name: snapshot.title,
+          target: shareTarget,
+        );
+        if (!accepted) throw StateError('No hay una aplicación disponible.');
+        if (mounted && shareTarget == ShareTarget.copyFile) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('PDF copiado. Pegalo donde quieras compartirlo.'),
+            ),
+          );
+        }
+      } else {
+        final saved = await widget.files!.savePdf(bytes, name: snapshot.title);
+        if (mounted && saved) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('PDF guardado.')));
+        }
       }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              'No se pudo exportar el PDF. Tus anotaciones siguen guardadas en Nala.',
+              shareTarget == null
+                  ? 'No se pudo exportar el PDF. Tus anotaciones siguen guardadas en Nala.'
+                  : 'No se pudo compartir el PDF. Tus anotaciones siguen guardadas. Podés reintentar o guardar una copia.',
             ),
           ),
         );
@@ -947,11 +1046,28 @@ class _EditorScreenState extends State<EditorScreen> {
                   onPressed: close,
                   icon: const Icon(Icons.arrow_back),
                 ),
-                title: Text(
-                  controller.notebook.title,
-                  overflow: TextOverflow.ellipsis,
+                title: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      controller.notebook.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (controller.notebook.subject.isNotEmpty)
+                      Text(
+                        controller.notebook.subject,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                  ],
                 ),
                 actions: [
+                  AppearanceButton(beforeChange: router.reset),
                   IconButton(
                     tooltip: reading ? 'Modo editor' : 'Modo lectura',
                     isSelected: reading,
@@ -968,16 +1084,49 @@ class _EditorScreenState extends State<EditorScreen> {
                       reading ? Icons.edit_outlined : Icons.menu_book_outlined,
                     ),
                   ),
+                  if (widget.pdf != null && widget.share != null)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Tooltip(
+                        message: 'Compartir PDF',
+                        child: MediaQuery.sizeOf(context).width >= 1100
+                            ? FilledButton.icon(
+                                onPressed: exporting || choosingShare
+                                    ? null
+                                    : sharePdf,
+                                icon: const Icon(
+                                  Icons.share_outlined,
+                                  size: 19,
+                                ),
+                                label: const Text('Compartir'),
+                              )
+                            : IconButton.filledTonal(
+                                onPressed: exporting || choosingShare
+                                    ? null
+                                    : sharePdf,
+                                icon: const Icon(Icons.share_outlined),
+                              ),
+                      ),
+                    ),
                   if (widget.pdf != null && widget.files != null)
                     IconButton(
                       tooltip: 'Exportar PDF',
                       onPressed: exporting ? null : exportPdf,
                       icon: const Icon(Icons.ios_share_outlined),
                     ),
-                  IconButton(
-                    tooltip: 'Renombrar cuaderno',
-                    onPressed: reading ? null : rename,
-                    icon: const Icon(Icons.drive_file_rename_outline),
+                  PopupMenuButton<String>(
+                    tooltip: 'Opciones del cuaderno',
+                    onSelected: (_) {
+                      router.reset();
+                      rename();
+                    },
+                    itemBuilder: (_) => [
+                      PopupMenuItem(
+                        value: 'rename',
+                        enabled: !reading,
+                        child: const Text('Renombrar cuaderno'),
+                      ),
+                    ],
                   ),
                   IconButton(
                     tooltip: 'Páginas',
@@ -997,27 +1146,6 @@ class _EditorScreenState extends State<EditorScreen> {
                     },
                     icon: const Icon(Icons.chat_bubble_outline),
                   ),
-                  IconButton(
-                    tooltip: 'Hoja anterior',
-                    onPressed: pageIndex > 0
-                        ? () => changePage(pageIndex - 1)
-                        : null,
-                    icon: const Icon(Icons.chevron_left),
-                  ),
-                  Text('${pageIndex + 1}/${controller.notebook.pages.length}'),
-                  IconButton(
-                    tooltip: 'Hoja siguiente',
-                    onPressed: pageIndex + 1 < controller.notebook.pages.length
-                        ? () => changePage(pageIndex + 1)
-                        : null,
-                    icon: const Icon(Icons.chevron_right),
-                  ),
-                  if (!reading)
-                    IconButton(
-                      tooltip: 'Agregar hoja',
-                      onPressed: addPage,
-                      icon: const Icon(Icons.note_add_outlined),
-                    ),
                 ],
               ),
               body: Column(
@@ -1181,84 +1309,141 @@ class _EditorScreenState extends State<EditorScreen> {
                   ),
                   SafeArea(
                     top: false,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.check_circle_outline,
-                            size: 16,
-                            color: nalaGreen,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child:
-                                controller.saving ||
-                                    controller.savingError != null
-                                ? Text(
-                                    controller.saving
-                                        ? 'Guardando…'
-                                        : controller.savingError != null
-                                        ? 'Guardado pendiente'
-                                        : 'Guardado en este dispositivo',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  )
-                                : CloudStatus(cloud: widget.cloud),
-                          ),
-                          ZoomControls(
-                            scale: view.scale,
-                            locked: view.zoomLocked,
-                            horizontalLocked: view.horizontalLocked,
-                            onHorizontalLock: () {
-                              router.reset();
-                              setState(
-                                () => view.horizontalLocked =
-                                    !view.horizontalLocked,
-                              );
-                            },
-                            onZoom: zoom,
-                            onScale: (value) {
-                              if (viewSize != null && !router.isWriting) {
-                                setState(
-                                  () => view.setScale(
-                                    value,
-                                    math.Point(
-                                      viewSize!.width / 2,
-                                      viewSize!.height / 2,
-                                    ),
+                    child: Material(
+                      color: Theme.of(context).colorScheme.surface,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.check_circle_outline,
+                                size: 16,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              const SizedBox(width: 8),
+                              if (MediaQuery.sizeOf(context).width >= 1100)
+                                SizedBox(
+                                  width: 180,
+                                  child:
+                                      controller.saving ||
+                                          controller.savingError != null
+                                      ? Text(
+                                          controller.saving
+                                              ? 'Guardando…'
+                                              : controller.savingError != null
+                                              ? 'Guardado pendiente'
+                                              : 'Guardado en este dispositivo',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        )
+                                      : CloudStatus(cloud: widget.cloud),
+                                ),
+                              IconButton(
+                                tooltip: 'Hoja anterior',
+                                onPressed: pageIndex > 0
+                                    ? () => changePage(pageIndex - 1)
+                                    : null,
+                                icon: const Icon(Icons.chevron_left, size: 20),
+                              ),
+                              Tooltip(
+                                message: 'Hoja actual',
+                                child: Text(
+                                  '${pageIndex + 1}/${controller.notebook.pages.length}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
                                   ),
-                                );
-                              }
-                            },
-                            onFit: () {
-                              router.reset();
-                              setState(() => fittedPage = null);
-                            },
-                            onFitWidth: () {
-                              if (viewSize != null && !router.isWriting) {
-                                setState(() {
-                                  view.fitWidth(
-                                    viewSize!.width,
-                                    viewSize!.height,
-                                    page.width,
-                                    page.height,
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Hoja siguiente',
+                                onPressed:
+                                    pageIndex + 1 <
+                                        controller.notebook.pages.length
+                                    ? () => changePage(pageIndex + 1)
+                                    : null,
+                                icon: const Icon(Icons.chevron_right, size: 20),
+                              ),
+                              if (!reading)
+                                IconButton(
+                                  tooltip: 'Agregar hoja',
+                                  onPressed: addPage,
+                                  icon: const Icon(
+                                    Icons.note_add_outlined,
+                                    size: 20,
+                                  ),
+                                ),
+                              Container(
+                                width: 1,
+                                height: 24,
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.outlineVariant,
+                              ),
+                              ZoomControls(
+                                scale: view.scale,
+                                locked: view.zoomLocked,
+                                horizontalLocked: view.horizontalLocked,
+                                onHorizontalLock: () {
+                                  router.reset();
+                                  setState(
+                                    () => view.horizontalLocked =
+                                        !view.horizontalLocked,
                                   );
-                                  view.tx -=
-                                      layout.rect(pageIndex).left * view.scale;
-                                  view.ty -=
-                                      layout.rect(pageIndex).top * view.scale;
-                                });
-                              }
-                            },
-                            onLock: () {
-                              router.reset();
-                              setState(
-                                () => view.zoomLocked = !view.zoomLocked,
-                              );
-                            },
+                                },
+                                onZoom: zoom,
+                                onScale: (value) {
+                                  if (viewSize != null && !router.isWriting) {
+                                    setState(
+                                      () => view.setScale(
+                                        value,
+                                        math.Point(
+                                          viewSize!.width / 2,
+                                          viewSize!.height / 2,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                },
+                                onFit: () {
+                                  router.reset();
+                                  setState(() => fittedPage = null);
+                                },
+                                onFitWidth: () {
+                                  if (viewSize != null && !router.isWriting) {
+                                    setState(() {
+                                      view.fitWidth(
+                                        viewSize!.width,
+                                        viewSize!.height,
+                                        page.width,
+                                        page.height,
+                                      );
+                                      view.tx -=
+                                          layout.rect(pageIndex).left *
+                                          view.scale;
+                                      view.ty -=
+                                          layout.rect(pageIndex).top *
+                                          view.scale;
+                                    });
+                                  }
+                                },
+                                onLock: () {
+                                  router.reset();
+                                  setState(
+                                    () => view.zoomLocked = !view.zoomLocked,
+                                  );
+                                },
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ),

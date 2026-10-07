@@ -6,11 +6,15 @@ Versión de prueba en desarrollo. Permite crear cuadernos, guardarlos automátic
 
 El código actual incorpora importación de PDF, anotaciones sobre sus páginas, hojas de apuntes intercaladas y exportación a PDF. Se conservan los PDF originales y los trazos editables. Los PDF protegidos piden su contraseña, que se mantiene únicamente durante la sesión. El flujo de importación, anotación, hojas intercaladas y exportación se verificó en la aplicación Linux. El selector Android aún requiere una comprobación física; ver [verificación](docs/verification.md).
 
-El editor incluye modo lectura, ajuste a hoja y ancho, porcentajes de zoom y bloqueo del zoom. Se pueden anclar comentarios de texto y notas de voz a la hoja. El audio comienza únicamente al pulsar Grabar, se puede escuchar o descartar y se detiene al pasar la app al fondo. Android usa su micrófono y Linux necesita PipeWire (pw-record/pw-play) o ALSA (arecord/aplay); los recursos se guardan como WAV mono de 16 kHz. Los comentarios permanecen editables en Nala. El PDF exportado incluye marcadores numerados y un anexo con el texto; las notas de voz se identifican con su duración y se escuchan desde Nala.
+El editor muestra las páginas una debajo de otra: podés seguir bajando sin abrir el índice. Incluye modo lectura, ajuste a hoja y ancho, porcentajes de zoom y bloqueos independientes del zoom y del movimiento horizontal. El resaltador empieza más ancho que el lápiz y cada herramienta conserva su grosor y color durante la sesión. Compartir PDF prepara una instantánea del apunte y abre directamente el selector de Android; Linux permite copiar el archivo o adjuntarlo a un correo, sin guardarlo antes manualmente.
+
+La biblioteca y el editor usan un diseño nuevo con Manrope y el logo minimalista elegido por Felipe. Desde Apariencia podés elegir Claro, Oscuro o Seguir sistema; la preferencia se conserva al reiniciar. El papel y los PDF mantienen sus colores originales. Los apuntes se pueden mover entre carpetas desde su menú de opciones.
+
+Se pueden anclar comentarios de texto y notas de voz a la hoja. El audio comienza únicamente al pulsar Grabar, se puede escuchar o descartar y se detiene al pasar la app al fondo. Android usa su micrófono y Linux necesita PipeWire (pw-record/pw-play) o ALSA (arecord/aplay); los recursos se guardan como WAV mono de 16 kHz. Los comentarios permanecen editables en Nala. El PDF exportado incluye marcadores numerados y un anexo con el texto; las notas de voz se identifican con su duración y se escuchan desde Nala.
 
 La sincronización automática con Drive está incorporada al código: carpetas, revisiones, PDF y voz, con reintentos y bibliotecas separadas por cuenta. La versión pública conserva el guardado local porque todavía necesita registrar los clientes OAuth en Google Cloud. Ver [configuración de Drive](docs/drive-setup.md) y [estado](docs/status.md).
 
-La [versión de prueba 0.2.0](https://github.com/felipendelicia/nala/releases/tag/v0.2.0) incluye estas mejoras. Descargas: [APK para la Tab S10 (Android ARM64)](https://github.com/felipendelicia/nala/releases/download/v0.2.0/Nala.apk), [Linux x64](https://github.com/felipendelicia/nala/releases/download/v0.2.0/Nala-Linux-x64.tar.gz) y [sumas de comprobación](https://github.com/felipendelicia/nala/releases/download/v0.2.0/SHA256SUMS). La primera versión corresponde al editor previo al trabajo de PDF; su APK fue probado en la tablet. Los archivos compilados se distribuyen en Releases y no se incluyen en el historial de código.
+La [versión de prueba 0.3.0](https://github.com/felipendelicia/nala/releases/tag/v0.3.0) incluye estas mejoras. Descargas: [APK para la Tab S10 (Android ARM64)](https://github.com/felipendelicia/nala/releases/download/v0.3.0/Nala.apk), [Linux x64](https://github.com/felipendelicia/nala/releases/download/v0.3.0/Nala-Linux-x64.tar.gz) y [sumas de comprobación](https://github.com/felipendelicia/nala/releases/download/v0.3.0/SHA256SUMS). La primera versión corresponde al editor previo al trabajo de PDF; su APK fue probado en la tablet. Los archivos compilados se distribuyen en Releases y no se incluyen en el historial de código.
 
 En Linux, descomprimí el paquete y ejecutá `Abrir-Nala.sh` manteniéndolo junto a `Nala-Linux/`. En Android, copiá `Nala.apk`, abrilo y permití la instalación desde la aplicación que lo abre. Es un APK de prueba firmado con una clave de desarrollo.
 
@@ -24,6 +28,7 @@ tool/flutter-safe build linux --release
 tool/flutter-safe test --no-pub --concurrency=1
 tool/flutter-safe test --no-pub integration_test/local_notebook_test.dart -d linux
 tool/flutter-safe test --no-pub integration_test/pdf_round_trip_test.dart -d linux
+tool/flutter-safe test --no-pub integration_test/appearance_share_test.dart -d linux
 tool/flutter-safe build apk --release --target-platform android-arm64
 ```
 

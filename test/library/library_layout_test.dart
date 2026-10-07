@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:apuntes/app.dart';
+import 'package:apuntes/library/library_screen.dart';
+import 'package:apuntes/ui/app_theme.dart';
 import 'package:apuntes/bootstrap.dart';
 import 'package:apuntes/document/asset_store.dart';
 import 'package:apuntes/library/library_controller.dart';
@@ -24,7 +25,18 @@ void main() {
         library: LibraryController(repository: repository, deviceId: 'pc'),
       );
       await services.library.refresh();
-      await tester.pumpWidget(NalaApp(services: services));
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: nalaTheme(brightness: Brightness.dark),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(1.5)),
+            child: child!,
+          ),
+          home: LibraryScreen(services: services),
+        ),
+      );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(find.text('Crear cuaderno'), findsOneWidget);

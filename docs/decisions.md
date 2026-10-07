@@ -12,3 +12,12 @@ El trabajo y la publicación pública se hicieron con la autorización de Felipe
 - Drive real requiere registrar clientes OAuth y comprobar dos dispositivos. El binario público funciona localmente hasta configurarlo; no contiene identificadores inventados ni afirma una conexión real verificada.
 
 La revisión independiente encontró seis problemas importantes, todos corregidos con reproducciones previas y pruebas pasando. No quedaron observaciones menores diferidas. Los resultados y los archivos de prueba se describen en [verificación](verification.md).
+
+## Editor continuo y apariencia 0.3.0
+
+- Ejecución y publicación autónomas bajo la autorización previa de Felipe. Los valores visuales elegidos pueden necesitar ajustes después de probar la tablet.
+- Páginas continuas, montando sólo las visibles. La rueda desplaza y Ctrl+rueda cambia el zoom; el coste es cambiar el comportamiento anterior de la rueda.
+- Compartir en Android abre el selector del sistema. En Linux ofrece copiar el archivo o abrir un correo con adjunto; la aplicación receptora debe aceptar archivos pegados o existir una integración de correo.
+- Compartir y diseño visual se entregan como un cambio conjunto porque comparten cabecera y biblioteca; el historial es menos granular, sin diferencia funcional.
+- Oscuro, claro o sistema se guardan como preferencia de la app. Papel y PDF conservan sus colores para mantener legibilidad y fidelidad; el papel blanco sigue siendo brillante de noche.
+- Se aplicó exactamente el logo minimalista que Felipe eligió. No se introdujo otra variante después de su aprobación.

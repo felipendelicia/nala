@@ -1,5 +1,9 @@
 # Nala
 
-Felipe eligió el nombre Nala y aportó una foto de su perrita. El icono conserva cara clara, hocico largo y orejas grandes dobladas. Fue creado con la herramienta integrada imagegen; el PNG final está en `assets/nala-icon.png`. La foto generada anterior no se utiliza en la app.
+Felipe eligió el nombre Nala y aportó una foto de su perrita blanca. La identidad conserva hocico largo y orejas grandes dobladas. En 0.3.0 eligió expresamente la segunda silueta simplificada: cara blanca sobre negro, dos ojos asimétricos y una nariz redonda. `assets/nala-icon.png` conserva exactamente el PNG aprobado; Android y Linux derivan sus iconos de ese archivo.
 
-Prompt usado: logo original minimalista de la cara de la perrita de referencia, silueta crema y detalles verde oscuro, orejas grandes con puntas plegadas y hocico alargado. Estética de mascota tecnológica como Datadog, sin copiar su logo. Fondo verde #24584b; sin texto, collar, cuerpo, parque, sombras ni textura de pelo. Composición centrada con margen para el recorte circular de Android.
+Se usó la herramienta integrada imagegen con el icono previamente derivado de la foto y el nuevo boceto de Felipe como referencias. La foto original temporal ya no estaba disponible en esta sesión; no se sustituyó por otra perrita. La foto generada anterior `assets/nala.png` no se utiliza en la app.
+
+La dirección fue: silueta frontal original de una cachorra blanca con hocico estrecho, orejas anchas con puntas plegadas hacia abajo, ojos negros asimétricos y nariz negra; solamente negro y blanco, sin pelo, líneas interiores, collar, cuerpo, texto, sombras ni detalles. El resultado elegido conserva margen para los recortes del lanzador Android. No se utilizó la tercera variante geométrica, porque Felipe eligió la segunda.
+
+La interfaz usa Manrope, distribuida bajo SIL Open Font License con su licencia y registro de cambios en assets/fonts. Los PDF usan DejaVu Sans para conservar caracteres Unicode, con su licencia incluida.

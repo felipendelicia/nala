@@ -15,6 +15,7 @@
 - Lápiz 2.5 pt grafito y resaltador 14 pt amarillo, ajustes independientes.
 - Compartir requiere acción explícita; no envío automático; temporales únicos privados y saneados.
 - Todas las tareas Flutter secuenciales mediante tool/flutter-safe.
+- Tema claro/oscuro/sistema persistido; el papel/PDF conserva sus colores. Usar exactamente el segundo logo elegido por el usuario.
 
 ## Review Focus
 
@@ -47,22 +48,22 @@ view.pan(-event.scrollDelta.dx, -event.scrollDelta.dy);
 **Files:** lib/pdf/pdf_share.dart (nuevo), lib/bootstrap.dart/library/library_screen.dart/editor/editor_screen.dart; MainActivity.kt, manifest, res/xml/nala_share_paths.xml; linux/runner/my_application.cc; test/pdf/share_test.dart, test/library/folders_test.dart, integración.
 **Interfaces:** PdfShare.share(bytes,name,target), ShareTarget {system,copyFile,email}; NativePdfShare usa tempDir/methodchannel nativos. EditorScreen optional share y AppServices share, sin cambiar DocumentFiles.
 
-- [ ] RED: PDF real enviado desde botón sin savePdf, snapshot sin duplicar ante dos toques; error muestra recuperación; archivo temporal saneado y único conservado; mover desde opciones persiste tras reabrir SQLite.
+- [x] RED: PDF real enviado desde botón sin savePdf, snapshot sin duplicar ante dos toques; error muestra recuperación; archivo temporal saneado y único conservado; mover desde opciones persiste tras reabrir SQLite.
 ```dart
 expect(files.saved, isNull);
 expect((await PdfDocument.openData(sharedBytes)).pages.length, 2);
 expect(reopened.notebook.folderId, target.id);
 ```
-- [ ] GREEN: Android FileProvider cache/nala-share limitado, ClipData/read permission, escritura fuera de main; Linux clipboard URI/gnome copied files y xdg-email adjunto; limpiar sólo temporales de más de 24 horas; crear instantánea/export en worker existente; opciones visibles para mover.
-- [ ] Verificar fronteras nativas con archivos reales/canales simulados y recorrido PDF/movimiento. Commit.
+- [x] GREEN: Android FileProvider cache/nala-share limitado, ClipData/read permission, escritura fuera de main; Linux clipboard URI/gnome copied files y xdg-email adjunto; limpiar sólo temporales de más de 24 horas; crear instantánea/export en worker existente; opciones visibles para mover.
+- [x] Verificar fronteras nativas con archivos reales/canales simulados y recorrido PDF/movimiento. Commit.
 
 ### Task 3: Diseño visual
 
 **Files:** lib/ui/app_theme.dart, assets/fonts/Manrope.ttf/licencia, pubspec.yaml, lib/editor/editor_toolbar.dart/page_panel.dart/editor_screen.dart, lib/library/library_screen.dart; pruebas de layout y capturas.
 
-- [ ] Incorporar Manrope oficial y licencia; aplicar tokens, cabecera/estuche de herramientas/pie, papel con sombra discreta, biblioteca lateral y previews. No añadir listeners al trazo ni animaciones al canvas.
-- [ ] Comprobar overflow en 800x1200/1200x800 y 1.5 texto, capturar y revisar biblioteca/editor continuo/lectura. Repetir prueba de widgets estables por muestras y observar capa activa inmediatamente.
-- [ ] Suite completa, analyze y recorridos nativos PDF/organización. Commit.
+- [x] Incorporar Manrope oficial y licencia; aplicar tokens, cabecera/estuche de herramientas/pie, papel con sombra discreta, biblioteca lateral y previews. No añadir listeners al trazo ni animaciones al canvas.
+- [x] Comprobar overflow en 800x1200/1200x800 y 1.5 texto, capturar y revisar biblioteca/editor continuo/lectura. Repetir prueba de widgets estables por muestras y observar capa activa inmediatamente.
+- [x] Suite completa, analyze y recorridos nativos PDF/organización. Commit.
 
 ### Final
 

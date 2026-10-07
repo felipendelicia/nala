@@ -22,7 +22,7 @@ class CommentsPanel extends StatelessWidget {
   final CommentAudioPlayer? player;
   @override
   Widget build(BuildContext context) => Material(
-    color: nalaBackground,
+    color: Theme.of(context).colorScheme.surface,
     child: SizedBox(
       width: 288,
       child: Column(
@@ -88,8 +88,10 @@ class CommentsPanel extends StatelessWidget {
                                     children: [
                                       Text(
                                         '${index + 1}',
-                                        style: const TextStyle(
-                                          color: nalaGreen,
+                                        style: TextStyle(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.primary,
                                           fontWeight: FontWeight.w700,
                                         ),
                                       ),

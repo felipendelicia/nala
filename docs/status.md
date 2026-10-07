@@ -2,16 +2,18 @@
 
 Nala se desarrolla para tomar apuntes universitarios con S Pen en Samsung Tab S10 y continuar en Linux. El nombre y el icono se basan en la perrita de Felipe.
 
-## Editor 0.2.0
+## Editor 0.3.0
 
-- Tinta activa incremental en su propia capa, sin reconstruir la interfaz por cada muestra del lápiz. Presión expresiva y suavizado ajustables; los trazos anteriores mantienen su aspecto.
-- Modo lectura: lápiz, dedos y mouse permiten navegar; las acciones de edición quedan deshabilitadas.
-- Ajuste a hoja y ancho, porcentajes de zoom, bloqueo de escala conservando desplazamiento.
-- Comentarios anclados a la hoja, texto editable y grabaciones de voz con guardar, escuchar y descartar. Captura sólo por acción explícita; se detiene al suspender o cerrar.
-- Carpetas y subcarpetas, rutas, renombrado y movimientos. Se rechazan ciclos y borrado de carpetas no vacías.
-- PDF original preservado, importación de páginas rotadas/protegidas, hojas intercaladas y exportación con tinta vectorial, fondos a 200 dpi y anexo de comentarios.
+- Páginas continuas al bajar, con índice opcional, hojas de tamaños mixtos y tinta local a cada página. Sólo las hojas visibles montan canvas; una prueba cubre mil páginas.
+- Tinta activa incremental en su propia capa, sin reconstruir la interfaz por muestra. Presión expresiva y suavizado ajustables; el trazo terminado reutiliza su geometría y los trazos antiguos conservan su aspecto.
+- Bloqueos independientes de movimiento horizontal y zoom. Se puede seguir bajando o saltar de hoja con ambos bloqueados.
+- Lápiz grafito de 2.5 pt y resaltador amarillo de 14 pt; grosores y colores independientes durante la sesión.
+- Diseño nuevo de biblioteca/editor, Manrope y el logo minimalista elegido por Felipe. Claro, Oscuro o Seguir sistema con preferencia guardada; las hojas y PDF conservan sus colores.
+- Compartir PDF directo desde el editor: selector Android; archivo al portapapeles o adjunto de correo Linux. Exportar una copia sigue disponible.
+- Mover/renombrar apuntes desde su menú, carpetas y subcarpetas persistidas en SQLite.
+- Lectura, comentarios de texto/voz y PDF protegido/rotado con hojas intercaladas. El PDF exportado conserva tinta vectorial y fondos a 200 dpi; comentarios en anexo y audio disponible en Nala.
 
-Pasaron 88 pruebas unitarias/widget, el análisis estático y los recorridos nativos de PDF y organización/comentarios en Linux. El recorrido de PDF también comprueba escribir durante la exportación, conservar el origen de la hoja y cancelar el selector. Las compilaciones finales Android y Linux terminaron correctamente. La interfaz fue comprobada en tamaños de escritorio y tablet, incluido texto ampliado; la versión Linux final abrió con una base de prueba aislada.
+La verificación actual y los límites se detallan en [verificación](verification.md). Las pruebas nativas se ejecutan una por proceso Flutter, manteniendo los límites de recursos.
 
 ## Verificación física pendiente
 
@@ -25,4 +27,4 @@ La versión pública todavía requiere registrar los clientes OAuth de Nala en G
 
 ## Publicación
 
-Repositorio público: [felipendelicia/nala](https://github.com/felipendelicia/nala). La [v0.2.0](https://github.com/felipendelicia/nala/releases/tag/v0.2.0) distribuye el APK Android ARM64 y la aplicación Linux x64 con sumas SHA-256. El acceso Nala del menú de esta PC abre la versión nueva. La primera [v0.1.0](https://github.com/felipendelicia/nala/releases/tag/v0.1.0) corresponde al editor anterior a PDF y a estas mejoras. No se publican cuadernos personales, bases, caches, SDK, tokens ni claves de firma.
+Repositorio público: [felipendelicia/nala](https://github.com/felipendelicia/nala). La [v0.3.0](https://github.com/felipendelicia/nala/releases/tag/v0.3.0) distribuye el APK Android ARM64 y la aplicación Linux x64 con sumas SHA-256. El acceso Nala del menú de esta PC abre la versión nueva. La primera [v0.1.0](https://github.com/felipendelicia/nala/releases/tag/v0.1.0) corresponde al editor anterior a PDF y a estas mejoras. No se publican cuadernos personales, bases, caches, SDK, tokens ni claves de firma.

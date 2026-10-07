@@ -53,8 +53,9 @@ class PageLayout {
     final i = _at(y).clamp(0, _rects.length - 1);
     if (i > 0 &&
         y < _rects[i].top &&
-        y - _rects[i - 1].bottom < _rects[i].top - y)
+        y - _rects[i - 1].bottom < _rects[i].top - y) {
       return i - 1;
+    }
     return i;
   }
 }

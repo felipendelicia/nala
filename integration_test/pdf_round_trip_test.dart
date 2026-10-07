@@ -49,107 +49,117 @@ Future<void> pumpUntil(
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-  testWidgets(
-    'importar, anotar, insertar hoja y exportar conserva el cuaderno',
-    (tester) async {
-      final dir = await Directory.systemTemp.createTemp('nala-pdf-flow-');
-      final files = TestDocumentFiles(await makeFixturePdf());
-      final services = await AppServices.open(dir.path, files: files);
-      const previewKey = ValueKey('pdf-preview');
-      await tester.pumpWidget(
-        RepaintBoundary(
-          key: previewKey,
-          child: NalaApp(services: services),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Abrir PDF'));
-      debugPrint('pdf-flow: waiting for import');
-      await pumpUntil(
-        tester,
-        () => find.byType(EditorScreen).evaluate().isNotEmpty,
-        'el editor del PDF',
-      );
-      await tester.pumpAndSettle();
-      debugPrint('pdf-flow: editor ready');
-      expect(
-        find.text('Guía'),
-        findsOneWidget,
-        reason: tester
-            .widgetList<Text>(find.byType(Text))
-            .map((text) => text.data)
-            .join(' | '),
-      );
-      final canvas = find.byType(PaperCanvas).first;
-      final center = tester.getCenter(canvas);
-      final gesture = await tester.startGesture(
-        center,
-        kind: PointerDeviceKind.stylus,
-      );
-      await gesture.moveBy(const Offset(20, 20));
-      await gesture.up();
-      await tester.pumpAndSettle();
-      debugPrint('pdf-flow: stroke drawn');
-      await captureUi(tester, find.byKey(previewKey), 'pdf-editor');
-      await tester.tap(find.byTooltip('Agregar hoja').first);
-      await tester.pumpAndSettle();
-      expect(find.text('2/3'), findsOneWidget);
-      final origin = tester.getTopLeft(canvas);
-      final whileExporting = await tester.startGesture(
-        tester.getCenter(canvas),
-        kind: PointerDeviceKind.stylus,
-        pointer: 40,
-      );
-      await whileExporting.moveBy(const Offset(10, 5));
-      await tester.tap(find.byTooltip('Exportar PDF'));
-      debugPrint('pdf-flow: export requested');
-      // The editor must remain usable while the worker prepares PDF pixels.
-      await tester.pump();
-      expect(
-        tester.getTopLeft(canvas),
-        origin,
-        reason:
-            'El aviso de exportación no debe cambiar las coordenadas del lápiz.',
-      );
-      await whileExporting.moveBy(const Offset(10, 5));
-      await whileExporting.up();
-      await tester.tap(find.byTooltip('Hoja siguiente'));
-      await tester.pump();
-      expect(find.text('3/3'), findsOneWidget);
-      final exportOrigin = tester.getTopLeft(canvas);
-      await pumpUntil(tester, () => files.saved != null, 'el PDF exportado');
-      debugPrint('pdf-flow: export received');
-      await tester.pumpAndSettle(
-        const Duration(milliseconds: 100),
-        EnginePhase.sendSemanticsUpdate,
-        const Duration(seconds: 60),
-      );
-      expect(files.saved, isNotNull);
-      expect(tester.getTopLeft(canvas), exportOrigin);
-      await captureUi(tester, find.byKey(previewKey), 'pdf-navigation');
-      final output = await PdfDocument.openData(files.saved!);
-      expect(output.pages.length, 3);
-      await output.dispose();
-      files.cancelSave = true;
-      await tester.tap(find.byTooltip('Exportar PDF'));
-      await tester.pumpAndSettle(
-        const Duration(milliseconds: 100),
-        EnginePhase.sendSemanticsUpdate,
-        const Duration(seconds: 60),
-      );
-      await tester.tap(find.byTooltip('Volver a mis apuntes'));
-      await tester.pumpAndSettle();
-      final saved = (await services.repository.list()).single.notebook;
-      expect(saved.pages, hasLength(3));
-      expect(saved.pages[0].strokes, hasLength(1));
-      expect(saved.pages[0].background.pageNumber, 1);
-      expect(saved.pages[1].background.pattern, isNotNull);
-      expect(saved.pages[1].strokes, hasLength(1));
-      expect(saved.pages[2].background.pageNumber, 2);
-      await tester.pumpWidget(const SizedBox.shrink());
-      await services.close();
-      debugPrint('pdf-flow: services closed');
-      await dir.delete(recursive: true);
-    },
-  );
+  testWidgets('importar, anotar, insertar hoja y exportar conserva el cuaderno', (
+    tester,
+  ) async {
+    final dir = await Directory.systemTemp.createTemp('nala-pdf-flow-');
+    final files = TestDocumentFiles(await makeFixturePdf());
+    final services = await AppServices.open(dir.path, files: files);
+    const previewKey = ValueKey('pdf-preview');
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: previewKey,
+        child: NalaApp(services: services),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Abrir PDF'));
+    debugPrint('pdf-flow: waiting for import');
+    await pumpUntil(
+      tester,
+      () => find.byType(EditorScreen).evaluate().isNotEmpty,
+      'el editor del PDF',
+    );
+    await tester.pumpAndSettle();
+    debugPrint('pdf-flow: editor ready');
+    expect(
+      find.text('Guía'),
+      findsOneWidget,
+      reason: tester
+          .widgetList<Text>(find.byType(Text))
+          .map((text) => text.data)
+          .join(' | '),
+    );
+    final firstPageId = services.library.entries.single.notebook.pages.first.id;
+    var canvas = find.byKey(ValueKey('canvas-$firstPageId'));
+    final center = tester.getCenter(canvas);
+    final gesture = await tester.startGesture(
+      center,
+      kind: PointerDeviceKind.stylus,
+    );
+    await gesture.moveBy(const Offset(20, 20));
+    await gesture.up();
+    await tester.pumpAndSettle();
+    debugPrint('pdf-flow: stroke drawn');
+    await captureUi(tester, find.byKey(previewKey), 'pdf-editor');
+    await tester.tap(find.byTooltip('Agregar hoja').first);
+    await tester.pumpAndSettle();
+    expect(find.text('2/3'), findsOneWidget);
+    // Inserted paper has its own local origin even while page 1 is partly visible.
+    canvas = find.byWidgetPredicate(
+      (widget) =>
+          widget is PaperCanvas && widget.page.background.pattern != null,
+    );
+    final origin = tester.getTopLeft(canvas);
+    final whileExporting = await tester.startGesture(
+      tester.getCenter(canvas),
+      kind: PointerDeviceKind.stylus,
+      pointer: 40,
+    );
+    await whileExporting.moveBy(const Offset(10, 5));
+    await tester.tap(find.byTooltip('Exportar PDF'));
+    debugPrint('pdf-flow: export requested');
+    // The editor must remain usable while the worker prepares PDF pixels.
+    await tester.pump();
+    expect(
+      tester.getTopLeft(canvas),
+      origin,
+      reason:
+          'El aviso de exportación no debe cambiar las coordenadas del lápiz.',
+    );
+    await whileExporting.moveBy(const Offset(10, 5));
+    await whileExporting.up();
+    await tester.tap(find.byTooltip('Hoja siguiente'));
+    await tester.pump();
+    expect(find.text('3/3'), findsOneWidget);
+    canvas = find.byKey(
+      ValueKey(
+        'canvas-${services.library.entries.single.notebook.pages.last.id}',
+      ),
+    );
+    final exportOrigin = tester.getTopLeft(canvas);
+    await pumpUntil(tester, () => files.saved != null, 'el PDF exportado');
+    debugPrint('pdf-flow: export received');
+    await tester.pumpAndSettle(
+      const Duration(milliseconds: 100),
+      EnginePhase.sendSemanticsUpdate,
+      const Duration(seconds: 60),
+    );
+    expect(files.saved, isNotNull);
+    expect(tester.getTopLeft(canvas), exportOrigin);
+    await captureUi(tester, find.byKey(previewKey), 'pdf-navigation');
+    final output = await PdfDocument.openData(files.saved!);
+    expect(output.pages.length, 3);
+    await output.dispose();
+    files.cancelSave = true;
+    await tester.tap(find.byTooltip('Exportar PDF'));
+    await tester.pumpAndSettle(
+      const Duration(milliseconds: 100),
+      EnginePhase.sendSemanticsUpdate,
+      const Duration(seconds: 60),
+    );
+    await tester.tap(find.byTooltip('Volver a mis apuntes'));
+    await tester.pumpAndSettle();
+    final saved = (await services.repository.list()).single.notebook;
+    expect(saved.pages, hasLength(3));
+    expect(saved.pages[0].strokes, hasLength(1));
+    expect(saved.pages[0].background.pageNumber, 1);
+    expect(saved.pages[1].background.pattern, isNotNull);
+    expect(saved.pages[1].strokes, hasLength(1));
+    expect(saved.pages[2].background.pageNumber, 2);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await services.close();
+    debugPrint('pdf-flow: services closed');
+    await dir.delete(recursive: true);
+  });
 }

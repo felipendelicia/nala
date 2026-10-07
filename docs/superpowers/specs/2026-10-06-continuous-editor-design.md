@@ -29,3 +29,7 @@ Pruebas de cámara/bloqueos, scroll y escritura en la segunda página, tamaños 
 La sensación física y latencia del S Pen requieren la Tab S10. No se afirma equivalencia física con Notewise. Drive no cambia su configuración externa.
 
 Referencias de implementación: [FileProvider](https://developer.android.com/reference/androidx/core/content/FileProvider), [Manrope/OFL](https://github.com/google/fonts/tree/main/ofl/manrope). Linux no tiene un panel general de compartir equivalente al de Android; se presentan destinos disponibles con nombres explícitos.
+
+## Ampliaciones del usuario
+
+Se agrega tema claro/oscuro/sistema con preferencia persistente. Se oscurecen biblioteca, barras, controles y superficie del editor; las hojas mantienen los colores del documento/PDF. El logo definitivo es la silueta blanca sobre negro que el usuario aprobó explícitamente (adjunto e66b4419), incorporada tal cual. Se regeneran iconos de Android y el icono Linux.
