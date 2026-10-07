@@ -14,7 +14,7 @@ Se pueden anclar comentarios de texto y notas de voz a la hoja. El audio comienz
 
 La sincronización automática con Drive está incorporada al código: carpetas, revisiones, PDF y voz, con reintentos y bibliotecas separadas por cuenta. La versión pública conserva el guardado local porque todavía necesita registrar los clientes OAuth en Google Cloud. Ver [configuración de Drive](docs/drive-setup.md) y [estado](docs/status.md).
 
-La [versión de prueba 0.3.0](https://github.com/felipendelicia/nala/releases/tag/v0.3.0) incluye estas mejoras. Descargas: [APK para la Tab S10 (Android ARM64)](https://github.com/felipendelicia/nala/releases/download/v0.3.0/Nala.apk), [Linux x64](https://github.com/felipendelicia/nala/releases/download/v0.3.0/Nala-Linux-x64.tar.gz) y [sumas de comprobación](https://github.com/felipendelicia/nala/releases/download/v0.3.0/SHA256SUMS). La primera versión corresponde al editor previo al trabajo de PDF; su APK fue probado en la tablet. Los archivos compilados se distribuyen en Releases y no se incluyen en el historial de código.
+La [versión de prueba 0.4.0](https://github.com/felipendelicia/nala/releases/tag/v0.4.0) incluye estas mejoras. Descargas: [APK para la Tab S10 (Android ARM64)](https://github.com/felipendelicia/nala/releases/download/v0.4.0/Nala.apk), [Linux x64](https://github.com/felipendelicia/nala/releases/download/v0.4.0/Nala-Linux-x64.tar.gz) y [sumas de comprobación](https://github.com/felipendelicia/nala/releases/download/v0.4.0/SHA256SUMS). La primera versión corresponde al editor previo al trabajo de PDF; su APK fue probado en la tablet. Los archivos compilados se distribuyen en Releases y no se incluyen en el historial de código.
 
 En Linux, descomprimí el paquete y ejecutá `Abrir-Nala.sh` manteniéndolo junto a `Nala-Linux/`. En Android, copiá `Nala.apk`, abrilo y permití la instalación desde la aplicación que lo abre. Es un APK de prueba firmado con una clave de desarrollo.
 
@@ -29,12 +29,15 @@ tool/flutter-safe test --no-pub --concurrency=1
 tool/flutter-safe test --no-pub integration_test/local_notebook_test.dart -d linux
 tool/flutter-safe test --no-pub integration_test/pdf_round_trip_test.dart -d linux
 tool/flutter-safe test --no-pub integration_test/appearance_share_test.dart -d linux
+tool/flutter-safe test --no-pub integration_test/spen_fluency_test.dart -d linux
 tool/flutter-safe build apk --release --target-platform android-arm64
 ```
 
 `tool/flutter-safe` ejecuta las tareas de a una dentro de un servicio con un límite total de 2300 MiB de RAM, 256 MiB de swap y dos CPU. Requiere Linux con una sesión systemd de usuario. Gradle además tiene un límite de heap de 640 MiB, un solo worker y no deja un daemon persistente. La compilación de Linux usa Ninja con un solo trabajo. Estos límites se añadieron para una PC de 7.5 GiB de RAM. No ejecutar tareas de Flutter por fuera del script al mismo tiempo que se genera el APK.
 
 La compilación Linux debe preceder a las pruebas de PDF: les proporciona la biblioteca nativa PDFium real. Requisitos de las plataformas y detalles del entorno en [compilación](docs/build-notes.md).
+
+Los ajustes de **Lápiz y S Pen** permiten configurar el botón (goma, resaltador, lápiz, selección o desactivado), mantenerlo apretado o alternar, y guardar presión y suavizado. Por defecto: presión 100%, suavizado 0%, mantener para borrar. Detalles y límites de la verificación en [S Pen](docs/spen.md).
 
 El icono está basado en la perrita de Felipe; ver [branding](docs/branding.md).
 

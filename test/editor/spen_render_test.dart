@@ -50,6 +50,43 @@ void main() {
     ink.dispose();
   });
   test(
+    'repintar tinta densa no engrosa bordes por acumulación de antialias',
+    () async {
+      final ink = DraftInk();
+      ink.begin(
+        const InkPoint(x: 10, y: 64.4, pressure: 1),
+        tool: InkTool.pen,
+        argb: 0xff000000,
+        width: 2,
+        pressureCurve: PressureCurve.uniform,
+        stabilization: 0,
+        rasterBounds: const Rect.fromLTWH(0, 0, 600, 600),
+      );
+      for (var i = 1; i <= 1000; i++) {
+        ink.add(InkPoint(x: 10 + i * .2, y: 64.4, pressure: 1));
+        if (i % 16 == 0) (await render(ink)).dispose();
+      }
+      final live = await render(ink);
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      canvas.drawPath(ink.path, Paint()..color = Colors.black);
+      final picture = recorder.endRecording();
+      final vector = await picture.toImage(600, 600);
+      for (final y in [63, 64, 65]) {
+        expect(
+          (await alpha(live, 100, y) - (await alpha(vector, 100, y))).abs(),
+          lessThan(8),
+          reason:
+              'La misma cobertura debe verse igual durante el trazo y al soltarlo.',
+        );
+      }
+      picture.dispose();
+      live.dispose();
+      vector.dispose();
+      ink.dispose();
+    },
+  );
+  test(
     'al ampliar la hoja la tinta activa mantiene resolución de pantalla',
     () async {
       final ink = DraftInk();
@@ -63,7 +100,9 @@ void main() {
         rasterBounds: const Rect.fromLTWH(0, 0, 64, 64),
         rasterScale: 8,
       );
-      ink.add(const InkPoint(x: 50, y: 13.37, pressure: 1));
+      for (var i = 1; i <= 120; i++) {
+        ink.add(InkPoint(x: 5 + 45 * i / 120, y: 13.37, pressure: 1));
+      }
       Future<ui.Image> picture(bool raster) async {
         final r = ui.PictureRecorder();
         final canvas = Canvas(r)..scale(8);

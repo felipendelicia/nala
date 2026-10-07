@@ -11,6 +11,8 @@ class DraftInk extends ChangeNotifier {
   InkStroke? _style;
   double _stabilization = 0;
   LiveInkRaster? _raster;
+  Rect? _rasterBounds;
+  double _rasterScale = 1;
   Path get path => _path;
   List<InkPoint> get points => UnmodifiableListView(_points);
   bool get isEmpty => _points.isEmpty;
@@ -34,9 +36,9 @@ class DraftInk extends ChangeNotifier {
     double rasterScale = 1,
   }) {
     _raster?.dispose();
-    _raster = rasterBounds == null
-        ? null
-        : LiveInkRaster(bounds: rasterBounds, scale: rasterScale);
+    _raster = null;
+    _rasterBounds = rasterBounds;
+    _rasterScale = rasterScale;
     _points.clear();
     _path = Path();
     _stabilization = stabilization.clamp(0, .4);
@@ -70,7 +72,12 @@ class DraftInk extends ChangeNotifier {
       if (corners != null) segment.addPolygon(corners, true);
     }
     _path.addPath(segment, Offset.zero);
-    _raster?.add(segment);
+    if (_raster == null && _rasterBounds != null && _points.length == 95) {
+      _raster = LiveInkRaster(bounds: _rasterBounds!, scale: _rasterScale)
+        ..add(_path);
+    } else {
+      _raster?.add(segment);
+    }
     _points.add(point);
   }
 
@@ -130,6 +137,7 @@ class DraftInk extends ChangeNotifier {
   void cancel() {
     _raster?.dispose();
     _raster = null;
+    _rasterBounds = null;
     _points.clear();
     _path = Path();
     _style = null;

@@ -3,7 +3,8 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 /// A transparent, opaque-white mask for one active stroke. Only tiles touched
-/// since the last frame receive new geometry. Stroke alpha is applied once when
+/// since the last frame are rasterized. Each keeps its vector union so repeated
+/// edge coverage cannot accumulate antialias opacity. Stroke alpha is applied once when
 /// compositing the mask, including at crossings and shared tile edges.
 class LiveInkRaster {
   LiveInkRaster({required this.bounds, required double scale})
@@ -13,7 +14,7 @@ class LiveInkRaster {
       );
   final Rect bounds;
   final double scale;
-  double get tileSize => 256 / scale;
+  double get tileSize => 128 / scale;
   final _tiles = <(int, int), _Tile>{};
 
   void add(Path segment) {
@@ -40,7 +41,7 @@ class LiveInkRaster {
             ).intersect(bounds),
           ),
         );
-        tile.pending.addPath(segment, Offset.zero);
+        tile.outline.addPath(segment, Offset.zero);
         tile.dirty = true;
       }
     }
@@ -83,18 +84,17 @@ class LiveInkRaster {
 class _Tile {
   _Tile(this.bounds);
   final Rect bounds;
-  Path pending = Path();
+  final Path outline = Path();
   bool dirty = false;
   Image? image;
   void rasterize(double scale) {
     final recorder = PictureRecorder();
     final canvas = Canvas(recorder);
     final previous = image;
-    if (previous != null) canvas.drawImage(previous, Offset.zero, Paint());
     canvas.translate(2, 2);
     canvas.scale(scale);
     canvas.translate(-bounds.left, -bounds.top);
-    canvas.drawPath(pending, Paint()..color = const Color(0xffffffff));
+    canvas.drawPath(outline, Paint()..color = const Color(0xffffffff));
     final picture = recorder.endRecording();
     image = picture.toImageSync(
       (bounds.width * scale).ceil() + 4,
@@ -102,7 +102,6 @@ class _Tile {
     );
     picture.dispose();
     previous?.dispose();
-    pending = Path();
     dirty = false;
   }
 }
