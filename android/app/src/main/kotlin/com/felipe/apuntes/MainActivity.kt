@@ -17,8 +17,8 @@ class MainActivity : FlutterActivity() {
     private var stylusChannel: MethodChannel? = null
     private var stylusListening = false
     private var stylusPressed = false
-    private data class PendingPdf(val bytes: ByteArray, val result: MethodChannel.Result)
-    private var pending: PendingPdf? = null
+    private data class PendingDocument(val bytes: ByteArray, val result: MethodChannel.Result)
+    private var pending: PendingDocument? = null
     private val writer = Executors.newSingleThreadExecutor()
     private val saveRequest = 40731
 
@@ -103,20 +103,26 @@ class MainActivity : FlutterActivity() {
         audio = AudioBridge(this)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nala/audio").setMethodCallHandler(audio)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nala/files").setMethodCallHandler { call, result ->
-            if (call.method != "savePdf") {
+            if (call.method != "savePdf" && call.method != "saveDocument") {
                 result.notImplemented()
             } else if (pending != null) {
-                result.error("BUSY", "Ya hay un PDF en preparación.", null)
+                result.error("BUSY", "Ya hay un archivo en preparación.", null)
             } else {
                 val bytes = call.argument<ByteArray>("bytes")
                 if (bytes == null || bytes.isEmpty()) {
-                    result.error("INVALID_PDF", "El PDF está vacío.", null)
+                    result.error("INVALID_DOCUMENT", "El archivo está vacío.", null)
                 } else {
-                    pending = PendingPdf(bytes, result)
-                    val name = call.argument<String>("name") ?: "Nala.pdf"
+                    val mimeType = if (call.method == "savePdf") "application/pdf"
+                        else call.argument<String>("mimeType") ?: "application/zip"
+                    if (mimeType != "application/pdf" && mimeType != "application/zip") {
+                        result.error("INVALID_TYPE", "Tipo de archivo no compatible.", null)
+                        return@setMethodCallHandler
+                    }
+                    pending = PendingDocument(bytes, result)
+                    val name = call.argument<String>("name") ?: if (mimeType == "application/zip") "Nala.nala.zip" else "Nala.pdf"
                     val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                         addCategory(Intent.CATEGORY_OPENABLE)
-                        type = "application/pdf"
+                        type = mimeType
                         putExtra(Intent.EXTRA_TITLE, name)
                     }
                     try { startActivityForResult(intent, saveRequest) }
@@ -151,7 +157,7 @@ class MainActivity : FlutterActivity() {
                 runOnUiThread {
                     if (pending === current) {
                         pending = null
-                        current.result.error("SAVE_FAILED", "No se pudo guardar el PDF.", null)
+                        current.result.error("SAVE_FAILED", "No se pudo guardar el archivo.", null)
                     }
                 }
             }

@@ -6,6 +6,12 @@ import '../document/notebook_recording.dart';
 import 'stroke_geometry.dart';
 
 class SelectionOperations {
+  static Set<String> editableIds(NotebookPage page, Set<String> ids) => {
+    for (final stroke in page.strokes)
+      if (ids.contains(stroke.id)) stroke.id,
+    for (final object in page.objects)
+      if (!object.locked && ids.contains(object.id)) object.id,
+  };
   static Rect objectBounds(PageObject o) {
     final center = Offset(o.x + o.width / 2, o.y + o.height / 2);
     final c = math.cos(o.rotation).abs(), s = math.sin(o.rotation).abs();
@@ -35,18 +41,21 @@ class SelectionOperations {
     for (final s in page.strokes)
       if (StrokeGeometry.bounds(s).overlaps(rect)) s.id,
     for (final o in page.objects)
-      if (objectBounds(o).overlaps(rect)) o.id,
+      if (!o.locked && objectBounds(o).overlaps(rect)) o.id,
   };
   static NotebookPage remove(NotebookPage page, Set<String> ids) =>
       page.copyWith(
         strokes: page.strokes.where((s) => !ids.contains(s.id)).toList(),
-        objects: page.objects.where((o) => !ids.contains(o.id)).toList(),
+        objects: page.objects
+            .where((o) => o.locked || !ids.contains(o.id))
+            .toList(),
       );
   static NotebookPage translate(
     NotebookPage page,
     Set<String> ids,
     Offset delta,
   ) {
+    ids = editableIds(page, ids);
     final r = bounds(page, ids);
     if (r == null) return page;
     // Content can be larger than the paper; keep at least its origin reachable.
@@ -85,7 +94,10 @@ class SelectionOperations {
             .toList(),
         objects: page.objects
             .map(
-              (o) => ids.contains(o.id) && o.kind == PageObjectKind.text
+              (o) =>
+                  !o.locked &&
+                      ids.contains(o.id) &&
+                      o.kind == PageObjectKind.text
                   ? o.copyWith(argb: color)
                   : o,
             )
@@ -95,6 +107,7 @@ class SelectionOperations {
     if (!factor.isFinite || factor <= 0 || factor > 8) {
       throw ArgumentError.value(factor);
     }
+    ids = editableIds(page, ids);
     final r = bounds(page, ids);
     if (r == null) return page;
     final origin = r.topLeft;
@@ -137,6 +150,8 @@ class SelectionOperations {
     Set<String> ids,
     double radians,
   ) {
+    if (!radians.isFinite) throw ArgumentError.value(radians);
+    ids = editableIds(page, ids);
     final r = bounds(page, ids);
     if (r == null) return page;
     Offset rotatePoint(Offset p) {
@@ -193,7 +208,9 @@ class SelectionClipboard {
     NotebookPage page,
     Set<String> ids, {
     List<NotebookRecording> recordings = const [],
+    bool forCut = false,
   }) {
+    if (forCut) ids = SelectionOperations.editableIds(page, ids);
     _strokes = page.strokes.where((s) => ids.contains(s.id)).toList();
     _objects = page.objects.where((o) => ids.contains(o.id)).toList();
     _bounds = SelectionOperations.bounds(page, ids);
@@ -224,7 +241,7 @@ class SelectionClipboard {
     final objects = _objects.map((o) {
       final id = newId();
       ids.add(id);
-      return o.copyWith(id: id);
+      return o.copyWith(id: id, locked: false);
     }).toList();
     return SelectionOperations.translate(
       page.copyWith(

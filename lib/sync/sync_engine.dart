@@ -16,8 +16,10 @@ Set<String> notebookAssets(Notebook notebook) => {
     if (page.background.assetId != null) page.background.assetId!,
     for (final comment in page.comments)
       if (comment.audioAssetId != null) comment.audioAssetId!,
-    for (final object in page.objects)
+    for (final object in page.objects) ...[
       if (object.assetId != null) object.assetId!,
+      if (object.originalAssetId != null) object.originalAssetId!,
+    ],
   ],
 };
 

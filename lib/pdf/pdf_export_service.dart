@@ -90,7 +90,7 @@ class PdfExportService {
           }
         }
         for (final object in page.objects) {
-          if (object.kind == PageObjectKind.image &&
+          if (object.kind != PageObjectKind.text &&
               !images.containsKey(object.assetId)) {
             images[object.assetId!] = await pdf.assets.read(object.assetId!);
           }
@@ -178,22 +178,28 @@ Future<Uint8List> _composePdf(
                   child: pw.SizedBox(
                     width: object.width,
                     height: object.height,
-                    child: pw.ClipRect(
-                      child: object.kind == PageObjectKind.image
-                          ? pw.Image(
-                              pw.MemoryImage(request.images[object.assetId]!),
-                              fit: pw.BoxFit.fill,
-                            )
-                          : pw.Align(
-                              alignment: pw.Alignment.topLeft,
-                              child: pw.Text(
-                                object.text,
-                                style: pw.TextStyle(
-                                  fontSize: object.fontSize,
-                                  color: PdfColor.fromInt(object.argb),
+                    child: pw.Opacity(
+                      opacity: object.opacity,
+                      child: pw.ClipRect(
+                        child: object.kind != PageObjectKind.text
+                            ? pw.Image(
+                                pw.MemoryImage(request.images[object.assetId]!),
+                                fit: pw.BoxFit.fill,
+                              )
+                            : pw.Align(
+                                alignment: pw.Alignment.topLeft,
+                                child: pw.Text(
+                                  object.text,
+                                  style: pw.TextStyle(
+                                    fontSize: object.fontSize,
+                                    decoration: object.link == null
+                                        ? null
+                                        : pw.TextDecoration.underline,
+                                    color: PdfColor.fromInt(object.argb),
+                                  ),
                                 ),
                               ),
-                            ),
+                      ),
                     ),
                   ),
                 ),

@@ -82,4 +82,10 @@ class PenPreferencesController {
       await staged.rename(file.path);
     });
   }
+
+  Future<void> reload() async {
+    await _writes;
+    final restored = await open(file.parent.path);
+    value = restored.value;
+  }
 }

@@ -53,6 +53,23 @@ class TemplateStore {
   static final Map<String, Future<void>> _queues = {};
   Future<void> get _tail => _queues[_file.absolute.path] ?? Future.value();
   set _tail(Future<void> value) => _queues[_file.absolute.path] = value;
+  static Future<T> withRegistryLock<T>(
+    String root,
+    Future<T> Function() operation,
+  ) {
+    final key = File(
+      path.join(root, 'templates', 'registry.json'),
+    ).absolute.path;
+    final result = (_queues[key] ?? Future<void>.value()).then(
+      (_) => operation(),
+    );
+    _queues[key] = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return result;
+  }
+
   static const _labels = {
     'blank': 'En blanco',
     'ruled': 'Rayada',

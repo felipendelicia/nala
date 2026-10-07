@@ -15,11 +15,19 @@ abstract interface class DocumentFiles {
 
 class AndroidDocumentSaver {
   static const _channel = MethodChannel('nala/files');
-  Future<bool> save(Uint8List bytes, {required String name}) async =>
-      await _channel.invokeMethod<bool>('savePdf', {
-        'bytes': bytes,
-        'name': name,
-      }) ??
+  Future<bool> save(
+    Uint8List bytes, {
+    required String name,
+    String mimeType = 'application/pdf',
+  }) async =>
+      await _channel.invokeMethod<bool>(
+        mimeType == 'application/pdf' ? 'savePdf' : 'saveDocument',
+        {
+          'bytes': bytes,
+          'name': name,
+          if (mimeType != 'application/pdf') 'mimeType': mimeType,
+        },
+      ) ??
       false;
 }
 

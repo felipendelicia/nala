@@ -6,11 +6,14 @@ import '../document/notebook_repository.dart';
 import '../document/revision.dart';
 import '../editor/editor_controller.dart';
 import '../editor/editor_screen.dart';
+import '../document/page_link.dart';
 
 class WorkspaceTab {
   WorkspaceTab({required this.controller, this.initialPageIndex = 0});
   final EditorController controller;
   final int initialPageIndex;
+  String? requestedPageId;
+  int navigationRequest = 0;
   String get id => controller.notebook.id;
   Future<void> Function()? prepareClose;
 }
@@ -55,6 +58,28 @@ class DocumentWorkspace extends ChangeNotifier {
     _tabs.add(tab);
     select(tab.id);
     return tab;
+  }
+
+  Future<bool> openLink(PageLink link) async {
+    var tab = _tabs.where((t) => t.id == link.notebookId).firstOrNull;
+    if (tab != null) {
+      if (!tab.controller.notebook.pages.any((p) => p.id == link.pageId)) {
+        return false;
+      }
+      select(tab.id);
+    } else {
+      final entry = (await repository.list())
+          .where((e) => e.notebook.id == link.notebookId)
+          .firstOrNull;
+      if (entry == null) return false;
+      final index = entry.notebook.pages.indexWhere((p) => p.id == link.pageId);
+      if (index < 0) return false;
+      tab = open(entry, initialPageIndex: index);
+    }
+    tab.requestedPageId = link.pageId;
+    tab.navigationRequest++;
+    notifyListeners();
+    return true;
   }
 
   void select(String id) {
@@ -190,6 +215,20 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     } else {
       workspace.splitWith(other.id);
     }
+  }
+
+  Future<void> _openLink(PageLink link) async {
+    try {
+      final found = await workspace.openLink(link);
+      if (!mounted || found) return;
+    } catch (_) {
+      if (!mounted) return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('El apunte o la página de destino no está disponible.'),
+      ),
+    );
   }
 
   void _error() {
@@ -402,6 +441,13 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                                           initialPageIndex:
                                               tab.initialPageIndex,
                                           storageRoot: widget.services.root,
+                                          toolbarPreferences: widget
+                                              .services
+                                              .toolbarPreferences,
+                                          onOpenLink: _openLink,
+                                          requestedPageId: tab.requestedPageId,
+                                          navigationRequest:
+                                              tab.navigationRequest,
                                           penPreferences:
                                               widget.services.penPreferences,
                                           pdf: widget.services.pdf,

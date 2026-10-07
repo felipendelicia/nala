@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import 'package:pdfrx_engine/pdfrx_engine.dart' show PdfPasswordException;
 import '../bootstrap.dart';
+import '../backup/backup_dialog.dart';
+import '../backup/backup_files.dart';
+import '../backup/backup_service.dart';
 import '../document/notebook.dart';
 import '../document/revision.dart';
 import '../document/folders.dart';
@@ -23,9 +26,15 @@ import '../account/cloud_controller.dart';
 import '../account/cloud_panel.dart';
 
 class LibraryScreen extends StatefulWidget {
-  const LibraryScreen({super.key, required this.services, this.cloud});
+  const LibraryScreen({
+    super.key,
+    required this.services,
+    this.cloud,
+    this.backupFiles,
+  });
   final AppServices services;
   final CloudController? cloud;
+  final BackupFiles? backupFiles;
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
 }
@@ -107,6 +116,29 @@ class _LibraryScreenState extends State<LibraryScreen> {
         .where((e) => e.notebook.id == hit.notebookId)
         .firstOrNull;
     if (entry != null) await _open(entry, initialPageIndex: hit.pageIndex);
+  }
+
+  Future<void> _backup() async {
+    final services = widget.services;
+    final result = await showBackupDialog(
+      context,
+      service: BackupService(
+        root: services.root,
+        repository: services.repository,
+        assets: services.assets,
+        deviceId: services.deviceId,
+        appearanceFile: AppearanceScope.of(context)?.file,
+      ),
+      files: widget.backupFiles ?? NativeBackupFiles(),
+      onRestored: (result) async {
+        await services.library.refresh();
+        if (result.preferencesRestored) {
+          await services.toolbarPreferences?.reload();
+          await services.penPreferences?.reload();
+        }
+      },
+    );
+    if (result != null && mounted) _navigate(result.recoveryFolderId);
   }
 
   Future<void> _create() async {
@@ -298,6 +330,24 @@ class _LibraryScreenState extends State<LibraryScreen> {
               tooltip: 'Buscar en todos los apuntes',
               onPressed: _search,
               icon: const Icon(Icons.manage_search_outlined),
+            ),
+            PopupMenuButton<String>(
+              tooltip: 'Más opciones de la biblioteca',
+              onSelected: (action) {
+                if (action == 'backup') _backup();
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: 'backup',
+                  child: Row(
+                    children: [
+                      Icon(Icons.backup_outlined, size: 20),
+                      SizedBox(width: 12),
+                      Text('Backup de la biblioteca'),
+                    ],
+                  ),
+                ),
+              ],
             ),
             const AppearanceButton(),
             if (widget.cloud != null)

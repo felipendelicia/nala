@@ -21,4 +21,27 @@ void main() {
     expect(received!.arguments['name'], 'Guía.pdf');
     expect(received!.arguments['bytes'], bytes);
   });
+  test(
+    'backup save passes ZIP MIME through the native document handler',
+    () async {
+      MethodCall? received;
+      const channel = MethodChannel('nala/files');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        received = call;
+        return true;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final saved = await AndroidDocumentSaver().save(
+        Uint8List.fromList([80, 75]),
+        name: 'Nala.nala.zip',
+        mimeType: 'application/zip',
+      );
+      expect(saved, isTrue);
+      expect(received!.method, 'saveDocument');
+      expect(received!.arguments['mimeType'], 'application/zip');
+      expect(received!.arguments['name'], 'Nala.nala.zip');
+    },
+  );
 }

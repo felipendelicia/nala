@@ -174,6 +174,38 @@ class SqliteNotebookRepository implements NotebookRepository, FolderRepository {
     onLocalChange?.call();
   }
 
+  /// One worker request reads a consistent logical snapshot, including all
+  /// retained histories and tombstones needed by older notebook revisions.
+  Future<NotebookSnapshot> snapshot() async {
+    final value = (await _call('snapshot')) as Map;
+    return NotebookSnapshot(
+      revisions: (value['revisions'] as List).cast<Revision>(),
+      folders: (value['folders'] as List)
+          .cast<String>()
+          .map(
+            (s) => NoteFolder.fromJson(jsonDecode(s) as Map<String, dynamic>),
+          )
+          .toList(),
+    );
+  }
+
+  /// Recovery never exposes half a folder tree or uploads half a notebook DAG.
+  Future<void> importBatch({
+    required List<NoteFolder> folders,
+    required List<Revision> revisions,
+  }) async {
+    await _call('importBatch', {
+      'folders': folders.map((f) => jsonEncode(f.toJson())).toList(),
+      'revisions': revisions.map(NotebookCodec.encodeRevision).toList(),
+    });
+    try {
+      onLocalChange?.call();
+    } on Object {
+      // The transaction has committed. A notification failure must not make
+      // recovery roll back its registries while the notebooks remain saved.
+    }
+  }
+
   @override
   Future<void> close() async {
     if (_closed) return;
@@ -222,6 +254,127 @@ void _databaseWorker((SendPort, String) config) {
       }
       Object? result;
       switch (request['op']) {
+        case 'snapshot':
+          result = _transaction(
+            db,
+            () => {
+              'revisions': db
+                  .select('SELECT payload FROM revisions ORDER BY rowid')
+                  .map(
+                    (r) => NotebookCodec.decodeRevision(r['payload'] as String),
+                  )
+                  .toList(),
+              'folders': db
+                  .select('SELECT * FROM folders')
+                  .map(
+                    (r) => jsonEncode({
+                      'id': r['id'],
+                      'name': r['name'],
+                      'parentId': r['parent_id'],
+                      'updatedAt': r['updated_at'],
+                      'deleted': r['deleted'] == 1,
+                    }),
+                  )
+                  .toList(),
+            },
+          );
+        case 'importBatch':
+          _transaction(db, () {
+            final folders = (request['folders'] as List)
+                .cast<String>()
+                .map(
+                  (s) => NoteFolder.fromJson(
+                    jsonDecode(s) as Map<String, dynamic>,
+                  ),
+                )
+                .toList();
+            final revisions = (request['revisions'] as List)
+                .cast<String>()
+                .map(NotebookCodec.decodeRevision)
+                .toList();
+            final catalog = <String, String?>{
+              for (final r in db.select(
+                'SELECT id,parent_id FROM folders WHERE deleted=0',
+              ))
+                r['id'] as String: r['parent_id'] as String?,
+            };
+            final folderIds = <String>{};
+            for (final folder in folders) {
+              if (folder.id.trim().isEmpty ||
+                  folder.name.trim().isEmpty ||
+                  folder.deleted ||
+                  !folderIds.add(folder.id) ||
+                  db.select('SELECT id FROM folders WHERE id=?', [
+                    folder.id,
+                  ]).isNotEmpty) {
+                throw StateError(
+                  'Carpeta de recuperación inválida o existente',
+                );
+              }
+              catalog[folder.id] = folder.parentId;
+            }
+            for (final folder in folders) {
+              final seen = <String>{folder.id};
+              var parent = folder.parentId;
+              while (parent != null) {
+                if (!catalog.containsKey(parent) || !seen.add(parent)) {
+                  throw StateError('Árbol de recuperación inválido');
+                }
+                parent = catalog[parent];
+              }
+            }
+            final byId = <String, Revision>{};
+            for (final revision in revisions) {
+              if (byId.containsKey(revision.id) ||
+                  db.select(
+                    'SELECT id FROM revisions WHERE id=? OR document_id=?',
+                    [revision.id, revision.notebook.id],
+                  ).isNotEmpty ||
+                  (revision.notebook.folderId != null &&
+                      !catalog.containsKey(revision.notebook.folderId))) {
+                throw StateError(
+                  'Revisión de recuperación inválida o existente',
+                );
+              }
+              byId[revision.id] = revision;
+            }
+            for (final revision in revisions) {
+              final seen = <String>{revision.id};
+              var parent = revision.parentId;
+              while (parent != null) {
+                final ancestor = byId[parent];
+                if (ancestor == null ||
+                    ancestor.notebook.id != revision.notebook.id ||
+                    !seen.add(parent)) {
+                  throw StateError('Historial de recuperación inválido');
+                }
+                parent = ancestor.parentId;
+              }
+            }
+            for (final folder in folders) {
+              db.execute(
+                'INSERT INTO folders(id,name,parent_id,updated_at,deleted) VALUES(?,?,?,?,0)',
+                [
+                  folder.id,
+                  folder.name,
+                  folder.parentId,
+                  folder.updatedAt.toUtc().toIso8601String(),
+                ],
+              );
+            }
+            for (final revision in revisions) {
+              db.execute(
+                'INSERT INTO revisions(id,document_id,parent_id,payload,frozen) VALUES(?,?,?,?,1)',
+                [
+                  revision.id,
+                  revision.notebook.id,
+                  revision.parentId,
+                  NotebookCodec.encodeRevision(revision),
+                ],
+              );
+              db.execute('INSERT INTO upload_queue VALUES(?)', [revision.id]);
+            }
+          });
         case 'mergeFolders':
           _transaction(db, () {
             final catalog = <String, NoteFolder>{
@@ -505,4 +658,14 @@ T _transaction<T>(Database db, T Function() action) {
     db.execute('ROLLBACK');
     rethrow;
   }
+}
+
+class NotebookSnapshot {
+  NotebookSnapshot({
+    required List<Revision> revisions,
+    required List<NoteFolder> folders,
+  }) : revisions = List.unmodifiable(revisions),
+       folders = List.unmodifiable(folders);
+  final List<Revision> revisions;
+  final List<NoteFolder> folders;
 }

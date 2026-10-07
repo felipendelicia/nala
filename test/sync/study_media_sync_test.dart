@@ -26,7 +26,14 @@ void main() {
       SyncEngine? localSync, otherSync;
       try {
         final media = <String, Uint8List>{};
-        for (final name in ['cover', 'recording', 'image', 'background']) {
+        for (final name in [
+          'cover',
+          'recording',
+          'image',
+          'background',
+          'original',
+          'formula',
+        ]) {
           final bytes = Uint8List.fromList('synthetic $name'.codeUnits);
           media[await localAssets.put(bytes)] = bytes;
         }
@@ -35,6 +42,20 @@ void main() {
         map['coverAssetId'] = ids[0];
         map['recordings'][0]['assetId'] = ids[1];
         map['pages'][0]['objects'][1]['assetId'] = ids[2];
+        map['pages'][0]['objects'][1]['originalAssetId'] = ids[4];
+        map['pages'][0]['objects'][1]['opacity'] = .5;
+        map['pages'][0]['objects'][1]['locked'] = true;
+        map['pages'][0]['objects'].add({
+          'id': 'math',
+          'kind': 'latex',
+          'x': 30,
+          'y': 30,
+          'width': 100,
+          'height': 40,
+          'text': r'\frac{x}{2}',
+          'assetId': ids[5],
+          'link': {'notebookId': 'doc-1', 'pageId': map['pages'][0]['id']},
+        });
         map['pages'][0]['background'] = {'kind': 'image', 'assetId': ids[3]};
         final book = NotebookCodec.decode(jsonEncode(map));
         await local.commit(
@@ -73,7 +94,17 @@ void main() {
         final received = (await other.load('doc-1'))!;
         expect(received.coverAssetId, ids[0]);
         expect(received.recordings.single.durationMs, 1200);
-        expect(received.pages.single.objects.last.assetId, ids[2]);
+        final image = received.pages.single.objects.firstWhere(
+          (o) => o.id == map['pages'][0]['objects'][1]['id'],
+        );
+        expect(image.assetId, ids[2]);
+        expect(image.originalAssetId, ids[4]);
+        expect(image.opacity, .5);
+        expect(image.locked, isTrue);
+        final formula = received.pages.single.objects.last;
+        expect(formula.assetId, ids[5]);
+        expect(formula.text, r'\frac{x}{2}');
+        expect(formula.link!.notebookId, 'doc-1');
         expect(received.pages.single.background.isImage, isTrue);
         expect(received.studyCards.single.front, '¿Qué es λ?');
         expect(received.pages.single.strokes.single.audioOffsetMs, 400);

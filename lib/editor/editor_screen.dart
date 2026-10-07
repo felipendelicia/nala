@@ -8,6 +8,14 @@ import 'package:pdfrx_engine/pdfrx_engine.dart' show PdfPasswordException;
 import '../document/notebook.dart';
 import '../document/page_object.dart';
 import 'advanced_toolbar.dart';
+import 'toolbar_preferences.dart';
+import 'toolbar_settings_dialog.dart';
+import '../elements/element_store.dart';
+import '../elements/element_picker.dart';
+import '../links/page_link_picker.dart';
+import '../document/page_link.dart';
+import '../media/image_editor.dart';
+import '../media/latex_editor.dart';
 import 'shape_tools.dart';
 import 'selection_operations.dart';
 import 'pen_favorites.dart';
@@ -63,6 +71,10 @@ class EditorScreen extends StatefulWidget {
     this.audioDirectory,
     this.cloud,
     this.penPreferences,
+    this.toolbarPreferences,
+    this.onOpenLink,
+    this.requestedPageId,
+    this.navigationRequest = 0,
     this.active = true,
     this.workspaceManaged = false,
     this.onClose,
@@ -83,6 +95,10 @@ class EditorScreen extends StatefulWidget {
   final String? audioDirectory;
   final CloudController? cloud;
   final PenPreferencesController? penPreferences;
+  final ToolbarPreferencesController? toolbarPreferences;
+  final ValueChanged<PageLink>? onOpenLink;
+  final String? requestedPageId;
+  final int navigationRequest;
   final bool active, workspaceManaged, splitView;
   final VoidCallback? onClose, onFocus, onOpenNotebook, onSplitView;
   final ValueChanged<Future<void> Function()>? registerClose;
@@ -120,6 +136,7 @@ class _EditorScreenState extends State<EditorScreen>
     );
     widget.registerClose?.call(prepareClose);
     unawaited(loadFavorites());
+    unawaited(loadToolbarPreferences());
     settings = widget.penPreferences?.value ?? const PenSettings();
     pressureSensitivity = settings.pressure;
     stabilization = settings.stabilization;
@@ -147,6 +164,16 @@ class _EditorScreenState extends State<EditorScreen>
   @override
   void didUpdateWidget(EditorScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.navigationRequest != widget.navigationRequest) {
+      final requestedId = widget.requestedPageId;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || widget.requestedPageId != requestedId) return;
+        final index = controller.notebook.pages.indexWhere(
+          (p) => p.id == requestedId,
+        );
+        if (index >= 0) changePage(index);
+      });
+    }
     if (oldWidget.active != widget.active) {
       if (widget.active) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -164,9 +191,46 @@ class _EditorScreenState extends State<EditorScreen>
     }
   }
 
+  EditorController get controller => widget.controller;
+  NotebookPage get currentPage => page;
+
   String? get root =>
       widget.storageRoot ?? widget.penPreferences?.file.parent.path;
   AssetStore? get assets => widget.assets ?? widget.pdf?.assets;
+  ToolbarPreferencesController? toolbarPreferences;
+  bool ownsToolbarPreferences = false;
+  ToolbarLayout get toolbarLayout =>
+      toolbarPreferences?.layout ?? ToolbarLayout.defaults();
+  void toolbarChanged() {
+    if (mounted && !disposing) setState(() {});
+  }
+
+  Future<void> loadToolbarPreferences() async {
+    final loaded =
+        widget.toolbarPreferences ??
+        (root == null ? null : await ToolbarPreferencesController.open(root!));
+    if (loaded == null) return;
+    final owned = widget.toolbarPreferences == null;
+    if (!mounted || disposing) {
+      if (owned) loaded.dispose();
+      return;
+    }
+    ownsToolbarPreferences = owned;
+    toolbarPreferences = loaded..addListener(toolbarChanged);
+    setState(() {});
+  }
+
+  Future<void> customizeToolbar() async {
+    router.reset();
+    final value = await showToolbarSettings(context, toolbarLayout);
+    if (!mounted || value == null) return;
+    try {
+      await toolbarPreferences?.update(value);
+    } catch (_) {
+      message('La barra cambió, pero no se pudo guardar el ajuste.');
+    }
+  }
+
   PenFavoritesController? favorites;
   List<PenFavorite> get favoriteValues =>
       favorites?.values ?? PenFavoritesController.defaults();
@@ -724,6 +788,7 @@ class _EditorScreenState extends State<EditorScreen>
       page,
       selected,
       recordings: widget.controller.notebook.recordings,
+      forCut: cut,
     );
     if (cut) deleteSelection();
     setState(() {});
@@ -792,7 +857,7 @@ class _EditorScreenState extends State<EditorScreen>
   }
 
   Future<void> insertText({PageObject? existing}) async {
-    if (reading) return;
+    if (reading || existing?.locked == true) return;
     router.reset();
     final targetId = page.id;
     final result = await showDialog<TextObjectDraft>(
@@ -848,26 +913,60 @@ class _EditorScreenState extends State<EditorScreen>
           fontSize: result.fontSize,
           argb: penColor,
         );
-    unawaited(
-      widget.controller.apply(
-        (book) => book.copyWith(
-          pages: book.pages
-              .map(
-                (p) => p.id != targetId
-                    ? p
-                    : p.copyWith(
-                        objects: [
-                          for (final current in p.objects)
-                            if (current.id == object.id) object else current,
-                          if (existing == null) object,
-                        ],
-                      ),
-              )
-              .toList(),
-        ),
+    await applyObject(targetId, object, create: existing == null);
+  }
+
+  void editSelectedText() {
+    final object = page.objects
+        .where(
+          (o) =>
+              selected.contains(o.id) &&
+              !o.locked &&
+              o.kind == PageObjectKind.text,
+        )
+        .firstOrNull;
+    if (object == null) {
+      message('Seleccioná un cuadro de texto para editarlo.');
+      return;
+    }
+    unawaited(insertText(existing: object));
+  }
+
+  PageObject? get selectedObject => page.objects
+      .where((o) => selected.contains(o.id) && !o.locked)
+      .firstOrNull;
+
+  Future<void> applyObject(
+    String pageId,
+    PageObject object, {
+    bool create = false,
+  }) async {
+    final target = controller.notebook.pages
+        .where((p) => p.id == pageId)
+        .firstOrNull;
+    if (target == null ||
+        (!create &&
+            !target.objects.any((o) => o.id == object.id && !o.locked))) {
+      return;
+    }
+    await controller.apply(
+      (book) => book.copyWith(
+        pages: book.pages
+            .map(
+              (p) => p.id != pageId
+                  ? p
+                  : p.copyWith(
+                      objects: [
+                        for (final current in p.objects)
+                          if (current.id == object.id) object else current,
+                        if (create) object,
+                      ],
+                    ),
+            )
+            .toList(),
       ),
     );
-    if (mounted) {
+    if (mounted && page.id == pageId) {
       setState(() {
         tool = EditorTool.selection;
         shape = null;
@@ -876,15 +975,302 @@ class _EditorScreenState extends State<EditorScreen>
     }
   }
 
-  void editSelectedText() {
-    final object = page.objects
-        .where((o) => selected.contains(o.id) && o.kind == PageObjectKind.text)
-        .firstOrNull;
-    if (object == null) {
-      message('Seleccioná un cuadro de texto para editarlo.');
+  Future<void> editImage() async {
+    final object = selectedObject;
+    if (reading || assets == null || object?.kind != PageObjectKind.image) {
+      message('Seleccioná una imagen para editarla.');
       return;
     }
-    unawaited(insertText(existing: object));
+    router.reset();
+    final target = page.id;
+    try {
+      final edited = await showImageEditor(
+        context,
+        assets: assets!,
+        object: object!,
+      );
+      if (mounted && edited != null) {
+        final targetPage = controller.notebook.pages
+            .where((p) => p.id == target)
+            .firstOrNull;
+        if (targetPage == null) return;
+        final scale = math.min(
+          1.0,
+          math.min(
+            targetPage.width / edited.width,
+            targetPage.height / edited.height,
+          ),
+        );
+        final w = edited.width * scale, h = edited.height * scale;
+        await applyObject(
+          target,
+          edited.copyWith(
+            width: w,
+            height: h,
+            x: edited.x.clamp(0, math.max(0, targetPage.width - w)),
+            y: edited.y.clamp(0, math.max(0, targetPage.height - h)),
+          ),
+        );
+      }
+    } catch (_) {
+      message('No se pudo editar esa imagen.');
+    }
+  }
+
+  Future<void> insertLatex({PageObject? existing}) async {
+    if (reading || assets == null || existing?.locked == true) return;
+    router.reset();
+    final target = page;
+    try {
+      final result = await showLatexEditor(
+        context,
+        assets: assets!,
+        object: existing,
+        position: insertionPoint,
+        maxWidth: math.max(1.0, target.width - 48),
+        maxHeight: math.max(1.0, target.height - 48),
+        argb: penColor,
+      );
+      if (!mounted || result == null) return;
+      final placed = result.copyWith(
+        x: result.x.clamp(0, math.max(0, target.width - result.width)),
+        y: result.y.clamp(0, math.max(0, target.height - result.height)),
+      );
+      await applyObject(target.id, placed, create: existing == null);
+    } catch (_) {
+      message('No se pudo guardar la fórmula.');
+    }
+  }
+
+  void editLatex() {
+    final object = selectedObject;
+    if (object?.kind != PageObjectKind.latex) {
+      message('Seleccioná una fórmula para editar su código.');
+      return;
+    }
+    unawaited(insertLatex(existing: object));
+  }
+
+  Future<void> saveElement() async {
+    if (reading || root == null || selected.isEmpty) return;
+    router.reset();
+    try {
+      final value = await saveSelectionAsElement(
+        context,
+        store: ElementStore(root: root!),
+        page: page,
+        ids: Set.of(selected),
+      );
+      if (value != null) message('Elemento guardado: ${value.name}');
+    } catch (e) {
+      message(
+        e is FormatException ? e.message : 'No se pudo guardar el elemento.',
+      );
+    }
+  }
+
+  Future<void> insertElement() async {
+    if (reading || root == null) return;
+    router.reset();
+    final targetId = page.id;
+    final store = ElementStore(root: root!);
+    try {
+      final element = await showElementPicker(context, store: store);
+      if (!mounted || element == null) return;
+      final target = controller.notebook.pages
+          .where((p) => p.id == targetId)
+          .firstOrNull;
+      if (target == null) return;
+      final result = store.insert(
+        element,
+        target,
+        insertionPoint,
+        newId: const Uuid().v4,
+      );
+      final oldIds = {
+        ...target.strokes.map((s) => s.id),
+        ...target.objects.map((o) => o.id),
+      };
+      await controller.apply(
+        (book) => book.copyWith(
+          pages: book.pages.map((p) => p.id == targetId ? result : p).toList(),
+        ),
+      );
+      if (mounted) {
+        setState(() {
+          tool = EditorTool.selection;
+          shape = null;
+          selected = {
+            ...result.strokes.map((s) => s.id),
+            ...result.objects.map((o) => o.id),
+          }.difference(oldIds);
+        });
+      }
+    } catch (e) {
+      message(
+        e is FormatException ? e.message : 'No se pudo insertar el elemento.',
+      );
+    }
+  }
+
+  Future<void> insertLink({bool attach = false}) async {
+    if (reading) return;
+    final existing = attach ? selectedObject : null;
+    if (attach && existing == null) {
+      message('Seleccioná un texto, imagen o fórmula.');
+      return;
+    }
+    router.reset();
+    final target = page;
+    try {
+      final choice = await showPageLinkPicker(
+        context,
+        repository: controller.repository,
+      );
+      if (!mounted || choice == null) return;
+      final point = insertionPoint;
+      final w = math.min(320.0, math.max(1.0, target.width - 48));
+      final object =
+          existing?.copyWith(link: choice.link) ??
+          PageObject(
+            id: const Uuid().v4(),
+            kind: PageObjectKind.text,
+            x: point.dx.clamp(0, math.max(0, target.width - w)),
+            y: point.dy.clamp(0, math.max(0, target.height - 56)),
+            width: w,
+            height: 56,
+            text: choice.label,
+            link: choice.link,
+          );
+      await applyObject(target.id, object, create: existing == null);
+    } catch (_) {
+      message('No se pudieron cargar los apuntes para enlazar.');
+    }
+  }
+
+  void openPageLink(PageLink link) {
+    router.reset();
+    if (widget.onOpenLink != null) {
+      widget.onOpenLink!(link);
+      return;
+    }
+    if (link.notebookId == controller.notebook.id) {
+      final index = controller.notebook.pages.indexWhere(
+        (p) => p.id == link.pageId,
+      );
+      if (index >= 0) {
+        changePage(index);
+        return;
+      }
+    }
+    message('El apunte o la página de destino no está disponible.');
+  }
+
+  void removeLink() {
+    final object = selectedObject;
+    if (reading || object?.link == null) return;
+    unawaited(applyObject(page.id, object!.copyWith(link: null)));
+  }
+
+  void lockSelection() {
+    if (reading || selected.isEmpty) return;
+    router.reset();
+    final ids = Set.of(selected);
+    editPage(
+      (p) => p.copyWith(
+        objects: p.objects
+            .map((o) => ids.contains(o.id) ? o.copyWith(locked: true) : o)
+            .toList(),
+      ),
+    );
+    setState(() => selected = {});
+  }
+
+  void unlockObjects() {
+    if (reading) return;
+    router.reset();
+    editPage(
+      (p) => p.copyWith(
+        objects: p.objects
+            .map((o) => o.locked ? o.copyWith(locked: false) : o)
+            .toList(),
+      ),
+    );
+    message('Objetos de esta hoja desbloqueados.');
+  }
+
+  List<Widget> workflowActions(void Function(VoidCallback) run) {
+    Widget action(String label, IconData icon, VoidCallback? callback) =>
+        SizedBox(
+          width: 96,
+          child: Tooltip(
+            message: label,
+            child: TextButton(
+              onPressed: callback == null ? null : () => run(callback),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(width: 48, height: 48, child: Icon(icon)),
+                  Text(label, textAlign: TextAlign.center),
+                ],
+              ),
+            ),
+          ),
+        );
+    final object = selectedObject;
+    return [
+      action(
+        'Elementos reutilizables',
+        Icons.collections_bookmark_outlined,
+        root == null ? null : insertElement,
+      ),
+      action(
+        'Guardar elemento',
+        Icons.bookmark_add_outlined,
+        root == null || selected.isEmpty ? null : saveElement,
+      ),
+      action(
+        'Insertar fórmula LaTeX',
+        Icons.functions,
+        assets == null ? null : () => insertLatex(),
+      ),
+      action(
+        'Editar fórmula',
+        Icons.edit_note,
+        object?.kind == PageObjectKind.latex ? editLatex : null,
+      ),
+      action(
+        'Editar imagen',
+        Icons.crop,
+        object?.kind == PageObjectKind.image ? editImage : null,
+      ),
+      action(
+        'Bloquear objetos',
+        Icons.lock_outline,
+        object == null ? null : lockSelection,
+      ),
+      action(
+        'Desbloquear objetos',
+        Icons.lock_open,
+        page.objects.any((o) => o.locked) ? unlockObjects : null,
+      ),
+      action('Enlace a otro apunte', Icons.link, () => insertLink()),
+      action(
+        'Enlazar selección',
+        Icons.add_link,
+        object == null ? null : () => insertLink(attach: true),
+      ),
+      action(
+        'Abrir enlace',
+        Icons.open_in_new,
+        object?.link == null ? null : () => openPageLink(object!.link!),
+      ),
+      action(
+        'Quitar enlace',
+        Icons.link_off,
+        object?.link == null ? null : removeLink,
+      ),
+    ];
   }
 
   void message(String text) {
@@ -1315,9 +1701,31 @@ class _EditorScreenState extends State<EditorScreen>
         key: const ValueKey('document-viewport'),
         behavior: HitTestBehavior.opaque,
         onPointerDown: pointerDown,
-        onPointerMove: (e) => router.move(sample(e)),
-        onPointerUp: (e) => router.up(sample(e)),
-        onPointerCancel: (e) => router.cancel(e.pointer),
+        onPointerMove: (e) {
+          if (linkPointer == e.pointer &&
+              (e.localPosition - linkPressPosition!).distance > 8) {
+            pressedLink = null;
+          }
+          router.move(sample(e));
+        },
+        onPointerUp: (e) {
+          router.up(sample(e));
+          if (linkPointer == e.pointer) {
+            final link = pressedLink;
+            pressedLink = null;
+            linkPointer = null;
+            if (reading &&
+                link != null &&
+                (e.localPosition - linkPressPosition!).distance <= 8) {
+              openPageLink(link);
+            }
+          }
+        },
+        onPointerCancel: (e) {
+          pressedLink = null;
+          linkPointer = null;
+          router.cancel(e.pointer);
+        },
         onPointerHover: (e) => router.hover(sample(e)),
         onPointerPanZoomUpdate: (e) {
           navigate(
@@ -1543,6 +1951,9 @@ class _EditorScreenState extends State<EditorScreen>
     }
   }
 
+  PageLink? pressedLink;
+  Offset? linkPressPosition;
+  int? linkPointer;
   void pointerDown(PointerDownEvent event) {
     if (commentOpen) return;
     if (widget.active) editorFocus.requestFocus();
@@ -1588,6 +1999,37 @@ class _EditorScreenState extends State<EditorScreen>
       );
       return;
     }
+    if (reading &&
+        hit != null &&
+        !router.isWriting &&
+        (event.buttons == 0 || event.buttons == kPrimaryButton)) {
+      if (linkPointer != null) {
+        pressedLink = null;
+        linkPointer = null;
+      } else {
+        for (final o in page.objects.reversed) {
+          final d = Offset(
+            position.x - o.x - o.width / 2,
+            position.y - o.y - o.height / 2,
+          );
+          final local = Offset(
+            d.dx * math.cos(o.rotation) +
+                d.dy * math.sin(o.rotation) +
+                o.width / 2,
+            -d.dx * math.sin(o.rotation) +
+                d.dy * math.cos(o.rotation) +
+                o.height / 2,
+          );
+          if (o.link != null &&
+              Rect.fromLTWH(0, 0, o.width, o.height).contains(local)) {
+            pressedLink = o.link;
+            linkPressPosition = event.localPosition;
+            linkPointer = event.pointer;
+            break;
+          }
+        }
+      }
+    }
     if (!router.isWriting) {
       // Pins are drawn above ink, so their visible target takes precedence.
       for (final comment in page.comments.reversed) {
@@ -1596,6 +2038,8 @@ class _EditorScreenState extends State<EditorScreen>
                   math.pow(position.y - comment.y, 2),
             ) <=
             15 / view.scale) {
+          pressedLink = null;
+          linkPointer = null;
           openComment(comment);
           return;
         }
@@ -1606,6 +2050,8 @@ class _EditorScreenState extends State<EditorScreen>
               StrokeGeometry.bounds(stroke)
                   .inflate(6 / view.scale)
                   .contains(Offset(position.x, position.y))) {
+            pressedLink = null;
+            linkPointer = null;
             unawaited(audioPlayer?.stop());
             unawaited(notebookAudio!.playStroke(stroke));
             return;
@@ -1840,11 +2286,94 @@ class _EditorScreenState extends State<EditorScreen>
     draft.dispose();
     shapePreview.dispose();
     favorites?.dispose();
+    toolbarPreferences?.removeListener(toolbarChanged);
+    if (ownsToolbarPreferences) toolbarPreferences?.dispose();
     editorFocus.dispose();
     notebookAudio?.dispose();
     audioPlayer?.dispose();
     super.dispose();
   }
+
+  Widget buildToolbar({bool fallback = false}) => EditorToolbar(
+    layout: fallback
+        ? ToolbarLayout.defaults().copyWith(
+            visible: {
+              ToolbarAction.color,
+              ToolbarAction.width,
+              ToolbarAction.penSettings,
+              ToolbarAction.undo,
+              ToolbarAction.redo,
+              ToolbarAction.paper,
+              ToolbarAction.applyPaper,
+              ToolbarAction.deleteSelection,
+            },
+          )
+        : toolbarLayout,
+    onShortcut: {
+      ToolbarAction.text: () => insertText(),
+      ToolbarAction.image: assets == null ? null : insertImage,
+      ToolbarAction.latex: assets == null ? null : () => insertLatex(),
+      ToolbarAction.link: insertLink,
+      ToolbarAction.elements: root == null ? null : insertElement,
+      ToolbarAction.templates:
+          root == null || widget.pdf == null || assets == null
+          ? null
+          : templates,
+      ToolbarAction.search: widget.pdf == null || assets == null
+          ? null
+          : searchNotebook,
+      ToolbarAction.study: openStudy,
+      ToolbarAction.audio: notebookAudio == null
+          ? null
+          : () => setState(() => showRecording = !showRecording),
+    },
+    tool: tool,
+    onTool: chooseTool,
+    onPenSettings: penSettings,
+    onOpenMenu: router.reset,
+    onMoreTools: fallback ? null : moreTools,
+    moreToolsActive: shape != null || ruler || selected.isNotEmpty,
+    argb: argb,
+    onColor: changeInkColor,
+    width: width,
+    onWidth: (w) => setState(() => width = w),
+    canUndo: controller.canUndo,
+    canRedo: controller.canRedo,
+    onUndo: () {
+      router.reset();
+      controller.undo();
+    },
+    onRedo: () {
+      router.reset();
+      controller.redo();
+    },
+    onDeleteSelection: selected.isEmpty ? null : deleteSelection,
+    pattern: currentPage.background.pattern,
+    onPattern: (pattern) {
+      router.reset();
+      editPage((p) => p.copyWith(background: PageBackground.paper(pattern)));
+    },
+    onApplyPattern: currentPage.background.pattern == null
+        ? null
+        : () {
+            router.reset();
+            controller.apply(
+              (book) => book.copyWith(
+                pages: book.pages
+                    .map(
+                      (p) => p.background.pattern == null
+                          ? p
+                          : p.copyWith(
+                              background: PageBackground.paper(
+                                currentPage.background.pattern!,
+                              ),
+                            ),
+                    )
+                    .toList(),
+              ),
+            );
+          },
+  );
 
   Future<void> moreTools() async {
     router.reset();
@@ -1895,78 +2424,139 @@ class _EditorScreenState extends State<EditorScreen>
                   Flexible(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                      child: AdvancedToolbar(
-                        onOpenMenu: router.reset,
-                        shape: shape,
-                        onShape: (value) => run(
-                          () => setState(() {
-                            tool = EditorTool.pen;
-                            shape = value;
-                            selected = {};
-                          }),
-                        ),
-                        ruler: ruler,
-                        rulerAngle: rulerAngle,
-                        onRuler: () =>
-                            run(() => setState(() => ruler = !ruler)),
-                        onAngle: (value) =>
-                            run(() => setState(() => rulerAngle = value)),
-                        hasSelection: selected.isNotEmpty,
-                        canPaste: !clipboard.isEmpty,
-                        onCopy: () => run(() => copySelection()),
-                        onCut: () => run(() => copySelection(cut: true)),
-                        onDuplicate: () => run(duplicateSelection),
-                        onPaste: () => run(pasteSelection),
-                        onScale: (value) =>
-                            run(() => transformSelection(scale: value)),
-                        onRotate: () =>
-                            run(() => transformSelection(rotate: true)),
-                        onText: () => run(() => insertText()),
-                        onEditText: () => run(editSelectedText),
-                        onImage: assets == null ? null : () => run(insertImage),
-                        favorites: favoriteValues,
-                        onFavorite: (value) => run(() => chooseFavorite(value)),
-                        onSaveFavorite: favorites == null
-                            ? null
-                            : () => run(saveFavorite),
-                        onRemoveFavorite: favorites == null
-                            ? null
-                            : (id) => run(() async {
-                                try {
-                                  await favorites!.remove(id);
-                                  if (mounted) setState(() {});
-                                } catch (_) {
-                                  message('No se pudo quitar el favorito.');
-                                }
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (!reading) ...[
+                            Wrap(
+                              spacing: 8,
+                              children: [
+                                PopupMenuButton<EditorTool>(
+                                  tooltip: 'Herramienta de escritura',
+                                  onOpened: router.reset,
+                                  onSelected: (value) =>
+                                      run(() => chooseTool(value)),
+                                  itemBuilder: (_) => [
+                                    for (final t in EditorTool.values)
+                                      PopupMenuItem(
+                                        value: t,
+                                        child: Text(
+                                          toolbarLabels[ToolbarAction.values[t
+                                              .index]]!,
+                                        ),
+                                      ),
+                                  ],
+                                  child: const Padding(
+                                    padding: EdgeInsets.all(12),
+                                    child: Text('Herramienta de escritura'),
+                                  ),
+                                ),
+                                Tooltip(
+                                  message: 'Personalizar barra',
+                                  child: TextButton.icon(
+                                    onPressed: toolbarPreferences == null
+                                        ? null
+                                        : () => run(customizeToolbar),
+                                    icon: const Icon(Icons.tune),
+                                    label: const Text('Personalizar barra'),
+                                    style: TextButton.styleFrom(
+                                      minimumSize: const Size(48, 48),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(
+                              height: 56,
+                              child: buildToolbar(fallback: true),
+                            ),
+                            const SizedBox(height: 12),
+                            Wrap(
+                              spacing: 12,
+                              runSpacing: 12,
+                              children: workflowActions(run),
+                            ),
+                            const Divider(height: 24),
+                          ],
+                          AdvancedToolbar(
+                            onOpenMenu: router.reset,
+                            shape: shape,
+                            onShape: (value) => run(
+                              () => setState(() {
+                                tool = EditorTool.pen;
+                                shape = value;
+                                selected = {};
                               }),
-                        onTemplates:
-                            root == null || assets == null || widget.pdf == null
-                            ? null
-                            : () => run(templates),
-                        onSearch: widget.pdf == null || assets == null
-                            ? null
-                            : () => run(searchNotebook),
-                        onAudio: notebookAudio == null
-                            ? null
-                            : () => run(() async {
-                                await audioPlayer?.stop();
-                                if (!mounted) return;
-                                if (showRecording &&
-                                    !await suspendNotebookAudio()) {
-                                  return;
-                                }
-                                if (mounted) {
-                                  setState(() {
-                                    showRecording = !showRecording;
-                                    if (showRecording) {
-                                      showComments = false;
-                                      showPages = false;
+                            ),
+                            ruler: ruler,
+                            rulerAngle: rulerAngle,
+                            onRuler: () =>
+                                run(() => setState(() => ruler = !ruler)),
+                            onAngle: (value) =>
+                                run(() => setState(() => rulerAngle = value)),
+                            hasSelection: selected.isNotEmpty,
+                            canPaste: !clipboard.isEmpty,
+                            onCopy: () => run(() => copySelection()),
+                            onCut: () => run(() => copySelection(cut: true)),
+                            onDuplicate: () => run(duplicateSelection),
+                            onPaste: () => run(pasteSelection),
+                            onScale: (value) =>
+                                run(() => transformSelection(scale: value)),
+                            onRotate: () =>
+                                run(() => transformSelection(rotate: true)),
+                            onText: () => run(() => insertText()),
+                            onEditText: () => run(editSelectedText),
+                            onImage: assets == null
+                                ? null
+                                : () => run(insertImage),
+                            favorites: favoriteValues,
+                            onFavorite: (value) =>
+                                run(() => chooseFavorite(value)),
+                            onSaveFavorite: favorites == null
+                                ? null
+                                : () => run(saveFavorite),
+                            onRemoveFavorite: favorites == null
+                                ? null
+                                : (id) => run(() async {
+                                    try {
+                                      await favorites!.remove(id);
+                                      if (mounted) setState(() {});
+                                    } catch (_) {
+                                      message('No se pudo quitar el favorito.');
                                     }
-                                  });
-                                }
-                              }),
-                        onStudy: () => run(openStudy),
-                        reading: reading,
+                                  }),
+                            onTemplates:
+                                root == null ||
+                                    assets == null ||
+                                    widget.pdf == null
+                                ? null
+                                : () => run(templates),
+                            onSearch: widget.pdf == null || assets == null
+                                ? null
+                                : () => run(searchNotebook),
+                            onAudio: notebookAudio == null
+                                ? null
+                                : () => run(() async {
+                                    await audioPlayer?.stop();
+                                    if (!mounted) return;
+                                    if (showRecording &&
+                                        !await suspendNotebookAudio()) {
+                                      return;
+                                    }
+                                    if (mounted) {
+                                      setState(() {
+                                        showRecording = !showRecording;
+                                        if (showRecording) {
+                                          showComments = false;
+                                          showPages = false;
+                                        }
+                                      });
+                                    }
+                                  }),
+                            onStudy: () => run(openStudy),
+                            reading: reading,
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -2169,70 +2759,16 @@ class _EditorScreenState extends State<EditorScreen>
               ),
               body: Column(
                 children: [
-                  if (!reading)
-                    EditorToolbar(
-                      tool: tool,
-                      onTool: chooseTool,
-                      onPenSettings: penSettings,
-                      onOpenMenu: router.reset,
-                      onMoreTools: moreTools,
-                      moreToolsActive:
-                          shape != null || ruler || selected.isNotEmpty,
-                      argb: argb,
-                      onColor: changeInkColor,
-                      width: width,
-                      onWidth: (w) => setState(() => width = w),
-                      canUndo: controller.canUndo,
-                      canRedo: controller.canRedo,
-                      onUndo: () {
-                        router.reset();
-                        controller.undo();
-                      },
-                      onRedo: () {
-                        router.reset();
-                        controller.redo();
-                      },
-                      onDeleteSelection: selected.isEmpty
-                          ? null
-                          : deleteSelection,
-                      pattern: currentPage.background.pattern,
-                      onPattern: (pattern) {
-                        router.reset();
-                        editPage(
-                          (p) => p.copyWith(
-                            background: PageBackground.paper(pattern),
-                          ),
-                        );
-                      },
-                      onApplyPattern: currentPage.background.pattern == null
-                          ? null
-                          : () {
-                              router.reset();
-                              controller.apply(
-                                (book) => book.copyWith(
-                                  pages: book.pages
-                                      .map(
-                                        (p) => p.background.pattern == null
-                                            ? p
-                                            : p.copyWith(
-                                                background:
-                                                    PageBackground.paper(
-                                                      currentPage
-                                                          .background
-                                                          .pattern!,
-                                                    ),
-                                              ),
-                                      )
-                                      .toList(),
-                                ),
-                              );
-                            },
-                    ),
+                  if (!reading && toolbarLayout.dock == ToolbarDock.top)
+                    buildToolbar(),
                   Expanded(
                     child: Stack(
                       children: [
                         Row(
                           children: [
+                            if (!reading &&
+                                toolbarLayout.dock == ToolbarDock.left)
+                              buildToolbar(),
                             if (showPages)
                               PagePanel(
                                 pages: controller.notebook.pages,
@@ -2244,6 +2780,9 @@ class _EditorScreenState extends State<EditorScreen>
                             Expanded(
                               child: LayoutBuilder(builder: buildDocument),
                             ),
+                            if (!reading &&
+                                toolbarLayout.dock == ToolbarDock.right)
+                              buildToolbar(),
                             if (showComments)
                               CommentsPanel(
                                 comments: currentPage.comments,

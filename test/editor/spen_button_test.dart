@@ -60,7 +60,7 @@ Future<EditorController> editor(
 }
 
 EditorTool selectedTool(WidgetTester tester) =>
-    tester.widget<EditorToolbar>(find.byType(EditorToolbar)).tool;
+    tester.widget<EditorToolbar>(find.byType(EditorToolbar).first).tool;
 
 void main() {
   test('ajustes sobreviven reinicio y recuperan archivos dañados', () async {

@@ -79,18 +79,24 @@ class _PaperCanvasState extends State<PaperCanvas> {
     height: object.height,
     child: Transform.rotate(
       angle: object.rotation,
-      child: ClipRect(
-        child: object.kind == PageObjectKind.image
-            ? storedImage(object.assetId!)
-            : Text(
-                object.text,
-                textScaler: TextScaler.noScaling,
-                style: TextStyle(
-                  color: Color(object.argb),
-                  fontSize: object.fontSize,
-                  height: 1.2,
+      child: Opacity(
+        opacity: object.opacity,
+        child: ClipRect(
+          child: object.kind != PageObjectKind.text
+              ? storedImage(object.assetId!)
+              : Text(
+                  object.text,
+                  textScaler: TextScaler.noScaling,
+                  style: TextStyle(
+                    color: Color(object.argb),
+                    fontSize: object.fontSize,
+                    decoration: object.link == null
+                        ? null
+                        : TextDecoration.underline,
+                    height: 1.2,
+                  ),
                 ),
-              ),
+        ),
       ),
     ),
   );

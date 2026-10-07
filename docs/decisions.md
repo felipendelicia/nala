@@ -75,3 +75,13 @@ El pedido de Felipe se resuelve con AppBar de 56 y herramientas principales de 5
 Las herramientas adicionales se abren en un diálogo con etiquetas y objetivos amplios. El diálogo conserva el rectángulo y el origen de la hoja; elegir una acción lo cierra antes de ejecutarla. El botón permanente de Más herramientas indica si hay una forma, regla o selección activa. Se mantiene una barra por editor para conservar su foco, selección y herramienta independientes en vista dividida. Coste: las acciones menos frecuentes requieren un toque adicional.
 
 La revisión detectó que los menús de grosor y fondo quedaban en 37 píxeles de alto con texto normal. Una prueba reprodujo el problema y ambos conservan ahora un mínimo de 48, dentro de la fila de 56. No se cambian los formatos de apuntes ni el guardado. La entrega es local y conserva 0.5.0 como respaldo.
+
+## Herramientas para apuntes 0.6.0
+
+Felipe eligió seis mejoras y autorizó avanzar de manera autónoma. Los elementos reutilizables guardan grupos normalizados y crean identificadores nuevos al insertarse; conservan recursos y enlaces, y liberan bloqueos y asociaciones temporales de audio. Los enlaces usan identificadores de cuaderno/página y navegan mediante los editores ya abiertos para conservar sus cambios.
+
+Las imágenes mantienen un recurso original separado al recortarse, con opacidad y bloqueo persistidos. Las fórmulas conservan el código LaTeX y un render transparente local; el mismo recurso sirve para canvas, sincronización y PDF. Se limita la complejidad del código y la resolución del render. No se implementó reconocimiento de fórmulas manuscritas.
+
+La barra conserva 56 píxeles, puede ordenarse, ocultar accesos y moverse a un lateral. Más herramientas siempre queda disponible. Las preferencias se comparten entre paneles y se escriben de forma atómica.
+
+El backup incluye las revisiones retenidas, todos los conflictos, carpetas, recursos referenciados y registros locales permitidos. Excluye credenciales e identidad. Antes de restaurar se validan rutas, tamaños, CRC y SHA-256; la importación de documentos ocurre en una transacción SQLite y remapea enlaces a las copias recuperadas. Los registros actuales se preservan si una combinación supera sus límites; los registros entrantes quedan en recovery-registries con un aviso. La restauración de preferencias es opcional y guarda las anteriores. Coste: el ZIP está acotado a 128 MB y la apariencia recuperada se aplica al reabrir.

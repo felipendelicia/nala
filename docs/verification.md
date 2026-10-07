@@ -228,6 +228,18 @@ Compilaciones release con `tool/flutter-safe`, secuenciales y bajo los límites 
 - La versión final arrancó con un directorio temporal propio y continuó activa; SQLite `quick_check` devolvió `ok`. El servicio terminó después sin fallo registrado y se borró la base de prueba. El menú y lanzador existentes conservan sus rutas y ahora abren 0.5.1.
 - `dist/previous-v0.5.0` conserva la entrega anterior completa y sus hashes. Entrega local, sin publicar una nueva release externa. No se comprobó el S Pen ni el micrófono físicos en la tablet.
 
+## Herramientas para apuntes 0.6.0
+
+Se incorporan elementos reutilizables, enlaces a páginas de otros apuntes, recorte/opacidad/restablecimiento de imágenes, bloqueo de objetos, orden/visibilidad/ubicación de la barra, backups `.nala.zip` y edición de fórmulas LaTeX con render transparente local. Se conserva el encabezado compacto y las pestañas estables. La [guía](notebook-workflow.md) describe los accesos; la [revisión](notebook-workflow-review.md) registra los hallazgos corregidos y sus comprobaciones.
+
+Análisis final sin incidencias (`.dart_tool/workflow-analyze-final.log`). Suite completa: **270/270** pruebas unitarias y widget en 2 min 14 s, servicio de 2 min 18,3 s (`.dart_tool/workflow-suite-final.log`). Incluye decodificación de apuntes anteriores, selecciones obsoletas sobre objetos bloqueados, recorte/restablecimiento de imágenes, captura y edición LaTeX, píxeles/opacidad en PDF, sincronización de originales/enlaces/fórmulas, biblioteca de elementos, navegación de pestañas, gestos de enlaces y barra persistida/reordenada. Se corrigieron dos pruebas previas del botón S Pen para distinguir la barra principal de la barra de controles ocultos dentro del modal; las 22 comprobaciones de enlaces/S Pen pasan (`.dart_tool/workflow-links-spen.log`).
+
+Los casos de backup cubren SQLite, carpetas, versiones concurrentes, revisiones retenidas durante audio, grabaciones descartadas/interrumpidas, recursos originales y fórmulas, registros y preferencias. Se comprueban hashes dañados, rutas duplicadas/no permitidas, ZIP solapado, límites previos a lectura, remapeo de identificadores/enlaces y recuperación sin sobrescribir datos actuales. Si la combinación supera la capacidad de un registro, la recuperación conserva el registro activo y guarda el entrante aparte con un aviso.
+
+Recorrido nativo Linux de las seis funciones: **1/1**, 27 s de interacción y 59,8 s de servicio (`.dart_tool/workflow-native-final.log`). Usa archivos y SQLite temporales, render PNG de fórmulas, PDF exportado y backup guardado/inspeccionado/restaurado por los servicios de producción; reemplaza únicamente el selector del sistema. Comprueba inserciones independientes, edición/crop/reset/bloqueo, navegación hacia una página de un editor ya abierto con tinta conservada, barra lateral reordenada/oculta y reapertura de preferencias. El ZIP contiene exactamente la imagen original y el PNG final compartido por ambas fórmulas y el elemento; sus bytes coinciden con AssetStore. La recuperación agrega dos cuadernos y un elemento, remapea el enlace y mantiene los originales. Las capturas están en `.dart_tool/ui-qa/workflow-*-v060.png`, junto a `workflow-v060.pdf` y `workflow-v060.nala.zip`.
+
+Regresiones nativas: herramientas de estudio **1/1** (12 s; servicio 46,4 s, `.dart_tool/workflow-study-native.log`) y recorrido de importación/anotación/hoja intercalada/exportación PDF **1/1** (6 s; servicio 37,1 s, `.dart_tool/workflow-pdf-native.log`). Ambos usan bibliotecas temporales y motores nativos. Las ejecuciones fueron seriales y no usaron apuntes personales, cuentas ni micrófono real.
+
 SHA-256 de los archivos entregados:
 
 ```text
