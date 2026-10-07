@@ -43,6 +43,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       MaterialPageRoute<void>(
         builder: (_) => EditorScreen(
           controller: editor,
+          penPreferences: widget.services.penPreferences,
           pdf: widget.services.pdf,
           files: widget.services.files,
           share: widget.services.share,

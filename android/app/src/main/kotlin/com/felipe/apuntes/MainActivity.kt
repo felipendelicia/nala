@@ -3,6 +3,7 @@ package com.felipe.apuntes
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import android.view.MotionEvent
 import android.app.Activity
 import android.content.Intent
 import android.content.ClipData
@@ -12,13 +13,72 @@ import java.util.concurrent.Executors
 
 class MainActivity : FlutterActivity() {
     private lateinit var audio: AudioBridge
+    private var stylusChannel: MethodChannel? = null
+    private var stylusListening = false
+    private var stylusPressed = false
     private data class PendingPdf(val bytes: ByteArray, val result: MethodChannel.Result)
     private var pending: PendingPdf? = null
     private val writer = Executors.newSingleThreadExecutor()
     private val saveRequest = 40731
 
+    private fun stylusEvent(event: MotionEvent) {
+        if (!stylusListening) return
+        val index = event.actionIndex
+        val type = event.getToolType(index)
+        if (type != MotionEvent.TOOL_TYPE_STYLUS && type != MotionEvent.TOOL_TYPE_ERASER) return
+        // Hover exit also occurs when the tip makes contact. It is not a
+        // release/cancel and must not turn one physical press into two toggles.
+        if (event.actionMasked == MotionEvent.ACTION_HOVER_EXIT) return
+        if (event.actionMasked == MotionEvent.ACTION_CANCEL) {
+            resetStylus()
+            return
+        }
+        val pressed = event.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY != 0
+        if (pressed != stylusPressed || event.actionMasked == MotionEvent.ACTION_DOWN ||
+            event.actionMasked == MotionEvent.ACTION_POINTER_DOWN) {
+            stylusPressed = pressed
+            stylusChannel?.invokeMethod("button", pressed)
+        }
+    }
+
+    private fun resetStylus() {
+        stylusPressed = false
+        if (stylusListening) stylusChannel?.invokeMethod("reset", null)
+    }
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        stylusEvent(event)
+        return super.dispatchTouchEvent(event)
+    }
+
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        stylusEvent(event)
+        val handled = super.dispatchGenericMotionEvent(event)
+        // Flutter ignores these two generic-motion actions. Consume only stylus
+        // button edges when an editor is listening; hover/scroll follow Flutter.
+        val buttonAction = event.actionMasked == MotionEvent.ACTION_BUTTON_PRESS ||
+            event.actionMasked == MotionEvent.ACTION_BUTTON_RELEASE
+        return handled || (stylusListening && buttonAction &&
+            (event.getToolType(event.actionIndex) == MotionEvent.TOOL_TYPE_STYLUS ||
+             event.getToolType(event.actionIndex) == MotionEvent.TOOL_TYPE_ERASER))
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus) resetStylus()
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        stylusChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nala/stylus").also { channel ->
+            channel.setMethodCallHandler { call, result ->
+                if (call.method == "listen") {
+                    stylusListening = call.arguments == true
+                    stylusPressed = false
+                    result.success(null)
+                } else result.notImplemented()
+            }
+        }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nala/share").setMethodCallHandler { call, result ->
             if (call.method != "sharePdf") { result.notImplemented() }
             else {

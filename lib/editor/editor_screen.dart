@@ -18,6 +18,8 @@ import 'editor_controller.dart';
 import 'editor_toolbar.dart';
 import 'draft_ink.dart';
 import 'pen_settings_dialog.dart';
+import 'pen_preferences.dart';
+import 'stylus_button_bridge.dart';
 import 'zoom_controls.dart';
 import 'input_router.dart';
 import 'page_panel.dart';
@@ -46,6 +48,7 @@ class EditorScreen extends StatefulWidget {
     this.audio,
     this.audioDirectory,
     this.cloud,
+    this.penPreferences,
   });
   final EditorController controller;
   final PdfService? pdf;
@@ -55,13 +58,15 @@ class EditorScreen extends StatefulWidget {
   final AudioDevice? audio;
   final String? audioDirectory;
   final CloudController? cloud;
+  final PenPreferencesController? penPreferences;
   @override
   State<EditorScreen> createState() => _EditorScreenState();
 }
 
-class _EditorScreenState extends State<EditorScreen> {
+class _EditorScreenState extends State<EditorScreen>
+    with WidgetsBindingObserver {
   bool allowPop = false, closing = false, showPages = false;
-  bool disposing = false, reading = false;
+  bool disposing = false, reading = false, inputActive = true;
   bool exporting = false, choosingShare = false;
   Notebook? exportedSnapshot;
   Uint8List? exportedBytes;
@@ -80,6 +85,19 @@ class _EditorScreenState extends State<EditorScreen> {
   @override
   void initState() {
     super.initState();
+    settings = widget.penPreferences?.value ?? const PenSettings();
+    pressureSensitivity = settings.pressure;
+    stabilization = settings.stabilization;
+    WidgetsBinding.instance.addObserver(this);
+    buttonBridge.start(
+      onButton: (pressed) {
+        if (acceptShortcut) router.stylusButton(pressed);
+      },
+      onReset: () => router.reset(),
+      onAvailability: (available) {
+        if (mounted && !disposing) router.nativeButtonEvents = available;
+      },
+    );
     widget.cloud?.addListener(syncChanged);
     widget.controller.addListener(localSettled);
     rememberPageFocus();
@@ -217,6 +235,62 @@ class _EditorScreenState extends State<EditorScreen> {
   String? fittedPage;
   final draft = DraftInk();
   double pressureSensitivity = 1, stabilization = 0;
+  PenSettings settings = const PenSettings();
+  EditorTool? buttonPreviousTool;
+  final buttonBridge = StylusButtonBridge();
+  bool get acceptShortcut =>
+      mounted &&
+      inputActive &&
+      !disposing &&
+      !closing &&
+      !reading &&
+      !commentOpen &&
+      (ModalRoute.of(context)?.isCurrent ?? true);
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    inputActive = state == AppLifecycleState.resumed;
+    if (!inputActive) router.reset();
+  }
+
+  void resetShortcut() {
+    if (settings.buttonMode == PenButtonMode.hold &&
+        buttonPreviousTool != null) {
+      tool = buttonPreviousTool!;
+      buttonPreviousTool = null;
+      if (mounted && !disposing) setState(() {});
+    }
+  }
+
+  void stylusButton(bool pressed) {
+    if (!acceptShortcut || settings.shortcutTool == null) return;
+    EditorTool? next;
+    if (settings.buttonMode == PenButtonMode.hold) {
+      if (pressed) {
+        buttonPreviousTool = tool;
+        next = settings.shortcutTool;
+      } else {
+        next = buttonPreviousTool;
+        buttonPreviousTool = null;
+      }
+    } else if (pressed) {
+      if (buttonPreviousTool == null) {
+        buttonPreviousTool = tool;
+        next = settings.shortcutTool;
+      } else {
+        next = buttonPreviousTool;
+        buttonPreviousTool = null;
+      }
+    }
+    if (next == null || next == tool) return;
+    router.changeInkTool(() {
+      setState(() {
+        tool = next!;
+        selected = {};
+      });
+    });
+  }
+
   final erased = <String>{};
   Set<String> selected = {};
   Offset? start, latest;
@@ -227,6 +301,8 @@ class _EditorScreenState extends State<EditorScreen> {
     onEnd: end,
     onCancel: cancel,
     onNavigate: navigate,
+    onStylusButton: stylusButton,
+    onReset: resetShortcut,
   );
   NotebookPage get page =>
       widget.controller.notebook.pages[pageIndex.clamp(
@@ -263,6 +339,20 @@ class _EditorScreenState extends State<EditorScreen> {
     );
   }
 
+  Rect get liveRasterBounds {
+    final sheet = Rect.fromLTWH(0, 0, page.width, page.height);
+    final size = viewSize;
+    if (size == null) return sheet;
+    final origin = layout.rect(pageIndex).topLeft;
+    final visible = Rect.fromLTRB(
+      -view.tx / view.scale - origin.dx,
+      -view.ty / view.scale - origin.dy,
+      (size.width - view.tx) / view.scale - origin.dx,
+      (size.height - view.ty) / view.scale - origin.dy,
+    );
+    return visible.inflate(4 / view.scale).intersect(sheet);
+  }
+
   void begin(InputSample event) {
     if (reading) return;
     final p = inkPoint(event);
@@ -282,7 +372,7 @@ class _EditorScreenState extends State<EditorScreen> {
         width: width,
         sensitivity: pressureSensitivity,
         stabilization: stabilization,
-        rasterBounds: Rect.fromLTWH(0, 0, page.width, page.height),
+        rasterBounds: liveRasterBounds,
         rasterScale: view.scale * MediaQuery.devicePixelRatioOf(context),
         pressureCurve: event.device == InputDevice.mouse
             ? PressureCurve.uniform
@@ -402,6 +492,7 @@ class _EditorScreenState extends State<EditorScreen> {
     if (reading) return;
     router.reset();
     setState(() {
+      buttonPreviousTool = null;
       tool = selectedTool;
       selected = {};
     });
@@ -411,15 +502,28 @@ class _EditorScreenState extends State<EditorScreen> {
     router.reset();
     final result = await showDialog<PenSettings>(
       context: context,
-      builder: (_) => PenSettingsDialog(
-        settings: (pressure: pressureSensitivity, stabilization: stabilization),
-      ),
+      builder: (_) => PenSettingsDialog(settings: settings),
     );
     if (result != null && mounted) {
       setState(() {
+        settings = result;
+        buttonPreviousTool = null;
         pressureSensitivity = result.pressure;
         stabilization = result.stabilization;
       });
+      try {
+        await widget.penPreferences?.update(result);
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Ajustes aplicados. No se pudieron guardar para la próxima sesión.',
+              ),
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -1043,6 +1147,8 @@ class _EditorScreenState extends State<EditorScreen> {
   @override
   void dispose() {
     disposing = true;
+    WidgetsBinding.instance.removeObserver(this);
+    buttonBridge.dispose();
     widget.cloud?.removeListener(syncChanged);
     widget.controller.removeListener(localSettled);
     for (final token in neighborTokens) {

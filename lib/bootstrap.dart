@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'editor/pen_preferences.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 import 'document/asset_store.dart';
@@ -24,6 +25,7 @@ class AppServices {
     DocumentFiles? files,
     PdfShare? share,
     AudioDevice? audio,
+    this.penPreferences,
   }) : pdf = pdf ?? PdfService(assets: assets),
        files = files ?? NativeDocumentFiles(),
        share = share ?? NativePdfShare(),
@@ -36,6 +38,7 @@ class AppServices {
   final DocumentFiles files;
   final PdfShare share;
   final AudioDevice audio;
+  final PenPreferencesController? penPreferences;
   SyncEngine? sync;
   SyncCoordinator? coordinator;
   bool _closed = false;
@@ -83,6 +86,7 @@ class AppServices {
     await library.refresh();
     return AppServices(
       root: root,
+      penPreferences: await PenPreferencesController.open(root),
       deviceId: id,
       repository: repository,
       assets: FileAssetStore(p.join(root, 'local', 'assets')),

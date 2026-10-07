@@ -49,6 +49,51 @@ void main() {
     expect(ink.points.last.y, 40);
     ink.dispose();
   });
+  test(
+    'al ampliar la hoja la tinta activa mantiene resolución de pantalla',
+    () async {
+      final ink = DraftInk();
+      ink.begin(
+        const InkPoint(x: 5, y: 13.37, pressure: 1),
+        tool: InkTool.pen,
+        argb: 0xff000000,
+        width: .5,
+        pressureCurve: PressureCurve.uniform,
+        stabilization: 0,
+        rasterBounds: const Rect.fromLTWH(0, 0, 64, 64),
+        rasterScale: 8,
+      );
+      ink.add(const InkPoint(x: 50, y: 13.37, pressure: 1));
+      Future<ui.Image> picture(bool raster) async {
+        final r = ui.PictureRecorder();
+        final canvas = Canvas(r)..scale(8);
+        if (raster) {
+          ink.paint(canvas);
+        } else {
+          canvas.drawPath(ink.path, Paint()..color = Colors.black);
+        }
+        final p = r.endRecording();
+        final image = await p.toImage(512, 512);
+        p.dispose();
+        return image;
+      }
+
+      final live = await picture(true), vector = await picture(false);
+      var difference = 0;
+      for (var y = 100; y < 114; y++) {
+        difference +=
+            ((await alpha(live, 200, y)) - (await alpha(vector, 200, y))).abs();
+      }
+      expect(
+        difference,
+        lessThan(120),
+        reason: 'Un zoom alto no debe ampliar una máscara de baja resolución.',
+      );
+      live.dispose();
+      vector.dispose();
+      ink.dispose();
+    },
+  );
   test('resaltador conserva opacidad al cruzar y repintar costuras', () async {
     final ink = DraftInk();
     ink.begin(

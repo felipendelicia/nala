@@ -23,17 +23,25 @@ class InputRouter {
     required this.onEnd,
     required this.onCancel,
     required this.onNavigate,
+    this.onStylusButton,
+    this.onReset,
   });
   final void Function(InputSample) onBegin, onUpdate, onEnd;
   final void Function() onCancel;
   final void Function(double dx, double dy, double factor, Point<double> anchor)
   onNavigate;
+  final void Function(bool)? onStylusButton;
+  final void Function()? onReset;
+  InputSample? _inkSample;
+  bool _buttonPressed = false;
   int? _inkPointer, _middlePointer;
   bool readOnly = false;
+  bool nativeButtonEvents = false;
   Point<double>? _middlePosition;
   final Map<int, Point<double>> _touches = {};
   bool get isWriting => _inkPointer != null;
   void down(InputSample event) {
+    _observeButton(event);
     if (readOnly &&
         (event.device == InputDevice.pen ||
             (event.device == InputDevice.mouse && event.buttons == 1))) {
@@ -47,6 +55,7 @@ class InputRouter {
         (event.device == InputDevice.mouse && event.buttons == 1)) {
       if (_inkPointer != null) return;
       _inkPointer = event.pointerId;
+      _inkSample = event;
       _touches.clear();
       onBegin(event);
     } else if (event.device == InputDevice.touch && _inkPointer == null) {
@@ -60,8 +69,10 @@ class InputRouter {
   }
 
   void move(InputSample event) {
+    _observeButton(event);
     if (_inkPointer == event.pointerId) {
       onUpdate(event);
+      _inkSample = event;
       return;
     }
     if (_inkPointer != null) return;
@@ -91,6 +102,7 @@ class InputRouter {
   void up(InputSample event) {
     if (_inkPointer == event.pointerId) {
       _inkPointer = null;
+      _inkSample = null;
       onEnd(event);
     }
     _touches.remove(event.pointerId);
@@ -103,7 +115,9 @@ class InputRouter {
   void cancel(int pointerId) {
     if (_inkPointer == pointerId) {
       _inkPointer = null;
+      _inkSample = null;
       onCancel();
+      _resetButton();
     }
     _touches.remove(pointerId);
     if (_middlePointer == pointerId) {
@@ -115,12 +129,40 @@ class InputRouter {
   void reset() {
     if (_inkPointer != null) onCancel();
     _inkPointer = null;
+    _inkSample = null;
+    _resetButton();
     _middlePointer = null;
     _middlePosition = null;
     _touches.clear();
   }
 
-  void hover(InputSample event) {}
+  void _resetButton() {
+    _buttonPressed = false;
+    onReset?.call();
+  }
+
+  void _observeButton(InputSample event) {
+    if (!nativeButtonEvents && event.device == InputDevice.pen) {
+      stylusButton((event.buttons & 2) != 0);
+    }
+  }
+
+  void stylusButton(bool pressed) {
+    if (_buttonPressed == pressed) return;
+    _buttonPressed = pressed;
+    if (!readOnly) onStylusButton?.call(pressed);
+  }
+
+  /// Finish using the old tool, then restart at the same contact point. Keep
+  /// pointer ownership so a palm cannot take over between these segments.
+  void changeInkTool(void Function() change) {
+    final contact = _inkSample;
+    if (contact != null) onEnd(contact);
+    change();
+    if (contact != null) onBegin(contact);
+  }
+
+  void hover(InputSample event) => _observeButton(event);
   Point<double> _center() {
     var x = 0.0, y = 0.0;
     for (final p in _touches.values) {

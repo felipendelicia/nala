@@ -8,12 +8,12 @@ import 'dart:ui';
 class LiveInkRaster {
   LiveInkRaster({required this.bounds, required double scale})
     : scale = math.min(
-        scale.clamp(.1, 3),
+        scale.clamp(.1, 24),
         math.sqrt(8000000 / math.max(1, bounds.width * bounds.height)),
       );
   final Rect bounds;
   final double scale;
-  static const tileSize = 256.0;
+  double get tileSize => 256 / scale;
   final _tiles = <(int, int), _Tile>{};
 
   void add(Path segment) {
