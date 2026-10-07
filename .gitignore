@@ -64,3 +64,8 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Local development runtime and workspace history
+/.tooling/
+/flutterw
+/.workspace-docs/
