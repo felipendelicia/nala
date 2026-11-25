@@ -20,6 +20,7 @@ _ASSET_ID = re.compile(r"[0-9a-f]{64}")
 _PDF_TIMEOUT = 4.0
 _PDF_MAX_TEXT = 128 * 1024
 _PDF_MAX_DIAGNOSTICS = 16 * 1024
+_PDF_CACHE_PAGES = 96
 
 
 @dataclass(frozen=True)
@@ -80,15 +81,20 @@ def _pdf_text(assets: Path, asset_id: object, page_number: object) -> tuple[str,
         if not stat.S_ISREG(metadata.st_mode):
             return "", "pdf_invalid"
         stamp = (metadata.st_dev, metadata.st_ino, metadata.st_size, metadata.st_mtime_ns, metadata.st_ctime_ns)
-        return _read_pdf(assets, asset_id, page_number, stamp)
+        contents, warning = _read_pdf(assets, asset_id, page_number, stamp)
     except (AssetMissing, FileNotFoundError):
         return "", "pdf_missing"
     except (AssetError, OSError):
         return "", "pdf_invalid"
+    text = contents.decode("utf-8", errors="replace").strip()
+    if not text and warning is None:
+        warning = "pdf_textless"
+    return text, warning
 
 
-@lru_cache(maxsize=48)
-def _read_pdf(assets: Path, asset_id: str, page_number: int, _stamp: tuple[int, ...]) -> tuple[str, str | None]:
+# Keep the raw output so the cache retains at most 12 MiB of extracted PDF text.
+@lru_cache(maxsize=_PDF_CACHE_PAGES)
+def _read_pdf(assets: Path, asset_id: str, page_number: int, _stamp: tuple[int, ...]) -> tuple[bytes, str | None]:
     contents = asset_bytes(assets, asset_id)
     # Use a seekable, unnamed file for the securely opened bytes. Poppler never
     # reopens the catalog path or inherits unrelated descriptors.
@@ -103,24 +109,23 @@ def _read_pdf(assets: Path, asset_id: str, page_number: int, _stamp: tuple[int, 
                 env={**os.environ, "LC_ALL": "C"},
             )
         except FileNotFoundError:
-            return "", "pdf_unavailable"
+            return b"", "pdf_unavailable"
         with process:
             try:
                 stdout, stderr, truncated = _read_pdf_pipes(process)
             except (TimeoutError, subprocess.TimeoutExpired):
                 process.kill()
-                return "", "pdf_timeout"
+                return b"", "pdf_timeout"
             except OSError:
                 process.kill()
                 raise
     if process.returncode == 3 or b"password" in stderr.lower():
-        return "", "pdf_protected"
-    text = stdout.decode("utf-8", errors="replace").strip()
+        return b"", "pdf_protected"
     if truncated == "stdout":
-        return text, "pdf_truncated"
+        return stdout, "pdf_truncated"
     if process.returncode or truncated:
-        return "", "pdf_invalid"
-    return (text, None) if text else ("", "pdf_textless")
+        return b"", "pdf_invalid"
+    return stdout, None
 
 
 def _read_pdf_pipes(process: subprocess.Popen) -> tuple[bytes, bytes, str | None]:

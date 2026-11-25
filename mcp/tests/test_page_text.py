@@ -132,6 +132,27 @@ class PageTextTests(unittest.TestCase):
         (self.assets / asset_id).unlink()
         self.assertEqual(page_text(selected, self.assets).warnings, ("pdf_missing",))
 
+    @unittest.skipUnless(shutil.which("pdftotext"), "requiere Poppler")
+    def test_repeated_reads_reuse_all_pages_of_a_64_page_pdf(self):
+        contents = [f"Hoja sintetica {number}".encode() for number in range(1, 65)]
+        asset_id = self.store_pdf(fixture_pdf(*contents))
+        with patch("nala_mcp.page_text.subprocess.Popen", wraps=subprocess.Popen) as extract:
+            for _ in range(2):
+                for number, text in enumerate(contents, start=1):
+                    result = page_text(self.pdf_page(asset_id, number), self.assets)
+                    self.assertEqual(result.sections, (("Texto original del PDF", text.decode()),))
+            self.assertEqual(extract.call_count, len(contents))
+
+    @unittest.skipUnless(shutil.which("pdftotext"), "requiere Poppler")
+    def test_cached_pdf_text_is_invalidated_when_the_file_changes(self):
+        asset_id = self.store_pdf(fixture_pdf(b"Original"))
+        selected = self.pdf_page(asset_id)
+        self.assertEqual(page_text(selected, self.assets).sections, (("Texto original del PDF", "Original"),))
+        (self.assets / asset_id).write_bytes(fixture_pdf(b"Replaced with a longer and different file"))
+        result = page_text(selected, self.assets)
+        self.assertEqual(result.sections, ())
+        self.assertEqual(result.warnings, ("pdf_invalid",))
+
     def test_asset_id_rejects_traversal_symlinks_and_invalid_contents(self):
         self.assertEqual(page_text(self.pdf_page("../file"), self.assets).warnings, ("pdf_invalid",))
         contents = fixture_pdf(b"Privado")
