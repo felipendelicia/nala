@@ -18,6 +18,8 @@ El código 0.5 incorpora formas y regla, copiar/cortar/pegar entre cuadernos, te
 
 La Tab S10 y Linux pueden compartir una biblioteca privada mediante el servidor de Nala. Cada equipo guarda primero en el dispositivo y sincroniza cuando hay conexión. Para instalar el servicio y conectar los clientes, seguí la [guía del servidor](docs/server-setup.md).
 
+El [conector MCP para Codex](docs/mcp.md) consulta los cuadernos de la biblioteca activa de Linux en modo de solo lectura. Permite buscar texto, citar páginas y ver apuntes manuscritos.
+
 La versión 0.6 agrega elementos reutilizables, enlaces entre páginas de apuntes, recorte y opacidad de imágenes con original recuperable, bloqueo de objetos, barra configurable, backup completo restaurable y fórmulas LaTeX con vista previa local. La restauración crea copias y conserva la biblioteca actual. Ver [la guía de estas herramientas](docs/notebook-workflow.md).
 
 La versión **0.7.0** incorpora el servidor privado. La [versión de prueba pública 0.6.0](https://github.com/felipendelicia/nala/releases/tag/v0.6.0) incluye las herramientas de estudio y el encabezado compacto. La [primera versión](https://github.com/felipendelicia/nala/releases/tag/v0.1.0) fue probada en la tablet antes de incorporar el flujo de PDF.

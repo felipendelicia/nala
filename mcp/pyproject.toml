@@ -1,0 +1,12 @@
+[project]
+name = "nala-notes-mcp"
+version = "0.1.0"
+description = "Conector MCP local de solo lectura para cuadernos de Nala"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp==2.3.0",
+    "pillow>=12,<13",
+]
+
+[tool.uv]
+package = false
