@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:apuntes/account/cloud_controller.dart';
@@ -37,6 +38,12 @@ void main() {
     expect(cloud.connected, isTrue);
   }
 
+  Future<void> settleLibraryRefresh() async {
+    final repository = cloud.services.repository;
+    await repository.list();
+    await (repository as FolderRepository).listFolders();
+  }
+
   setUp(() async {
     dir = await Directory.systemTemp.createTemp('nala-server-account-');
     server = _Server();
@@ -46,6 +53,83 @@ void main() {
     await cloud.close();
     await dir.delete(recursive: true);
   });
+
+  test(
+    'la sincronización sin cambios no vuelve a cargar la biblioteca',
+    () async {
+      cloud = await open();
+      await connect();
+      final library = cloud.services.library;
+      final firstRefresh = Completer<void>();
+      var refreshes = 0;
+      library.addListener(() {
+        refreshes++;
+        if (!firstRefresh.isCompleted) firstRefresh.complete();
+      });
+      server.folders['inbox'] = NoteFolder(
+        id: 'inbox',
+        name: 'Entrada',
+        updatedAt: DateTime.utc(2026),
+      ).toJson();
+
+      await cloud.synchronize();
+      await firstRefresh.future.timeout(const Duration(seconds: 3));
+      expect(library.folders.single.name, 'Entrada');
+      expect(refreshes, 1);
+
+      await cloud.synchronize();
+      await cloud.synchronize();
+      await cloud.services.repository.commit(
+        Revision(
+          id: 'local-only-echo',
+          parentId: null,
+          deviceId: 'tablet',
+          createdAt: DateTime.utc(2026),
+          notebook: fixtureNotebook(),
+        ),
+      );
+      await cloud.synchronize();
+      await settleLibraryRefresh();
+      expect(cloud.status.phase, SyncPhase.synced);
+      expect(refreshes, 1);
+    },
+  );
+
+  test(
+    'la biblioteca recibe una revisión aplicada antes de un fallo',
+    () async {
+      cloud = await open();
+      await connect();
+      final library = cloud.services.library;
+      final remoteNotebooks = <Set<String>>[];
+      final subscription = cloud.remoteNotebookChanges.listen(
+        remoteNotebooks.add,
+      );
+      addTearDown(subscription.cancel);
+      const revisionId = 'downloaded-before-error';
+      server.revisions[revisionId] = jsonDecode(
+        NotebookCodec.encodeRevision(
+          Revision(
+            id: revisionId,
+            parentId: null,
+            deviceId: 'pc',
+            createdAt: DateTime.utc(2026),
+            notebook: fixtureNotebook(),
+          ),
+        ),
+      );
+      server.failRevisionReadsAfter = 1;
+
+      await cloud.synchronize();
+      await settleLibraryRefresh();
+
+      expect(cloud.status.phase, SyncPhase.error);
+      expect(library.entries.map((e) => e.headId), [revisionId]);
+      expect(remoteNotebooks, [
+        {fixtureNotebook().id},
+      ]);
+    },
+  );
 
   test(
     'la primera migración preserva las revisiones y los borrados locales',
@@ -340,6 +424,7 @@ http.Response _json(Map<String, Object?> body) => http.Response(
 class _Server {
   String id = 'original-generation';
   bool revoked = false;
+  int? failRevisionReadsAfter;
   final methods = <String>[];
   final revisions = <String, Object?>{};
   final folders = <String, Map<String, dynamic>>{};
@@ -369,6 +454,9 @@ class _Server {
     }
     if (path == '/v1/revisions' && request.method == 'GET') {
       final after = int.parse(request.url.queryParameters['after']!);
+      if (after == failRevisionReadsAfter) {
+        return http.Response('{"error":"busy"}', 503);
+      }
       return _json({
         'items': revisions.values.skip(after).toList(),
         'next': revisions.length,

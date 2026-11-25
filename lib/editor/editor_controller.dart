@@ -24,11 +24,13 @@ class EditorController extends ChangeNotifier {
   String? _headId;
   Object? savingError;
   bool saving = false, _disposed = false;
+  bool _deletedRemotely = false;
   int _editGeneration = 0;
   Future<void> _queue = Future.value();
   final List<Notebook> _undo = [], _redo = [];
   Notebook get notebook => _notebook;
   String? get headId => _headId;
+  bool get deletedRemotely => _deletedRemotely;
   bool get canUndo => _undo.isNotEmpty;
   bool get canRedo => _redo.isNotEmpty;
   void _notify() {
@@ -65,24 +67,21 @@ class EditorController extends ChangeNotifier {
   }
 
   Future<bool> refreshRemote({required bool Function() canApply}) async {
-    if (_disposed || !canApply()) return false;
+    if (_disposed || deletedRemotely || !canApply()) return false;
     await flush();
     final generation = _editGeneration, previous = _headId;
     if (previous == null) return false;
     final heads = (await repository.list())
         .where((e) => e.notebook.id == _notebook.id)
         .toList();
-    if (heads.length != 1 || heads.single.headId == previous) return false;
-    final history = {
-      for (final r in await repository.history(_notebook.id)) r.id: r,
-    };
-    final seen = <String>{};
-    String? cursor = heads.single.headId;
-    while (cursor != null && cursor != previous && seen.add(cursor)) {
-      cursor = history[cursor]?.parentId;
+    if (heads.length > 1 || heads.singleOrNull?.headId == previous) {
+      return false;
     }
-    if (cursor != previous ||
-        _disposed ||
+    final deleted = heads.isEmpty && await repository.isDeleted(_notebook.id);
+    final history = heads.isEmpty
+        ? const <String, Revision>{}
+        : {for (final r in await repository.history(_notebook.id)) r.id: r};
+    if (_disposed ||
         generation != _editGeneration ||
         _headId != previous ||
         !canApply() ||
@@ -90,6 +89,18 @@ class EditorController extends ChangeNotifier {
         savingError != null) {
       return false;
     }
+    if (heads.isEmpty) {
+      if (!deleted) return false;
+      _deletedRemotely = true;
+      _notify();
+      return true;
+    }
+    final seen = <String>{};
+    String? cursor = heads.single.headId;
+    while (cursor != null && cursor != previous && seen.add(cursor)) {
+      cursor = history[cursor]?.parentId;
+    }
+    if (cursor != previous) return false;
     _notebook = heads.single.notebook;
     _headId = heads.single.headId;
     _undo.clear();

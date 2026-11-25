@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
+import 'package:apuntes/document/notebook_codec.dart';
 import 'package:apuntes/document/sqlite_notebook_repository.dart';
 import 'package:apuntes/document/revision.dart';
 import 'package:apuntes/document/asset_store.dart';
@@ -34,6 +35,78 @@ void main() {
       30,
     );
     expect((await repo.pending()).single.id, 'r1');
+  });
+  test('actualiza el índice de cabeceras de una base existente', () async {
+    await repo.acceptRemote(revision('r1', null));
+    await repo.acceptRemote(revision('r2', 'r1'));
+    await repo.close();
+
+    final before = sqlite3.open(getPath());
+    before.execute('DROP INDEX IF EXISTS revisions_parent_document');
+    before.close();
+
+    repo = await SqliteNotebookRepository.open(getPath());
+    expect((await repo.list()).single.headId, 'r2');
+    final after = sqlite3.open(getPath());
+    addTearDown(after.close);
+    final plan = after.select(
+      'EXPLAIN QUERY PLAN SELECT r.payload FROM revisions r WHERE NOT EXISTS '
+      '(SELECT 1 FROM revisions c WHERE c.parent_id=r.id AND c.document_id=r.document_id)',
+    );
+    expect(
+      plan.map((row) => row['detail'] as String),
+      contains(contains('COVERING INDEX revisions_parent_document')),
+    );
+  });
+  test('releer el catálogo conserva los cuadernos que no cambiaron', () async {
+    final original = revision('a1', null);
+    final other = Revision(
+      id: 'b1',
+      parentId: null,
+      deviceId: original.deviceId,
+      createdAt: original.createdAt,
+      notebook: fixtureNotebook(id: 'second'),
+    );
+    await repo.acceptRemote(original);
+    await repo.acceptRemote(other);
+
+    final initial = {
+      for (final entry in await repo.list()) entry.headId: entry,
+    };
+    final repeat = {for (final entry in await repo.list()) entry.headId: entry};
+    expect(repeat['a1']!.notebook, same(initial['a1']!.notebook));
+    expect(repeat['b1']!.notebook, same(initial['b1']!.notebook));
+
+    await repo.acceptRemote(revision('a2', 'a1', title: 'Revisión nueva'));
+    final updated = {
+      for (final entry in await repo.list()) entry.headId: entry,
+    };
+    expect(updated.keys, unorderedEquals(['a2', 'b1']));
+    expect(updated['a2']!.notebook.title, 'Revisión nueva');
+    expect(updated['b1']!.notebook, same(initial['b1']!.notebook));
+
+    await repo.acceptRemote(revision(Revision.deletionId('deleted'), 'a2'));
+    final afterDeletion = (await repo.list()).single;
+    expect(afterDeletion.headId, 'b1');
+    expect(afterDeletion.notebook, same(initial['b1']!.notebook));
+  });
+  test('el catálogo vuelve a leer tras un cambio en otra conexión', () async {
+    await repo.acceptRemote(revision('head', null));
+    expect((await repo.list()).single.notebook.title, 'Álgebra');
+
+    final sql = sqlite3.open(getPath());
+    try {
+      sql.execute('UPDATE revisions SET payload=? WHERE id=?', [
+        NotebookCodec.encodeRevision(
+          revision('head', null, title: 'Biblioteca reemplazada'),
+        ),
+        'head',
+      ]);
+    } finally {
+      sql.close();
+    }
+
+    expect((await repo.list()).single.notebook.title, 'Biblioteca reemplazada');
   });
   test('cien guardados locales se agrupan sin perder el último', () async {
     String? parent;

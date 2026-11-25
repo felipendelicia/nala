@@ -31,9 +31,8 @@ const _configs = {
 class BackupPreview {
   BackupPreview._(this._data);
   final _BackupData _data;
-  int get notebookCount =>
-      _data.revisions.map((r) => r.notebook.id).toSet().length;
-  int get headCount => _data.heads.length;
+  int get notebookCount => _data.visibleNotebookCount;
+  int get headCount => _data.visibleHeads.length;
   int get revisionCount => _data.revisions.length;
   int get assetCount =>
       _data.files.keys.where((p) => p.startsWith('assets/')).length;
@@ -239,7 +238,10 @@ class BackupService {
       final recoveryId = id();
       final folderIds = {for (final folder in data.folders) folder.id: id()};
       final documentIds = {for (final r in data.revisions) r.notebook.id: id()};
-      final revisionIds = {for (final r in data.revisions) r.id: id()};
+      final revisionIds = {
+        for (final r in data.revisions)
+          r.id: r.deleted ? Revision.deletionId(id()) : id(),
+      };
       final scopedIds = <(String, String), String>{};
       String remap(String scope, String old) =>
           scopedIds.putIfAbsent((scope, old), id);
@@ -455,7 +457,7 @@ class BackupService {
       }
       return BackupRestoreResult(
         recoveryFolderId: recoveryId,
-        notebookCount: documentIds.length,
+        notebookCount: data.visibleNotebookCount,
         templateCount: mergedCounts['templates'] ?? 0,
         elementCount: mergedCounts['elements'] ?? 0,
         preferencesRestored:
@@ -796,6 +798,24 @@ class _BackupData {
   final Map<String, dynamic> configs;
   final List<String> heads, warnings;
   final DateTime createdAt;
+
+  late final List<Revision> visibleHeads = _visibleHeads();
+  int get visibleNotebookCount =>
+      visibleHeads.map((revision) => revision.notebook.id).toSet().length;
+
+  List<Revision> _visibleHeads() {
+    final headIds = heads.toSet();
+    final deleted = {
+      for (final revision in revisions)
+        if (revision.deleted) revision.notebook.id,
+    };
+    return [
+      for (final revision in revisions)
+        if (headIds.contains(revision.id) &&
+            !deleted.contains(revision.notebook.id))
+          revision,
+    ];
+  }
 }
 
 class _StagedFile {

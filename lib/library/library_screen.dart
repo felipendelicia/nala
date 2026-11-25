@@ -25,6 +25,9 @@ import '../pdf/pdf_service.dart';
 import '../account/cloud_controller.dart';
 import '../account/cloud_panel.dart';
 
+const _notebookTileMaxWidth = 360.0;
+const _notebookPreviewSidePadding = 40.0;
+
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({
     super.key,
@@ -266,7 +269,29 @@ class _LibraryScreenState extends State<LibraryScreen> {
           builder: (_) => FolderPickerDialog(library: library),
         );
         if (target != null) await library.moveNotebook(entry, target.id);
-      } else {
+      } else if (action == 'delete') {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('¿Eliminar apunte?'),
+            content: Text(
+              '«${entry.notebook.title}» se quitará de tu biblioteca y de los '
+              'dispositivos sincronizados.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Eliminar'),
+              ),
+            ],
+          ),
+        );
+        if (mounted && confirmed == true) await library.deleteNotebook(entry);
+      } else if (action == 'rename') {
         final name = await showDialog<String>(
           context: context,
           builder: (_) => NameDialog(
@@ -295,12 +320,19 @@ class _LibraryScreenState extends State<LibraryScreen> {
     widget.services.library.openFolder(folder);
   }
 
+  ValueKey<(String, String?)> _tileKey(DocumentEntry entry) =>
+      ValueKey((entry.notebook.id, entry.isConflict ? entry.headId : null));
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.services.library,
     builder: (context, _) {
       final library = widget.services.library;
       final entries = library.filtered(query: query, subject: subject);
+      final tileIndices = {
+        for (var index = 0; index < entries.length; index++)
+          _tileKey(entries[index]): index,
+      };
       final subjects =
           library.entries
               .map((e) => e.notebook.subject)
@@ -660,7 +692,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                             : GridView.builder(
                                 gridDelegate:
                                     SliverGridDelegateWithMaxCrossAxisExtent(
-                                      maxCrossAxisExtent: 360,
+                                      maxCrossAxisExtent: _notebookTileMaxWidth,
                                       mainAxisExtent:
                                           constraints.maxHeight < 800
                                           ? 280
@@ -669,7 +701,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                       mainAxisSpacing: 20,
                                     ),
                                 itemCount: entries.length,
+                                findChildIndexCallback: (key) =>
+                                    tileIndices[key],
                                 itemBuilder: (_, index) => _NotebookTile(
+                                  key: _tileKey(entries[index]),
                                   entry: entries[index],
                                   pdf: widget.services.pdf,
                                   assets: widget.services.assets,
@@ -693,6 +728,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
 class _NotebookTile extends StatelessWidget {
   const _NotebookTile({
+    super.key,
     required this.entry,
     required this.onTap,
     required this.pdf,
@@ -734,7 +770,12 @@ class _NotebookTile extends StatelessWidget {
                   children: [
                     Positioned.fill(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(40, 18, 40, 0),
+                        padding: const EdgeInsets.fromLTRB(
+                          _notebookPreviewSidePadding,
+                          18,
+                          _notebookPreviewSidePadding,
+                          0,
+                        ),
                         child: FittedBox(
                           alignment: Alignment.topCenter,
                           child: DecoratedBox(
@@ -753,22 +794,9 @@ class _NotebookTile extends StatelessWidget {
                                   ? SizedBox(
                                       width: page.width,
                                       height: page.height,
-                                      child: FutureBuilder<Uint8List>(
-                                        future: assets.read(cover),
-                                        builder: (context, state) =>
-                                            state.hasData
-                                            ? Image.memory(
-                                                state.data!,
-                                                fit: BoxFit.cover,
-                                              )
-                                            : const ColoredBox(
-                                                color: Colors.white,
-                                                child: Center(
-                                                  child: Icon(
-                                                    Icons.image_outlined,
-                                                  ),
-                                                ),
-                                              ),
+                                      child: _NotebookCover(
+                                        assets: assets,
+                                        assetId: cover,
                                       ),
                                     )
                                   : PaperCanvas(
@@ -776,6 +804,7 @@ class _NotebookTile extends StatelessWidget {
                                       page: page,
                                       tool: EditorTool.pen,
                                       onStroke: (_) {},
+                                      externalInput: true,
                                       background: isPdf
                                           ? PdfPageBackground(
                                               pdf: pdf,
@@ -818,6 +847,10 @@ class _NotebookTile extends StatelessWidget {
                           PopupMenuItem(
                             value: 'rename',
                             child: Text('Renombrar'),
+                          ),
+                          PopupMenuItem(
+                            value: 'delete',
+                            child: Text('Eliminar apunte'),
                           ),
                         ],
                       ),
@@ -874,4 +907,55 @@ class _NotebookTile extends StatelessWidget {
       ),
     );
   }
+}
+
+class _NotebookCover extends StatefulWidget {
+  const _NotebookCover({required this.assets, required this.assetId});
+
+  final AssetStore assets;
+  final String assetId;
+
+  @override
+  State<_NotebookCover> createState() => _NotebookCoverState();
+}
+
+class _NotebookCoverState extends State<_NotebookCover> {
+  late Future<Uint8List> _image = widget.assets.read(widget.assetId);
+
+  @override
+  void didUpdateWidget(_NotebookCover oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.assets != widget.assets ||
+        oldWidget.assetId != widget.assetId) {
+      _image = widget.assets.read(widget.assetId);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<Uint8List>(
+    key: ValueKey(widget.assetId),
+    future: _image,
+    builder: (context, snapshot) {
+      const placeholder = ColoredBox(
+        color: Colors.white,
+        child: Center(child: Icon(Icons.image_outlined)),
+      );
+      final bytes = snapshot.data;
+      if (bytes == null) return placeholder;
+      final ratio = MediaQuery.devicePixelRatioOf(context);
+      return Image(
+        image: ResizeImage(
+          MemoryImage(bytes),
+          width:
+              ((_notebookTileMaxWidth - 2 * _notebookPreviewSidePadding) *
+                      ratio)
+                  .ceil(),
+          height: (320 * ratio).ceil(),
+          policy: ResizeImagePolicy.fit,
+        ),
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => placeholder,
+      );
+    },
+  );
 }

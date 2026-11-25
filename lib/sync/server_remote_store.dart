@@ -132,7 +132,10 @@ class ServerRemoteStore
 
   @override
   Future<void> putRevision(Revision revision) async {
-    await _putJson('revisions', await const DocumentWorker().encode(revision));
+    final bytes = await DocumentWorker(
+      events: NotebookCodec.diagnostics,
+    ).encodeUtf8(revision);
+    await _putJson('revisions', bytes);
   }
 
   @override
@@ -152,20 +155,22 @@ class ServerRemoteStore
 
   @override
   Future<void> putFolder(NoteFolder folder) =>
-      _putJson('folders', jsonEncode(folder.toJson()));
+      _putJson('folders', utf8.encode(jsonEncode(folder.toJson())));
 
   @override
   Future<void> putFolders(List<NoteFolder> folders) => _putJson(
     'folders',
-    jsonEncode({'items': folders.map((folder) => folder.toJson()).toList()}),
+    utf8.encode(
+      jsonEncode({'items': folders.map((folder) => folder.toJson()).toList()}),
+    ),
   );
 
-  Future<void> _putJson(String route, String body) async {
+  Future<void> _putJson(String route, Uint8List bytes) async {
     final response = await _transport.send(
       'PUT',
       [route],
       serverId: _serverId,
-      body: body,
+      bytes: bytes,
       headers: {'Content-Type': 'application/json; charset=utf-8'},
       accepted: {200, 201, 204},
     );
@@ -503,7 +508,6 @@ class _ServerHttp {
     String? serverId,
     Map<String, String>? query,
     Map<String, String> headers = const {},
-    String? body,
     Uint8List? bytes,
     Set<int> accepted = const {200},
   }) async {
@@ -525,7 +529,6 @@ class _ServerHttp {
             'X-Nala-Server': ?serverId,
             ...headers,
           });
-    if (body != null) request.body = body;
     if (bytes != null) request.bodyBytes = bytes;
     final response = await _client
         .send(request)

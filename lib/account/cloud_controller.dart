@@ -10,6 +10,7 @@ import '../bootstrap.dart';
 import '../document/sqlite_notebook_repository.dart';
 import '../sync/remote_store.dart';
 import '../sync/server_remote_store.dart';
+import '../sync/sync_engine.dart';
 import '../sync/sync_state.dart';
 import 'token_store.dart';
 
@@ -94,6 +95,8 @@ class CloudController extends ChangeNotifier {
   _SavedConnection? _saved;
   ServerConnectionProbe? _pending;
   http.Client? _probeClient;
+  final _remoteNotebookChanges = StreamController<Set<String>>.broadcast();
+  StreamSubscription<RemoteChanges>? _remoteChangesSubscription;
   Future<void>? _operation, _closing;
   bool _closed = false, _needsCredentials = false;
   int _probeEpoch = 0;
@@ -109,6 +112,8 @@ class CloudController extends ChangeNotifier {
       SyncStatus(
         _needsCredentials ? SyncPhase.needsSignIn : SyncPhase.localOnly,
       );
+  Stream<Set<String>> get remoteNotebookChanges =>
+      _remoteNotebookChanges.stream;
   File get _connectionFile =>
       File(p.join(activeCatalog.root, 'server-connection.json'));
   SqliteNotebookRepository get _repository =>
@@ -221,11 +226,12 @@ class CloudController extends ChangeNotifier {
     if (!_closed) notifyListeners();
   }
 
-  void _syncChanged() {
-    _changed();
-    if (status.phase == SyncPhase.synced) {
-      unawaited(services.library.refresh().catchError((Object _) {}));
+  void _refreshChangedContent(RemoteChanges changes) {
+    if (_closed) return;
+    if (changes.notebookIds.isNotEmpty) {
+      _remoteNotebookChanges.add(changes.notebookIds);
     }
+    unawaited(services.library.refresh().catchError((Object _) {}));
   }
 
   void _attach(ServerDestination destination, String token) {
@@ -245,13 +251,19 @@ class CloudController extends ChangeNotifier {
       autoStart: false,
     );
     _needsCredentials = false;
-    services.sync!.addListener(_syncChanged);
-    services.sync!.notifyPending();
+    final sync = services.sync!;
+    _remoteChangesSubscription = sync.remoteChanges.listen(
+      _refreshChangedContent,
+    );
+    sync.addListener(_changed);
+    sync.notifyPending();
     if (_autoStart) services.coordinator!.start();
   }
 
   Future<void> _stop() async {
-    services.sync?.removeListener(_syncChanged);
+    services.sync?.removeListener(_changed);
+    await _remoteChangesSubscription?.cancel();
+    _remoteChangesSubscription = null;
     await services.stopSync();
   }
 
@@ -507,6 +519,7 @@ class CloudController extends ChangeNotifier {
     await _operation;
     await _stop();
     await services.close();
+    unawaited(_remoteNotebookChanges.close());
     super.dispose();
   }
 }

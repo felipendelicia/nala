@@ -23,6 +23,13 @@ Set<String> notebookAssets(Notebook notebook) => {
   ],
 };
 
+typedef RemoteChanges = ({Set<String> notebookIds, bool foldersChanged});
+
+class _RemoteChanges {
+  final notebookIds = <String>{};
+  bool foldersChanged = false;
+}
+
 class SyncEngine extends ChangeNotifier {
   SyncEngine({
     required this.repository,
@@ -34,6 +41,8 @@ class SyncEngine extends ChangeNotifier {
   final RemoteStore remote;
   final _states = StreamController<SyncStatus>.broadcast();
   Stream<SyncStatus> get states => _states.stream;
+  final _remoteChanges = StreamController<RemoteChanges>.broadcast();
+  Stream<RemoteChanges> get remoteChanges => _remoteChanges.stream;
   SyncStatus status = const SyncStatus(SyncPhase.localOnly);
   Future<void>? _running;
   bool _closed = false;
@@ -60,9 +69,10 @@ class SyncEngine extends ChangeNotifier {
 
   Future<void> _synchronize() async {
     _emit(const SyncStatus(SyncPhase.syncing));
+    final changes = _RemoteChanges();
     try {
       final verified = <String>{};
-      await _pull(verified);
+      await _pull(verified, changes);
       if (_closed) return;
       if (repository is FolderRepository) {
         final folders = await (repository as FolderRepository).listFolders(
@@ -91,7 +101,7 @@ class SyncEngine extends ChangeNotifier {
         if (_closed) return;
         await repository.markUploaded(revision.id);
       }
-      await _pull(verified);
+      await _pull(verified, changes);
       if (_closed) return;
       final pending = await repository.pending();
       _failures = 0;
@@ -131,14 +141,24 @@ class SyncEngine extends ChangeNotifier {
           retryAfter: delay,
         ),
       );
+    } finally {
+      if (!_closed &&
+          (changes.notebookIds.isNotEmpty || changes.foldersChanged)) {
+        _remoteChanges.add((
+          notebookIds: Set.unmodifiable(changes.notebookIds),
+          foldersChanged: changes.foldersChanged,
+        ));
+      }
     }
   }
 
-  Future<void> _pull(Set<String> verified) async {
+  Future<void> _pull(Set<String> verified, _RemoteChanges changes) async {
     final remoteFolders = await remote.listFolders();
     if (_closed) return;
-    if (repository is FolderRepository) {
-      await (repository as FolderRepository).mergeFolders(remoteFolders);
+    if (repository case final FolderRepository folders) {
+      if (await folders.mergeFolders(remoteFolders)) {
+        changes.foldersChanged = true;
+      }
     }
     final catalog = repository;
     final known = <String, Map<String, Revision>>{};
@@ -170,6 +190,7 @@ class SyncEngine extends ChangeNotifier {
       _checkOpen();
       if (old == null) {
         await repository.acceptRemote(revision);
+        changes.notebookIds.add(revision.notebook.id);
         known[revision.notebook.id]?[revision.id] = revision;
       }
     }
@@ -242,6 +263,7 @@ class SyncEngine extends ChangeNotifier {
     _closed = true;
     remote.close();
     unawaited(_states.close());
+    unawaited(_remoteChanges.close());
     super.dispose();
   }
 }

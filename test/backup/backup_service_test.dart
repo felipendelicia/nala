@@ -181,6 +181,46 @@ void main() {
   });
 
   test(
+    'la copia anterior recupera el apunte y la posterior mantiene el borrado',
+    () async {
+      final before = await exporter.export();
+      final book = Notebook.blank(
+        id: 'source-book',
+        pageId: 'source-page',
+        title: 'Left',
+        pattern: PaperPattern.blank,
+        now: now,
+      );
+      await sourceRepo.commit(
+        Revision(
+          id: Revision.deletionId('source'),
+          deviceId: 'source-device',
+          parentId: 'left',
+          createdAt: now,
+          notebook: book,
+        ),
+      );
+      final after = await exporter.export();
+      final preview = await importer.inspect(after);
+      expect(preview.notebookCount, 0);
+      expect(preview.headCount, 0);
+      expect((await importer.restore(after)).notebookCount, 0);
+      expect(await targetRepo.list(), isEmpty);
+      final archived = (await targetRepo.snapshot()).revisions;
+      expect(archived.where((r) => r.deleted), hasLength(1));
+      expect(archived.map((r) => r.notebook.title), contains('Right'));
+
+      expect((await importer.restore(before)).notebookCount, 1);
+      final recovered = await targetRepo.list();
+      expect(
+        recovered.map((r) => r.notebook.title),
+        unorderedEquals(['Left', 'Right']),
+      );
+      expect(recovered.first.notebook.id, isNot(archived.first.notebook.id));
+    },
+  );
+
+  test(
     'recovery preserves histories, conflicts, media and remaps links while retaining existing notes',
     () async {
       await targetRepo.commit(

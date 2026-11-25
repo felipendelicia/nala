@@ -23,6 +23,8 @@ class SqliteNotebookRepository
   final Map<int, Completer<Object?>> _responses;
   int _requestId = 0;
   bool _closed = false;
+  int? _catalogDataVersion;
+  Map<String, Revision> _catalogRevisions = const {};
   void Function()? onLocalChange;
   static Future<SqliteNotebookRepository> open(String path) async {
     await File(path).parent.create(recursive: true);
@@ -81,7 +83,20 @@ class SqliteNotebookRepository
   ]) async => ((await _call(op, args)) as List).cast<Revision>();
   @override
   Future<List<DocumentEntry>> list() async {
-    final heads = await _revisions('list');
+    final cached = _catalogRevisions;
+    final (dataVersion, ids, loaded) =
+        (await _call('list', {
+              'dataVersion': _catalogDataVersion,
+              'cachedIds': cached.keys.toList(),
+            }))
+            as (int, List<String>, List<Revision>);
+    final revisions = {
+      ...cached,
+      for (final revision in loaded) revision.id: revision,
+    };
+    _catalogDataVersion = dataVersion;
+    _catalogRevisions = {for (final id in ids) id: revisions[id]!};
+    final heads = _catalogRevisions.values;
     final counts = <String, int>{};
     for (final r in heads) {
       counts.update(r.notebook.id, (n) => n + 1, ifAbsent: () => 1);
@@ -102,7 +117,11 @@ class SqliteNotebookRepository
   @override
   Future<Notebook?> load(String documentId, {String? headId}) async {
     if (headId != null) {
-      return (await lookupRevision(documentId, headId))?.notebook;
+      return (await _loadRevision(
+        documentId,
+        headId,
+        visibleOnly: true,
+      ))?.notebook;
     }
     final entries = await list();
     for (final entry in entries) {
@@ -112,10 +131,22 @@ class SqliteNotebookRepository
   }
 
   @override
-  Future<Revision?> lookupRevision(String documentId, String revisionId) async {
+  Future<bool> isDeleted(String documentId) async =>
+      (await _call('isDeleted', {'documentId': documentId})) as bool;
+
+  @override
+  Future<Revision?> lookupRevision(String documentId, String revisionId) =>
+      _loadRevision(documentId, revisionId);
+
+  Future<Revision?> _loadRevision(
+    String documentId,
+    String revisionId, {
+    bool visibleOnly = false,
+  }) async {
     final revision = await _call('load', {
       'documentId': documentId,
       'headId': revisionId,
+      'visibleOnly': visibleOnly,
     });
     return revision as Revision?;
   }
@@ -165,11 +196,11 @@ class SqliteNotebookRepository
   }
 
   @override
-  Future<void> mergeFolders(List<NoteFolder> folders) async {
-    await _call('mergeFolders', {
-      'payload': folders.map((f) => jsonEncode(f.toJson())).toList(),
-    });
-  }
+  Future<bool> mergeFolders(List<NoteFolder> folders) async =>
+      (await _call('mergeFolders', {
+            'payload': folders.map((f) => jsonEncode(f.toJson())).toList(),
+          }))
+          as bool;
 
   @override
   Future<void> deleteFolder(String id) async {
@@ -219,6 +250,13 @@ class SqliteNotebookRepository
   }
 }
 
+const _deletionIdPattern = "GLOB '${Revision.deletionIdPrefix}*'";
+const _notDeleted =
+    '''NOT EXISTS (
+  SELECT 1 FROM revisions d WHERE d.document_id=r.document_id
+    AND d.id $_deletionIdPattern
+)''';
+
 void _databaseWorker((SendPort, String) config) {
   final (reply, path) = config;
   late Database db;
@@ -238,7 +276,13 @@ void _databaseWorker((SendPort, String) config) {
       'CREATE INDEX IF NOT EXISTS revisions_document ON revisions(document_id)',
     );
     db.execute(
+      'CREATE INDEX IF NOT EXISTS revisions_parent_document ON revisions(parent_id, document_id)',
+    );
+    db.execute(
       'CREATE TABLE IF NOT EXISTS upload_queue (revision_id TEXT PRIMARY KEY REFERENCES revisions(id))',
+    );
+    db.execute(
+      'CREATE INDEX IF NOT EXISTS revisions_deleted_document ON revisions(document_id) WHERE id $_deletionIdPattern',
     );
   } catch (error) {
     reply.send({'error': error.toString()});
@@ -379,7 +423,7 @@ void _databaseWorker((SendPort, String) config) {
             }
           });
         case 'mergeFolders':
-          _transaction(db, () {
+          result = _transaction(db, () {
             final catalog = <String, NoteFolder>{
               for (final row in db.select('SELECT * FROM folders'))
                 row['id'] as String: NoteFolder(
@@ -434,9 +478,16 @@ void _databaseWorker((SendPort, String) config) {
                 cursor = parent;
               }
             }
+            var changed = false;
             for (final folder in catalog.values) {
               db.execute(
-                'INSERT INTO folders(id,name,parent_id,updated_at,deleted) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,parent_id=excluded.parent_id,updated_at=excluded.updated_at,deleted=excluded.deleted',
+                'INSERT INTO folders(id,name,parent_id,updated_at,deleted) VALUES(?,?,?,?,?) '
+                'ON CONFLICT(id) DO UPDATE SET name=excluded.name,parent_id=excluded.parent_id,'
+                'updated_at=excluded.updated_at,deleted=excluded.deleted '
+                'WHERE folders.name IS NOT excluded.name '
+                'OR folders.parent_id IS NOT excluded.parent_id '
+                'OR folders.updated_at IS NOT excluded.updated_at '
+                'OR folders.deleted IS NOT excluded.deleted',
                 [
                   folder.id,
                   folder.name,
@@ -445,7 +496,9 @@ void _databaseWorker((SendPort, String) config) {
                   folder.deleted ? 1 : 0,
                 ],
               );
+              changed = db.updatedRows > 0 || changed;
             }
+            return changed;
           });
         case 'folders':
           result = db
@@ -509,10 +562,15 @@ void _databaseWorker((SendPort, String) config) {
                   'SELECT id FROM folders WHERE parent_id=? AND deleted=0',
                   [id],
                 ).isNotEmpty ||
-                db.select(
-                  r"SELECT r.id FROM revisions r WHERE json_extract(r.payload,'$.notebook.folderId')=? AND NOT EXISTS (SELECT 1 FROM revisions c WHERE c.parent_id=r.id AND c.document_id=r.document_id)",
-                  [id],
-                ).isNotEmpty) {
+                db
+                    .select(
+                      '''SELECT r.id FROM revisions r
+                     WHERE json_extract(r.payload,'\$.notebook.folderId')=?
+                       AND $_notDeleted
+                       AND NOT EXISTS (SELECT 1 FROM revisions c WHERE c.parent_id=r.id AND c.document_id=r.document_id)''',
+                      [id],
+                    )
+                    .isNotEmpty) {
               throw StateError(
                 'La carpeta todavía contiene apuntes o subcarpetas',
               );
@@ -538,18 +596,33 @@ void _databaseWorker((SendPort, String) config) {
             );
           });
         case 'list':
-          result = db
-              .select(
-                'SELECT r.payload FROM revisions r WHERE NOT EXISTS (SELECT 1 FROM revisions c WHERE c.parent_id=r.id AND c.document_id=r.document_id)',
-              )
-              .map((row) => row['payload'])
-              .toList();
+          final (version, ids, payloads) = _readCatalog(
+            db,
+            request['dataVersion'] as int?,
+            (request['cachedIds'] as List).cast<String>(),
+          );
+          result = (
+            version,
+            ids,
+            payloads.map(NotebookCodec.decodeRevision).toList(),
+          );
         case 'load':
+          final visibility = request['visibleOnly'] == true
+              ? ' AND $_notDeleted'
+              : '';
           final rows = db.select(
-            'SELECT payload FROM revisions WHERE id=? AND document_id=?',
+            'SELECT r.payload FROM revisions r WHERE r.id=? AND r.document_id=?$visibility',
             [request['headId'], request['documentId']],
           );
           result = rows.isEmpty ? null : rows.single['payload'];
+        case 'isDeleted':
+          result = db
+              .select(
+                '''SELECT 1 FROM revisions WHERE document_id=?
+               AND id $_deletionIdPattern LIMIT 1''',
+                [request['documentId']],
+              )
+              .isNotEmpty;
         case 'history':
           result = db
               .select(
@@ -563,6 +636,17 @@ void _databaseWorker((SendPort, String) config) {
             var revision = NotebookCodec.decodeRevision(
               request['payload'] as String,
             );
+            if (revision.deleted) {
+              // A head from the menu may have been coalesced while its
+              // confirmation was open. Keep an existing revision as parent.
+              final retained = db.select(
+                '''SELECT r.id FROM revisions r WHERE r.document_id=? AND $_notDeleted
+                   ORDER BY (r.id=?) DESC, r.rowid DESC LIMIT 1''',
+                [revision.notebook.id, revision.parentId],
+              );
+              if (retained.isEmpty) return;
+              revision = revision.withParent(retained.single['id'] as String);
+            }
             final parent = db.select('SELECT * FROM revisions WHERE id=?', [
               revision.parentId,
             ]);
@@ -574,7 +658,8 @@ void _databaseWorker((SendPort, String) config) {
               'SELECT id FROM revisions WHERE parent_id=?',
               [revision.parentId],
             );
-            if (parent.isNotEmpty &&
+            if (!revision.deleted &&
+                parent.isNotEmpty &&
                 parent.single['frozen'] == 0 &&
                 children.isEmpty) {
               final previous = revision.parentId;
@@ -587,12 +672,13 @@ void _databaseWorker((SendPort, String) config) {
               db.execute('DELETE FROM revisions WHERE id=?', [previous]);
             }
             db.execute(
-              'INSERT INTO revisions (id,document_id,parent_id,payload) VALUES (?,?,?,?)',
+              'INSERT INTO revisions (id,document_id,parent_id,payload,frozen) VALUES (?,?,?,?,?)',
               [
                 revision.id,
                 revision.notebook.id,
                 revision.parentId,
                 NotebookCodec.encodeRevision(revision),
+                revision.deleted ? 1 : 0,
               ],
             );
             db.execute('INSERT INTO upload_queue VALUES (?)', [revision.id]);
@@ -641,7 +727,7 @@ void _databaseWorker((SendPort, String) config) {
           throw StateError('Operación desconocida');
       }
       if (result is List &&
-          const {'list', 'history', 'pending'}.contains(request['op'])) {
+          const {'history', 'pending'}.contains(request['op'])) {
         result = result
             .cast<String>()
             .map(NotebookCodec.decodeRevision)
@@ -656,8 +742,43 @@ void _databaseWorker((SendPort, String) config) {
   });
 }
 
-T _transaction<T>(Database db, T Function() action) {
-  db.execute('BEGIN IMMEDIATE');
+(int, List<String>, List<String>) _readCatalog(
+  Database db,
+  int? cachedVersion,
+  List<String> cachedIds,
+) => _transaction(db, write: false, () {
+  // Revisions are immutable. Invalidate the cache if another connection
+  // changed the database, and read IDs and payloads within the same snapshot.
+  final version =
+      db.select('PRAGMA data_version').single['data_version'] as int;
+  final known = version == cachedVersion ? cachedIds.toSet() : const <String>{};
+  final columns = known.isEmpty ? 'r.id, r.payload' : 'r.id';
+  final rows = db.select('''
+    SELECT $columns FROM revisions r WHERE $_notDeleted
+      AND NOT EXISTS (
+        SELECT 1 FROM revisions c WHERE c.parent_id=r.id AND c.document_id=r.document_id
+      )
+  ''');
+  final ids = [for (final row in rows) row['id'] as String];
+  if (known.isEmpty) {
+    return (version, ids, [for (final row in rows) row['payload'] as String]);
+  }
+  return (
+    version,
+    ids,
+    [
+      for (final id in ids)
+        if (!known.contains(id))
+          db.select('SELECT payload FROM revisions WHERE id=?', [
+                id,
+              ]).single['payload']
+              as String,
+    ],
+  );
+});
+
+T _transaction<T>(Database db, T Function() action, {bool write = true}) {
+  db.execute(write ? 'BEGIN IMMEDIATE' : 'BEGIN');
   try {
     final result = action();
     db.execute('COMMIT');

@@ -7,8 +7,8 @@ import 'revision.dart';
 class DocumentWorker {
   const DocumentWorker({this.events});
   final SendPort? events;
-  Future<String> encode(Revision revision) =>
-      compute(_encode, (revision, events));
+  Future<Uint8List> encodeUtf8(Revision revision) =>
+      compute(_encodeUtf8, (revision, events));
   Future<Revision> decode(Uint8List bytes) => compute(_decode, (bytes, events));
   Future<String> canonical(Uint8List bytes) =>
       compute(_canonical, (bytes, events));
@@ -20,9 +20,11 @@ class DocumentWorker {
   ) => compute(_multipart, (metadata, payload, boundary, events));
 }
 
-String _encode((Revision, SendPort?) request) {
+Uint8List _encodeUtf8((Revision, SendPort?) request) {
   NotebookCodec.diagnostics = request.$2;
-  return NotebookCodec.encodeRevision(request.$1);
+  final json = NotebookCodec.encodeRevision(request.$1);
+  NotebookCodec.reportWork('utf8-encode');
+  return utf8.encode(json);
 }
 
 Revision _decode((Uint8List, SendPort?) request) {

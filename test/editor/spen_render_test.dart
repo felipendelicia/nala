@@ -20,7 +20,44 @@ Future<int> alpha(ui.Image image, int x, int y) async {
   return bytes.getUint8((y * image.width + x) * 4 + 3);
 }
 
+class _TileCounter implements Canvas {
+  final destinations = <Rect>[];
+
+  @override
+  void drawImageRect(ui.Image image, Rect src, Rect dst, Paint paint) {
+    destinations.add(dst);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
+  test('la tinta activa no rasteriza los huecos de un trazo diagonal', () {
+    final ink = DraftInk();
+    addTearDown(ink.dispose);
+    ink.begin(
+      const InkPoint(x: 24, y: 24, pressure: 1),
+      tool: InkTool.pen,
+      argb: 0xff000000,
+      width: 4,
+      rasterBounds: const Rect.fromLTWH(0, 0, 1792, 1792),
+    );
+    for (var i = 1; i < 96; i++) {
+      final position = 24.0 + 18 * i;
+      ink.add(InkPoint(x: position, y: position, pressure: 1));
+    }
+
+    final canvas = _TileCounter();
+    ink.paint(canvas);
+
+    expect(canvas.destinations, hasLength(40));
+    expect(
+      canvas.destinations.every((tile) => (tile.left - tile.top).abs() <= 128),
+      isTrue,
+    );
+  });
+
   test('la presión de la muestra actual responde sin filtro retardado', () {
     final ink = DraftInk();
     ink.begin(

@@ -63,7 +63,8 @@ class DocumentWorkspace extends ChangeNotifier {
   Future<bool> openLink(PageLink link) async {
     var tab = _tabs.where((t) => t.id == link.notebookId).firstOrNull;
     if (tab != null) {
-      if (!tab.controller.notebook.pages.any((p) => p.id == link.pageId)) {
+      if (tab.controller.deletedRemotely ||
+          !tab.controller.notebook.pages.any((p) => p.id == link.pageId)) {
         return false;
       }
       select(tab.id);
@@ -429,6 +430,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                                               closingId != tab.id,
                                           workspaceManaged: true,
                                           onClose: _leave,
+                                          onCloseDeleted: () =>
+                                              _closeTab(tab.id),
                                           onOpenNotebook: closing
                                               ? null
                                               : () => _choose(),

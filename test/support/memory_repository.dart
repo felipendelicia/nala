@@ -17,8 +17,14 @@ class MemoryRepository implements NotebookRepository {
   @override
   Future<List<DocumentEntry>> list() async {
     final parents = revisions.values.map((r) => r.parentId).toSet();
+    final deleted = revisions.values
+        .where((r) => r.deleted)
+        .map((r) => r.notebook.id)
+        .toSet();
     final heads = revisions.values
-        .where((r) => !parents.contains(r.id))
+        .where(
+          (r) => !parents.contains(r.id) && !deleted.contains(r.notebook.id),
+        )
         .toList();
     return heads
         .map(
@@ -34,13 +40,24 @@ class MemoryRepository implements NotebookRepository {
   }
 
   @override
-  Future<Notebook?> load(String documentId, {String? headId}) async =>
-      headId != null
-      ? revisions[headId]?.notebook
-      : (await list())
-            .where((e) => e.notebook.id == documentId)
-            .firstOrNull
-            ?.notebook;
+  Future<bool> isDeleted(String documentId) async =>
+      revisions.values.any((r) => r.notebook.id == documentId && r.deleted);
+
+  @override
+  Future<Notebook?> load(String documentId, {String? headId}) async {
+    if (headId == null) {
+      return (await list())
+          .where((e) => e.notebook.id == documentId)
+          .firstOrNull
+          ?.notebook;
+    }
+    final revision = revisions[headId];
+    if (revision?.notebook.id != documentId || await isDeleted(documentId)) {
+      return null;
+    }
+    return revision?.notebook;
+  }
+
   @override
   Future<List<Revision>> history(String id) async =>
       revisions.values.where((r) => r.notebook.id == id).toList();

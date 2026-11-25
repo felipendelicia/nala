@@ -12,6 +12,10 @@ class Revision {
   final String? parentId;
   final DateTime createdAt;
   final Notebook notebook;
+  // v1 sync preserves revision IDs even on clients that predate deletion.
+  static const deletionIdPrefix = 'nala-deleted-v1-';
+  static String deletionId(String id) => '$deletionIdPrefix$id';
+  bool get deleted => id.startsWith(deletionIdPrefix);
   Revision withParent(String? parentId) => Revision(
     id: id,
     deviceId: deviceId,

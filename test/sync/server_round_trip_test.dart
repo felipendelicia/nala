@@ -75,7 +75,7 @@ void main() {
   _NetworkTestBinding();
 
   test(
-    'migra los adjuntos y sincroniza dos bibliotecas SQLite reales',
+    'sincroniza adjuntos, conflictos y eliminaciones entre bibliotecas reales',
     () async {
       final directory = await Directory.systemTemp.createTemp('nala-e2e-');
       addTearDown(() => directory.delete(recursive: true));
@@ -179,6 +179,7 @@ void main() {
       await pc.synchronize();
       expect(pc.status.phase, SyncPhase.synced);
       expect((await pcDb.list()).single.headId, 'origen');
+      expect(await pcDb.isDeleted(notebook.id), isFalse);
       expect((await pcDb.listFolders()).single.name, 'Análisis');
       expect(await pc.services.assets.read(pdfId), pdf);
       expect(await pc.services.assets.read(voiceId), audio);
@@ -219,10 +220,65 @@ void main() {
         expect(await controller.services.repository.pending(), isEmpty);
       }
 
+      final deletingDb = tablet.services.repository;
+      final deletingLibrary = tablet.services.library;
+      await deletingLibrary.refresh();
+      final selected = deletingLibrary.entries.firstWhere(
+        (entry) => entry.headId == 'tablet-offline',
+      );
+      await deletingDb.commit(
+        _revision(
+          'unsynced-before-delete',
+          selected.headId,
+          notebook.copyWith(title: 'Edición aún no enviada'),
+          'tablet',
+        ),
+      );
+      await deletingLibrary.refresh();
+      await deletingLibrary.deleteNotebook(
+        deletingLibrary.entries.firstWhere(
+          (entry) => entry.headId == 'unsynced-before-delete',
+        ),
+      );
+      expect(await deletingDb.list(), isEmpty);
+      expect((await deletingDb.pending()).map((r) => r.notebook.title), [
+        'Edición aún no enviada',
+        'Edición aún no enviada',
+      ]);
+      await tablet.synchronize();
+      expect(tablet.status.phase, SyncPhase.synced);
+      expect(await pcDb.list(), hasLength(2));
+
+      await pcDb.commit(
+        _revision(
+          'late-pc-edit',
+          'pc-offline',
+          notebook.copyWith(title: 'Edición anterior a recibir el borrado'),
+          'pc',
+        ),
+      );
+      await pc.synchronize();
+      await tablet.synchronize();
+      for (final db in [deletingDb, pcDb]) {
+        expect(await db.list(), isEmpty);
+        expect(await db.isDeleted(notebook.id), isTrue);
+        expect(await db.load(notebook.id, headId: 'late-pc-edit'), isNull);
+        final retained = await db.history(notebook.id);
+        expect(retained.map((r) => r.id), contains('late-pc-edit'));
+        expect(
+          retained.where((r) => r.deleted).single.parentId,
+          'unsynced-before-delete',
+        );
+      }
+      await tablet.close();
+      tablet = await open('tablet', tabletTokens);
+      expect(tablet.services.library.entries, isEmpty);
+      expect(await tablet.services.repository.pending(), isEmpty);
+
       await _command(env, ['token-revoke', 'pc']);
       await pc.synchronize();
       expect(pc.status.phase, SyncPhase.needsSignIn);
-      expect(await pcDb.list(), hasLength(2));
+      expect(await pcDb.list(), isEmpty);
     },
   );
 }

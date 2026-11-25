@@ -18,6 +18,7 @@ class NalaApp extends StatefulWidget {
 
 class _NalaAppState extends State<NalaApp> {
   CloudController? cloud;
+  AppServices? _catalogServices;
   AppearanceController? appearance;
   RandomAccessFile? _libraryLock;
   Future<AppServices> loadAppearance(AppServices services) async {
@@ -29,6 +30,13 @@ class _NalaAppState extends State<NalaApp> {
 
   void themeChanged() {
     if (mounted) setState(() {});
+  }
+
+  void _catalogChanged() {
+    final current = cloud!.services;
+    if (mounted && !identical(_catalogServices, current)) {
+      setState(() => _catalogServices = current);
+    }
   }
 
   late final Future<AppServices> services = widget.services != null
@@ -56,8 +64,9 @@ class _NalaAppState extends State<NalaApp> {
       appearance = await AppearanceController.open(directory.path);
       appearance!.addListener(themeChanged);
       themeChanged();
-      cloud = await CloudController.open(directory.path);
-      return cloud!.services;
+      final controller = cloud = await CloudController.open(directory.path);
+      controller.addListener(_catalogChanged);
+      return _catalogServices = controller.services;
     } catch (_) {
       await _libraryLock?.close();
       _libraryLock = null;
@@ -74,6 +83,7 @@ class _NalaAppState extends State<NalaApp> {
             appearance?.removeListener(themeChanged);
             appearance?.dispose();
             try {
+              cloud?.removeListener(_catalogChanged);
               await cloud?.close();
             } finally {
               await _libraryLock?.close();
@@ -98,14 +108,11 @@ class _NalaAppState extends State<NalaApp> {
       future: services,
       builder: (context, snapshot) {
         if (snapshot.hasData) {
-          if (cloud == null) return LibraryScreen(services: snapshot.data!);
-          return AnimatedBuilder(
-            animation: cloud!,
-            builder: (_, _) => LibraryScreen(
-              key: ValueKey(cloud!.services.root),
-              services: cloud!.services,
-              cloud: cloud,
-            ),
+          final catalog = _catalogServices ?? snapshot.data!;
+          return LibraryScreen(
+            key: ValueKey(catalog.root),
+            services: catalog,
+            cloud: cloud,
           );
         }
         if (snapshot.hasError) {

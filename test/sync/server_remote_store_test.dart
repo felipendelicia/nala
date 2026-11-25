@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:apuntes/document/asset_store.dart';
@@ -106,6 +107,56 @@ void main() {
       throwsA(isA<HttpException>()),
     );
     expect(requests, 1);
+  });
+
+  test('revision upload encodes UTF-8 off the calling isolate', () async {
+    final notebook = fixtureNotebook();
+    final revision = Revision(
+      id: 'outbound',
+      parentId: 'base',
+      deviceId: 'tablet',
+      createdAt: DateTime.utc(2026),
+      notebook: notebook.copyWith(
+        title: 'Álgebra · λ · 📓',
+        pages: [
+          notebook.pages.single.copyWith(
+            recognizedText: 'Apuntes de álgebra. ' * 4096,
+          ),
+        ],
+      ),
+    );
+    final bytes = utf8.encode(NotebookCodec.encodeRevision(revision));
+    final receive = ReceivePort();
+    final diagnostics = NotebookCodec.diagnostics;
+    NotebookCodec.diagnostics = receive.sendPort;
+    addTearDown(() {
+      NotebookCodec.diagnostics = diagnostics;
+      receive.close();
+    });
+    final events = receive.cast<(String, SendPort)>().take(2).toList();
+    final store = connect(
+      MockClient((request) async {
+        expect(request.method, 'PUT');
+        expect(request.url.path, '/nala/v1/revisions');
+        expect(
+          request.headers['content-type'],
+          'application/json; charset=utf-8',
+        );
+        expect(request.contentLength, bytes.length);
+        expect(request.bodyBytes, bytes);
+        return http.Response('', 204);
+      }),
+    );
+
+    await store.putRevision(revision);
+
+    final work = await events.timeout(
+      const Duration(seconds: 2),
+      onTimeout: () => [],
+    );
+    expect(work.map((event) => event.$1), ['encode-revision', 'utf8-encode']);
+    expect(work.first.$2, isNot(Isolate.current.controlPort));
+    expect(work.last.$2, work.first.$2);
   });
 
   test(

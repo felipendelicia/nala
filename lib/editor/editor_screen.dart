@@ -78,6 +78,7 @@ class EditorScreen extends StatefulWidget {
     this.active = true,
     this.workspaceManaged = false,
     this.onClose,
+    this.onCloseDeleted,
     this.onFocus,
     this.onOpenNotebook,
     this.onSplitView,
@@ -101,6 +102,7 @@ class EditorScreen extends StatefulWidget {
   final int navigationRequest;
   final bool active, workspaceManaged, splitView;
   final VoidCallback? onClose, onFocus, onOpenNotebook, onSplitView;
+  final VoidCallback? onCloseDeleted;
   final ValueChanged<Future<void> Function()>? registerClose;
   final int initialPageIndex;
   final String? storageRoot;
@@ -117,6 +119,7 @@ class _EditorScreenState extends State<EditorScreen>
   Uint8List? exportedBytes;
   bool showComments = false, placingComment = false, commentOpen = false;
   bool remoteDirty = false, refreshingRemote = false;
+  StreamSubscription<Set<String>>? remoteNotebookChanges;
   bool get canReceiveRemote =>
       mounted &&
       !disposing &&
@@ -143,9 +146,10 @@ class _EditorScreenState extends State<EditorScreen>
     router.preserveButtonOnReset = settings.buttonMode == PenButtonMode.toggle;
     WidgetsBinding.instance.addObserver(this);
     if (widget.active) startButtonBridge();
-    widget.cloud?.addListener(syncChanged);
+    listenForRemoteChanges();
     widget.controller.addListener(localSettled);
     rememberPageFocus();
+    unawaited(checkInitialDeletion());
   }
 
   void startButtonBridge() {
@@ -164,6 +168,10 @@ class _EditorScreenState extends State<EditorScreen>
   @override
   void didUpdateWidget(EditorScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.cloud != widget.cloud) {
+      oldWidget.cloud?.removeListener(retryRemoteWhenSynced);
+      listenForRemoteChanges();
+    }
     if (oldWidget.navigationRequest != widget.navigationRequest) {
       final requestedId = widget.requestedPageId;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -267,9 +275,32 @@ class _EditorScreenState extends State<EditorScreen>
     setState(() => favorites = loaded);
   }
 
-  void syncChanged() {
-    if (widget.cloud?.status.phase == SyncPhase.synced) {
+  void listenForRemoteChanges() {
+    unawaited(remoteNotebookChanges?.cancel());
+    final cloud = widget.cloud;
+    cloud?.addListener(retryRemoteWhenSynced);
+    remoteNotebookChanges = cloud?.remoteNotebookChanges.listen((ids) {
+      if (!ids.contains(widget.controller.notebook.id)) return;
       remoteDirty = true;
+      unawaited(refreshRemote());
+    });
+  }
+
+  Future<void> checkInitialDeletion() async {
+    try {
+      if (!await controller.repository.isDeleted(controller.notebook.id)) {
+        return;
+      }
+    } catch (_) {
+      return; // The normal sync listener can retry when the repository is ready.
+    }
+    if (!mounted || disposing) return;
+    remoteDirty = true;
+    await refreshRemote();
+  }
+
+  void retryRemoteWhenSynced() {
+    if (remoteDirty && widget.cloud?.status.phase == SyncPhase.synced) {
       unawaited(refreshRemote());
     }
   }
@@ -323,12 +354,13 @@ class _EditorScreenState extends State<EditorScreen>
   Future<void> refreshRemote() async {
     if (!remoteDirty || refreshingRemote || !canReceiveRemote) return;
     refreshingRemote = true;
+    remoteDirty = false;
     final previousPage = page.id;
     try {
       final applied = await widget.controller.refreshRemote(
         canApply: () => canReceiveRemote,
       );
-      if (canReceiveRemote) remoteDirty = false;
+      if (!canReceiveRemote) remoteDirty = true;
       if (applied && mounted) {
         setState(() {
           final index = widget.controller.notebook.pages.indexWhere(
@@ -340,11 +372,12 @@ class _EditorScreenState extends State<EditorScreen>
         });
       }
     } catch (_) {
-      remoteDirty = false; // Keep local state; a later sync can retry.
+      remoteDirty = true;
+      return; // A later sync can retry without spinning on the same failure.
     } finally {
       refreshingRemote = false;
-      if (remoteDirty && canReceiveRemote) unawaited(refreshRemote());
     }
+    if (remoteDirty && canReceiveRemote) unawaited(refreshRemote());
   }
 
   late final CommentAudioPlayer? audioPlayer =
@@ -1696,6 +1729,7 @@ class _EditorScreenState extends State<EditorScreen>
         constraints.maxHeight / view.scale,
       ),
     );
+    final rasterScale = view.scale * MediaQuery.devicePixelRatioOf(context);
     return ClipRect(
       child: Listener(
         key: const ValueKey('document-viewport'),
@@ -1757,7 +1791,10 @@ class _EditorScreenState extends State<EditorScreen>
               ? Colors.black
               : const Color(0xffeeeeee),
           child: Stack(
-            children: [for (final index in visible) buildPage(context, index)],
+            children: [
+              for (final index in visible)
+                buildPage(index, visible, rasterScale),
+            ],
           ),
         ),
       ),
@@ -1766,7 +1803,7 @@ class _EditorScreenState extends State<EditorScreen>
 
   double trackpadScale = 1;
 
-  Widget buildPage(BuildContext context, int index) {
+  Widget buildPage(int index, List<int> visible, double rasterScale) {
     final source = widget.controller.notebook.pages[index],
         bounds = layout.rect(index);
     final active = index == pageIndex;
@@ -1818,15 +1855,14 @@ class _EditorScreenState extends State<EditorScreen>
                             key: ValueKey('${source.id}-$pdfRenderVersion'),
                             pdf: widget.pdf!,
                             page: source,
-                            scale:
-                                view.scale *
-                                MediaQuery.devicePixelRatioOf(context),
+                            scale: rasterScale,
                             onError: (error) {
                               if (mounted && source.id == page.id) {
                                 setState(() => pdfError = error);
                               }
                             },
-                            onRendered: preloadNeighbors,
+                            onRendered: () =>
+                                preloadNeighbors(visible, rasterScale),
                           ),
                   ),
                   if (active)
@@ -1955,7 +1991,7 @@ class _EditorScreenState extends State<EditorScreen>
   Offset? linkPressPosition;
   int? linkPointer;
   void pointerDown(PointerDownEvent event) {
-    if (commentOpen) return;
+    if (commentOpen || controller.deletedRemotely) return;
     if (widget.active) editorFocus.requestFocus();
     if (!widget.active) {
       widget.onFocus?.call();
@@ -2113,39 +2149,58 @@ class _EditorScreenState extends State<EditorScreen>
     }
   }
 
-  void preloadNeighbors() {
+  void preloadNeighbors(List<int> visible, double rasterScale) {
     final pdf = widget.pdf;
     if (pdf == null || !mounted) return;
-    final key =
-        '${page.id}:${PdfService.scaleStep(view.scale)}:${widget.controller.notebook.pages.length}';
+    if (showPages) setState(() {});
+    final pages = widget.controller.notebook.pages;
+    final scaleStep = PdfService.scaleStep(rasterScale);
+    final key = '${page.id}:$scaleStep:${pages.length}';
     if (key == neighborKey) return;
     neighborKey = key;
     for (final token in neighborTokens) {
       token.cancel();
     }
     neighborTokens.clear();
-    final pages = widget.controller.notebook.pages;
-    for (final index in [pageIndex - 1, pageIndex + 1]) {
+    final rasterPixelsPerPoint = scaleStep / 4;
+    for (final index in [pageIndex + 1, pageIndex - 1]) {
       if (index < 0 ||
           index >= pages.length ||
+          visible.contains(index) ||
           !pages[index].background.isPdf) {
         continue;
       }
       final neighbor = pages[index];
+      final background = neighbor.background;
+      final estimatedBytes =
+          neighbor.width *
+          neighbor.height *
+          math.pow(rasterPixelsPerPoint, 2) *
+          4;
+      // Leave the cache room for current pages and their zoom previews.
+      if (estimatedBytes > pdf.cache.maxBytes ~/ 3 ||
+          pdf.cachedBackground(
+                background.assetId!,
+                background.pageNumber!,
+                scale: rasterScale,
+              ) !=
+              null) {
+        continue;
+      }
       final token = PdfRenderCancellation();
       neighborTokens.add(token);
       pdf
           .renderBackground(
-            neighbor.background.assetId!,
-            neighbor.background.pageNumber!,
-            scale: view.scale,
+            background.assetId!,
+            background.pageNumber!,
+            scale: rasterScale,
             cancellation: token,
           )
           .then<void>((_) {
-            if (mounted && !token.isCancelled) setState(() {});
+            if (mounted && showPages && !token.isCancelled) setState(() {});
           }, onError: (Object _) {});
+      break;
     }
-    setState(() {});
   }
 
   Future<void> sharePdf() async {
@@ -2277,7 +2332,8 @@ class _EditorScreenState extends State<EditorScreen>
     WidgetsBinding.instance.removeObserver(this);
     buttonBridge.dispose();
     holdTimer?.cancel();
-    widget.cloud?.removeListener(syncChanged);
+    widget.cloud?.removeListener(retryRemoteWhenSynced);
+    unawaited(remoteNotebookChanges?.cancel());
     widget.controller.removeListener(localSettled);
     for (final token in neighborTokens) {
       token.cancel();
@@ -2575,6 +2631,55 @@ class _EditorScreenState extends State<EditorScreen>
     animation: widget.controller,
     builder: (context, _) {
       final controller = widget.controller;
+      if (controller.deletedRemotely) {
+        final session = notebookAudio;
+        final closeDeleted = widget.onCloseDeleted ?? close;
+        final deletedNotice = Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('El apunte se eliminó en otro dispositivo.'),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: closeDeleted,
+                child: const Text('Cerrar apunte'),
+              ),
+            ],
+          ),
+        );
+        return PopScope(
+          canPop: widget.workspaceManaged || allowPop,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop && !widget.workspaceManaged) close();
+          },
+          child: Scaffold(
+            body: SafeArea(
+              child: session == null
+                  ? Center(child: deletedNotice)
+                  : ListenableBuilder(
+                      listenable: session,
+                      child: deletedNotice,
+                      builder: (context, notice) => Column(
+                        children: [
+                          Expanded(child: Center(child: notice)),
+                          if (session.busy ||
+                              session.recording ||
+                              session.pendingSave)
+                            Expanded(
+                              child: RecordingPanel(
+                                session: session,
+                                controller: controller,
+                                onClose: closeDeleted,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+            ),
+          ),
+        );
+      }
       final currentPage = page;
       return CallbackShortcuts(
         bindings: widget.active

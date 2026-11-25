@@ -24,6 +24,8 @@ La versión 0.6 agrega elementos reutilizables, enlaces entre páginas de apunte
 
 La versión **0.7.0** incorpora el servidor privado. La [versión de prueba pública 0.6.0](https://github.com/felipendelicia/nala/releases/tag/v0.6.0) incluye las herramientas de estudio y el encabezado compacto. La [primera versión](https://github.com/felipendelicia/nala/releases/tag/v0.1.0) fue probada en la tablet antes de incorporar el flujo de PDF.
 
+El [parche 0.7.2](docs/releases/v0.7.2.md) reduce el tiempo de recarga de la biblioteca y el trabajo de renderizado al navegar por PDF.
+
 En Linux, descomprimí el paquete y ejecutá `Abrir-Nala.sh` manteniéndolo junto a `Nala-Linux/`. En Android, copiá `Nala.apk`, abrilo y permití la instalación desde la aplicación que lo abre. Es un APK de prueba firmado con una clave de desarrollo.
 
 Herramientas usadas: Flutter 3.47.6, Dart 3.13.5.

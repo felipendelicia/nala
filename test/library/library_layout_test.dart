@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,7 +12,83 @@ import 'package:apuntes/document/notebook.dart';
 import 'package:apuntes/library/library_controller.dart';
 import '../support/memory_repository.dart';
 
+class _CountingCovers extends MemoryAssets {
+  _CountingCovers(this.image);
+
+  final Uint8List image;
+  final reads = <String>[];
+
+  @override
+  Future<Uint8List> read(String id) async {
+    reads.add(id);
+    return image;
+  }
+}
+
 void main() {
+  testWidgets('una portada visible no se vuelve a leer al filtrar', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(820, 1100));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final repository = MemoryRepository();
+    final library = LibraryController(repository: repository, deviceId: 'tab');
+    final assets = _CountingCovers(
+      base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGNgAAAAAgABSK+kcQAAAABJRU5ErkJggg==',
+      ),
+    );
+    final services = AppServices(
+      root: '/unused',
+      deviceId: 'tab',
+      repository: repository,
+      assets: assets,
+      library: library,
+    );
+    addTearDown(services.close);
+    final algebra = Notebook.blank(
+      id: 'algebra',
+      pageId: 'page',
+      title: 'Álgebra',
+      subject: '',
+      pattern: PaperPattern.grid,
+      now: DateTime.utc(2026),
+    );
+    final otherCover = 'c' * 64;
+    await library.add(
+      Notebook.blank(
+        id: 'physics',
+        pageId: 'physics-page',
+        title: 'Física',
+        subject: '',
+        pattern: PaperPattern.grid,
+        now: DateTime.utc(2026),
+      ).copyWith(coverAssetId: otherCover),
+    );
+    final cover = 'a' * 64;
+    final updatedCover = 'b' * 64;
+    final entry = await library.add(algebra.copyWith(coverAssetId: cover));
+    await tester.pumpWidget(
+      MaterialApp(home: LibraryScreen(services: services)),
+    );
+    await tester.pumpAndSettle();
+    expect(assets.reads, unorderedEquals([otherCover, cover]));
+
+    await tester.enterText(find.byType(TextField), 'ALGEBRA');
+    await tester.pumpAndSettle();
+    expect(find.text('Álgebra'), findsOneWidget);
+    expect(find.text('Física'), findsNothing);
+    expect(assets.reads, unorderedEquals([otherCover, cover]));
+
+    await library.updateNotebook(
+      entry,
+      algebra.copyWith(coverAssetId: updatedCover),
+    );
+    await tester.pumpAndSettle();
+    expect(assets.reads, unorderedEquals([otherCover, cover, updatedCover]));
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets(
     'biblioteca poblada muestra título y materia en una ventana de PC',
     (tester) async {

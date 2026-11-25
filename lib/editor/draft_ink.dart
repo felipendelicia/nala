@@ -6,7 +6,10 @@ import 'live_ink_raster.dart';
 
 /// Only the live ink layer listens to this buffer; no widget rebuild per sample.
 class DraftInk extends ChangeNotifier {
+  static const _rasterStartSamples = 96;
+
   final _points = <InkPoint>[];
+  final _pendingRasterSegments = <Path>[];
   Path _path = Path();
   InkStroke? _style;
   double _stabilization = 0;
@@ -40,6 +43,7 @@ class DraftInk extends ChangeNotifier {
     _rasterBounds = rasterBounds;
     _rasterScale = rasterScale;
     _points.clear();
+    _pendingRasterSegments.clear();
     _path = Path();
     _stabilization = stabilization.clamp(0, .4);
     _style = InkStroke(
@@ -72,11 +76,20 @@ class DraftInk extends ChangeNotifier {
       if (corners != null) segment.addPolygon(corners, true);
     }
     _path.addPath(segment, Offset.zero);
-    if (_raster == null && _rasterBounds != null && _points.length == 95) {
-      _raster = LiveInkRaster(bounds: _rasterBounds!, scale: _rasterScale)
-        ..add(_path);
-    } else {
-      _raster?.add(segment);
+    if (_raster case final raster?) {
+      raster.add(segment);
+    } else if (_rasterBounds case final bounds?) {
+      _pendingRasterSegments.add(segment);
+      if (_pendingRasterSegments.length == _rasterStartSamples) {
+        final raster = _raster = LiveInkRaster(
+          bounds: bounds,
+          scale: _rasterScale,
+        );
+        for (final pending in _pendingRasterSegments) {
+          raster.add(pending);
+        }
+        _pendingRasterSegments.clear();
+      }
     }
     _points.add(point);
   }
@@ -139,6 +152,7 @@ class DraftInk extends ChangeNotifier {
     _raster = null;
     _rasterBounds = null;
     _points.clear();
+    _pendingRasterSegments.clear();
     _path = Path();
     _style = null;
     notifyListeners();

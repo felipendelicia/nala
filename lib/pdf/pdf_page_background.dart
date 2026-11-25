@@ -38,9 +38,13 @@ class _PdfPageBackgroundState extends State<PdfPageBackground> {
   void didUpdateWidget(PdfPageBackground old) {
     super.didUpdateWidget(old);
     final changedPage =
+        old.pdf != widget.pdf ||
         old.page.background.assetId != widget.page.background.assetId ||
         old.page.background.pageNumber != widget.page.background.pageNumber;
-    if (changedPage) png = null;
+    if (changedPage) {
+      png = null;
+      error = null;
+    }
     if (changedPage ||
         old.render != widget.render ||
         PdfService.scaleStep(old.scale) != PdfService.scaleStep(widget.scale)) {
@@ -52,18 +56,30 @@ class _PdfPageBackgroundState extends State<PdfPageBackground> {
     cancellation?.cancel();
     if (!widget.render) return;
     final token = cancellation = PdfRenderCancellation();
+    final assetId = widget.page.background.assetId!;
+    final pageNumber = widget.page.background.pageNumber!;
     try {
-      final bytes = await widget.pdf.renderBackground(
-        widget.page.background.assetId!,
-        widget.page.background.pageNumber!,
+      final cached = widget.pdf.cachedBackground(
+        assetId,
+        pageNumber,
         scale: widget.scale,
-        cancellation: token,
       );
+      png = cached ?? png ?? widget.pdf.cache.latestFor(assetId, pageNumber);
+      final bytes = await (cached != null
+          ? Future.value(cached)
+          : widget.pdf.renderBackground(
+              assetId,
+              pageNumber,
+              scale: widget.scale,
+              cancellation: token,
+            ));
       if (!mounted || token.isCancelled) return;
-      setState(() {
-        png = bytes;
-        error = null;
-      });
+      if (!identical(bytes, png) || error != null) {
+        setState(() {
+          png = bytes;
+          error = null;
+        });
+      }
       widget.onRendered?.call();
     } on PdfRenderCancelled {
       /* The next page/scale owns the result. */

@@ -94,6 +94,29 @@ class LibraryController extends ChangeNotifier {
     await refresh();
   }
 
+  Future<void> deleteNotebook(DocumentEntry entry) async {
+    final now = DateTime.now().toUtc();
+    final book = entry.notebook;
+    await repository.commit(
+      Revision(
+        id: Revision.deletionId(const Uuid().v4()),
+        deviceId: deviceId,
+        parentId: entry.headId,
+        createdAt: now,
+        // The sync protocol requires a notebook with a page. The retained
+        // parent holds the content, so the deletion depends on no assets.
+        notebook: Notebook.blank(
+          id: book.id,
+          pageId: book.pages.first.id,
+          title: book.title,
+          pattern: PaperPattern.blank,
+          now: now,
+        ),
+      ),
+    );
+    await refresh();
+  }
+
   final NotebookRepository repository;
   final String deviceId;
   List<DocumentEntry> entries = [];
