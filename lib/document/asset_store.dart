@@ -11,6 +11,14 @@ abstract interface class AssetStore {
   Future<bool> contains(String assetId);
 }
 
+Future<String> assetFileHash(File file) {
+  final path = file.path;
+  return Isolate.run(() async {
+    final digest = await sha256.bind(File(path).openRead()).first;
+    return digest.toString();
+  });
+}
+
 class FileAssetStore implements AssetStore {
   FileAssetStore(this.directory);
   final String directory;
@@ -24,15 +32,46 @@ class FileAssetStore implements AssetStore {
   @override
   Future<String> put(Uint8List bytes) async {
     final id = await Isolate.run(() => sha256.convert(bytes).toString());
-    await Directory(directory).create(recursive: true);
+    await _writeAtomically(id, (temporary) async {
+      await temporary.writeAsBytes(bytes, flush: true);
+    });
+    return id;
+  }
+
+  Future<File> verifiedFile(String assetId) async {
+    final file = _file(assetId);
+    if (await assetFileHash(file) != assetId) {
+      throw const FormatException('Recurso dañado');
+    }
+    return file;
+  }
+
+  Future<void> putVerifiedFile(String assetId, File source) =>
+      _writeAtomically(assetId, (temporary) async {
+        final destination = await temporary.open(mode: FileMode.write);
+        try {
+          await for (final block in source.openRead()) {
+            await destination.writeFrom(block);
+          }
+          await destination.flush();
+        } finally {
+          await destination.close();
+        }
+      });
+
+  Future<void> _writeAtomically(
+    String id,
+    Future<void> Function(File temporary) write,
+  ) async {
+    final destination = _file(id);
+    await destination.parent.create(recursive: true);
     final temporary = File(p.join(directory, '${const Uuid().v4()}.tmp'));
     try {
-      await temporary.writeAsBytes(bytes, flush: true);
-      await temporary.rename(_file(id).path);
+      await write(temporary);
+      await temporary.rename(destination.path);
     } finally {
       if (await temporary.exists()) await temporary.delete();
     }
-    return id;
   }
 
   @override

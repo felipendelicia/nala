@@ -1,14 +1,20 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'auth_service.dart';
+
+abstract interface class TokenStore {
+  Future<String?> read(String key);
+  Future<void> write(String key, String value);
+  Future<void> delete(String key);
+}
 
 class SecureTokenStore implements TokenStore {
   const SecureTokenStore();
   static const _storage = FlutterSecureStorage();
-  static const _key = 'nala-desktop-oauth';
+
   @override
-  Future<String?> read() => _storage.read(key: _key);
+  Future<String?> read(String key) => _storage.read(key: key);
   @override
-  Future<void> write(String value) => _storage.write(key: _key, value: value);
+  Future<void> write(String key, String value) =>
+      _storage.write(key: key, value: value);
   @override
-  Future<void> delete() => _storage.delete(key: _key);
+  Future<void> delete(String key) => _storage.delete(key: key);
 }

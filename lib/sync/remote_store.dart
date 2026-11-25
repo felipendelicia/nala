@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 import '../document/revision.dart';
 import '../document/folders.dart';
@@ -13,8 +14,30 @@ abstract interface class RemoteStore {
   void close();
 }
 
+abstract interface class IncrementalRemoteStore {
+  Future<void> pullRevisions(Future<void> Function(Revision revision) accept);
+}
+
+abstract interface class FolderBatchRemoteStore {
+  Future<void> putFolders(List<NoteFolder> folders);
+}
+
+abstract interface class FileTransferRemoteStore {
+  Future<void> putVerifiedAssetFile(String assetId, File file);
+
+  /// The verified file is available until [accept] finishes.
+  Future<void> readAssetFile(
+    String assetId,
+    Future<void> Function(File) accept,
+  );
+}
+
 class RemoteSignInRequired implements Exception {
   const RemoteSignInRequired();
+}
+
+class RemoteServerChanged implements Exception {
+  const RemoteServerChanged();
 }
 
 class RemoteRetryLater implements Exception {

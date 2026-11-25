@@ -9,7 +9,8 @@ import 'notebook_repository.dart';
 import 'revision.dart';
 import 'folders.dart';
 
-class SqliteNotebookRepository implements NotebookRepository, FolderRepository {
+class SqliteNotebookRepository
+    implements NotebookRepository, FolderRepository, RevisionLookupRepository {
   SqliteNotebookRepository._(
     this._port,
     this._receive,
@@ -101,17 +102,22 @@ class SqliteNotebookRepository implements NotebookRepository, FolderRepository {
   @override
   Future<Notebook?> load(String documentId, {String? headId}) async {
     if (headId != null) {
-      final json = await _call('load', {
-        'documentId': documentId,
-        'headId': headId,
-      });
-      return json == null ? null : (json as Revision).notebook;
+      return (await lookupRevision(documentId, headId))?.notebook;
     }
     final entries = await list();
     for (final entry in entries) {
       if (entry.notebook.id == documentId) return entry.notebook;
     }
     return null;
+  }
+
+  @override
+  Future<Revision?> lookupRevision(String documentId, String revisionId) async {
+    final revision = await _call('load', {
+      'documentId': documentId,
+      'headId': revisionId,
+    });
+    return revision as Revision?;
   }
 
   @override
@@ -135,16 +141,13 @@ class SqliteNotebookRepository implements NotebookRepository, FolderRepository {
     await _call('remote', {'revision': revision});
   }
 
-  // First account adoption retains immutable history and queues it for upload.
+  Future<bool> hasSyncContent() async =>
+      (await _call('hasSyncContent')) as bool;
+
+  // Stage the retained history as immutable before enabling a new destination.
   Future<void> queueAllForUpload() async {
     await _call('queueAll');
     onLocalChange?.call();
-  }
-
-  // Only called for a never-selected account partition during local adoption.
-  // Its previous contents are an interrupted copy, never synchronized work.
-  Future<void> resetForAdoption() async {
-    await _call('resetAdoption');
   }
 
   @override
@@ -519,16 +522,21 @@ void _databaseWorker((SendPort, String) config) {
               id,
             ]);
           });
-        case 'resetAdoption':
-          _transaction(db, () {
-            db.execute('DELETE FROM upload_queue');
-            db.execute('DELETE FROM revisions');
-            db.execute('DELETE FROM folders');
-          });
+        case 'hasSyncContent':
+          result =
+              db
+                  .select(
+                    'SELECT EXISTS(SELECT 1 FROM revisions) OR EXISTS(SELECT 1 FROM folders) AS present',
+                  )
+                  .single['present'] ==
+              1;
         case 'queueAll':
-          db.execute(
-            'INSERT OR IGNORE INTO upload_queue(revision_id) SELECT id FROM revisions',
-          );
+          _transaction(db, () {
+            db.execute('UPDATE revisions SET frozen=1 WHERE frozen=0');
+            db.execute(
+              'INSERT OR IGNORE INTO upload_queue(revision_id) SELECT id FROM revisions',
+            );
+          });
         case 'list':
           result = db
               .select(

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** Use superpowers:executing-plans inline, with one fresh final reviewer. Steps use checkbox syntax.
 
-**Goal:** Mejorar escritura, lectura, zoom, comentarios y jerarquías de Nala, verificar PDF y entregar Android/Linux; Drive al final.
+**Goal:** Mejorar escritura, lectura, zoom, comentarios y jerarquías de Nala, verificar PDF y entregar Android/Linux.
 **Architecture:** Documento inmutable con metadatos opcionales compatibles; buffer incremental Listenable para tinta activa; SQLite para directorios; adaptadores de audio detrás de un puerto; editor con controles de vista separados.
 **Tech Stack:** Flutter 3.47.6, Dart 3.13.5, SQLite, pdfrx, pdf, canales Android y PipeWire/ALSA en Linux.
 **Spec:** [Diseño](../specs/2026-10-06-editor-design.md).
@@ -16,7 +16,6 @@
 - La grabación empieza sólo al pulsar el botón de micrófono.
 - Nunca se graba en segundo plano.
 - Las compilaciones y pruebas se ejecutan de a una mediante tool/flutter-safe.
-- La conexión real requiere credenciales OAuth del proyecto de Google Cloud.
 
 ## Review Focus
 
@@ -87,16 +86,8 @@ expect(await assets.contains(hash), isFalse);
 - [x] Verificar crear/reabrir y flujo PDF Linux. Inspeccionar exportación y escenas de lectura/carpeta/comentarios; pruebas sin activar micrófono real.
 - [x] Suite completa y analyze limpios; build Android release y Linux release de a uno. Version 0.2.0+2, actualizar entregables y documentar límites de prueba física.
 
-### Task 6: Drive al final
-
-**Files:** contratos, motor, auth y UI de las tareas 5–6 del plan inicial; docs/drive-setup.md.
-
-- [x] Leer briefs del plan inicial y ejecutar RED→GREEN del motor con dos repositorios y remoto de prueba: ramas, reintento perdido, assets PDF/audio, paginación y carpetas.
-- [x] Implementar adaptadores Drive/OAuth configurables sin credenciales inventadas; preservar notas y colas ante revocación/cambio de cuenta; mostrar conexión/configuración y estados reales.
-- [x] Verificar las pruebas y documentar qué comprobación exige OAuth externo; no afirmar sincronización real sin cuenta configurada.
-
 ### Final
 
 - [x] Una revisión de contexto fresco sobre todo el cambio. Corregir Important/Critical con tests RED→GREEN y suite.
 - [x] Compilaciones finales si el código cambió tras las primeras builds; commits/push al repositorio público autorizado, prerelease con APK/Linux/checksums. Publicada v0.2.0; tamaños y digests remotos coinciden con los tres archivos locales.
-- [x] Informe conciso de funciones entregadas, verificación y requisitos externos restantes. Registrado en README, docs/status.md, docs/verification.md y docs/decisions.md; entrega con enlaces de descarga y límites de S Pen/OAuth.
+- [x] Informe conciso de funciones entregadas, verificación y requisitos externos restantes. Registrado en README, docs/status.md, docs/verification.md y docs/decisions.md; entrega con enlaces de descarga y límites del S Pen.

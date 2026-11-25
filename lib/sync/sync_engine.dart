@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../document/asset_store.dart';
+import '../document/document_worker.dart';
 import '../document/folders.dart';
 import '../document/notebook.dart';
-import '../document/notebook_codec.dart';
 import '../document/notebook_repository.dart';
 import '../document/revision.dart';
 import 'remote_store.dart';
@@ -65,11 +65,17 @@ class SyncEngine extends ChangeNotifier {
       await _pull(verified);
       if (_closed) return;
       if (repository is FolderRepository) {
-        for (final folder in await (repository as FolderRepository).listFolders(
+        final folders = await (repository as FolderRepository).listFolders(
           includeDeleted: true,
-        )) {
-          if (_closed) return;
-          await remote.putFolder(folder);
+        );
+        if (_closed) return;
+        if (remote case final FolderBatchRemoteStore batch) {
+          if (folders.isNotEmpty) await batch.putFolders(folders);
+        } else {
+          for (final folder in folders) {
+            if (_closed) return;
+            await remote.putFolder(folder);
+          }
         }
       }
       for (final revision in await repository.pending()) {
@@ -77,7 +83,7 @@ class SyncEngine extends ChangeNotifier {
         for (final id in notebookAssets(revision.notebook)) {
           if (_closed) return;
           if (!await remote.hasAsset(id)) {
-            await remote.putAsset(id, await assets.read(id));
+            await _uploadAsset(id);
           }
         }
         if (_closed) return;
@@ -95,12 +101,20 @@ class SyncEngine extends ChangeNotifier {
           pendingCount: pending.length,
         ),
       );
+    } on RemoteServerChanged {
+      _emit(
+        const SyncStatus(
+          SyncPhase.needsSignIn,
+          message:
+              'La identidad del servidor cambió. Confirmá el destino para volver a sincronizar.',
+        ),
+      );
     } on RemoteSignInRequired {
       _emit(
         const SyncStatus(
           SyncPhase.needsSignIn,
           message:
-              'Volvé a conectar tu cuenta. Tus apuntes siguen guardados acá.',
+              'Volvé a conectar el servidor. Tus apuntes siguen guardados acá.',
         ),
       );
     } catch (e) {
@@ -126,45 +140,101 @@ class SyncEngine extends ChangeNotifier {
     if (repository is FolderRepository) {
       await (repository as FolderRepository).mergeFolders(remoteFolders);
     }
+    final catalog = repository;
     final known = <String, Map<String, Revision>>{};
-    for (final revision in await remote.listRevisions()) {
-      if (_closed) return;
-      final history = known[revision.notebook.id] ??= {
-        for (final r in await repository.history(revision.notebook.id)) r.id: r,
+    Future<Revision?> findLocalRevision(
+      String documentId,
+      String revisionId,
+    ) async {
+      if (catalog case final RevisionLookupRepository lookup) {
+        return lookup.lookupRevision(documentId, revisionId);
+      }
+      final history = known[documentId] ??= {
+        for (final r in await catalog.history(documentId)) r.id: r,
       };
-      final old = history[revision.id];
-      if (old != null && !await compute(_sameRevision, (old, revision))) {
+      return history[revisionId];
+    }
+
+    Future<void> accept(Revision revision) async {
+      _checkOpen();
+      final old = await findLocalRevision(revision.notebook.id, revision.id);
+      if (old != null && !await const DocumentWorker().equal(old, revision)) {
         throw const FormatException('Una revisión remota cambió de contenido.');
       }
       for (final id in notebookAssets(revision.notebook)) {
-        if (_closed) return;
+        _checkOpen();
         if (verified.contains(id)) continue;
-        var valid = false;
-        if (await assets.contains(id)) {
-          try {
-            await assets.read(id);
-            valid = true;
-          } on FormatException {
-            /* Repair from remote. */
-          }
-        }
-        if (!valid) {
-          final downloaded = await remote.readAsset(id);
-          if (_closed) return;
-          if (await assets.put(downloaded) != id) {
-            throw const FormatException(
-              'El recurso descargado no coincide con su hash.',
-            );
-          }
-        }
+        await _ensureAsset(id);
         verified.add(id);
       }
-      if (_closed) return;
+      _checkOpen();
       if (old == null) {
         await repository.acceptRemote(revision);
-        history[revision.id] = revision;
+        known[revision.notebook.id]?[revision.id] = revision;
       }
     }
+
+    if (remote case final IncrementalRemoteStore incremental) {
+      await incremental.pullRevisions(accept);
+    } else {
+      for (final revision in await remote.listRevisions()) {
+        await accept(revision);
+      }
+    }
+  }
+
+  Future<void> _uploadAsset(String id) async {
+    final local = assets;
+    final server = remote;
+    if ((local, server) case (
+      final FileAssetStore files,
+      final FileTransferRemoteStore transfer,
+    )) {
+      final file = await files.verifiedFile(id);
+      _checkOpen();
+      await transfer.putVerifiedAssetFile(id, file);
+    } else {
+      await remote.putAsset(id, await assets.read(id));
+    }
+  }
+
+  Future<void> _ensureAsset(String id) async {
+    final local = assets;
+    final server = remote;
+    if (await local.contains(id)) {
+      try {
+        if (local is FileAssetStore) {
+          await local.verifiedFile(id);
+        } else {
+          await local.read(id);
+        }
+        return;
+      } on FormatException {
+        // Replace a corrupt file with the verified server copy.
+      }
+    }
+    _checkOpen();
+    if ((local, server) case (
+      final FileAssetStore files,
+      final FileTransferRemoteStore transfer,
+    )) {
+      await transfer.readAssetFile(id, (file) async {
+        _checkOpen();
+        await files.putVerifiedFile(id, file);
+      });
+      return;
+    }
+    final downloaded = await server.readAsset(id);
+    _checkOpen();
+    if (await local.put(downloaded) != id) {
+      throw const FormatException(
+        'El recurso descargado no coincide con su hash.',
+      );
+    }
+  }
+
+  void _checkOpen() {
+    if (_closed) throw StateError('Se cerró la sincronización.');
   }
 
   @override
@@ -175,7 +245,3 @@ class SyncEngine extends ChangeNotifier {
     super.dispose();
   }
 }
-
-bool _sameRevision((Revision, Revision) pair) =>
-    NotebookCodec.encodeRevision(pair.$1) ==
-    NotebookCodec.encodeRevision(pair.$2);

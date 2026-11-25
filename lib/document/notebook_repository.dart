@@ -11,3 +11,7 @@ abstract interface class NotebookRepository {
   Future<void> acceptRemote(Revision revision);
   Future<void> close();
 }
+
+abstract interface class RevisionLookupRepository {
+  Future<Revision?> lookupRevision(String documentId, String revisionId);
+}

@@ -12,9 +12,9 @@ Felipe pidió:
 - Crear cuadernos vacíos.
 - Anotar sobre PDFs.
 - Usar los documentos desde ambos dispositivos.
-- Sincronización automática tipo Drive.
+- Sincronización automática entre dispositivos.
 
-Esta propuesta interpreta el último punto como sincronización mediante la cuenta de Google Drive de Felipe. Propone edición en ambos dispositivos y funcionamiento sin internet.
+La sincronización permite editar en ambos dispositivos y seguir trabajando sin internet.
 
 ## Enfoque recomendado
 
@@ -28,7 +28,7 @@ La alternativa considerada es una aplicación web instalable. Simplifica la dist
 
 La pantalla inicial muestra cuadernos y documentos PDF, sus nombres, miniaturas, fecha de edición y estado de sincronización. Permite organizar por materia, buscar por título, crear un cuaderno e importar un PDF desde el selector de archivos del dispositivo.
 
-La app puede empezar a usarse localmente antes de conectar Google Drive. Al conectar la misma cuenta en ambos dispositivos, aparecen los mismos documentos.
+La app permite tomar apuntes en el dispositivo y compartirlos al conectar ambos equipos al servidor.
 
 ### Editor
 
@@ -54,9 +54,9 @@ Los trazos guardan puntos en coordenadas de la hoja, presión, herramienta, colo
 
 El guardado local usa transacciones para confirmar una edición y su pendiente de sincronización juntas. La recuperación al volver a abrir la app debe incluir las ediciones ya confirmadas aunque la sincronización haya fallado. La actividad de red y la preparación de documentos no bloquean la escritura.
 
-## Sincronización con Google Drive
+## Sincronización
 
-La app crea una carpeta propia visible en Drive. Solicita el alcance `drive.file` para trabajar con los archivos creados por la aplicación. Los cuadernos conservan su estructura editable y sus recursos; una exportación PDF es un resultado adicional.
+El servidor guarda la biblioteca y sus archivos. Los cuadernos conservan su estructura editable y sus recursos; una exportación PDF es un resultado adicional.
 
 La sincronización se intenta después de guardar, al abrir o retomar la app y al recuperar la conexión mientras la app está activa. Los pendientes sobreviven al cierre. La primera versión garantiza este comportamiento con la aplicación activa; sincronizar con la aplicación cerrada requiere trabajo específico según el sistema operativo.
 
@@ -73,12 +73,12 @@ Los fallos de red conservan los cambios locales y se reintentan con espera progr
 - **Motor de escritura:** transforma la entrada a coordenadas de página y dibuja los trazos y las herramientas.
 - **Adaptador PDF:** dibuja los fondos importados y produce la exportación con las anotaciones.
 - **Repositorio local:** confirma cambios, recupera documentos y conserva la cola de sincronización.
-- **Sincronización Drive:** autentica, consulta y transfiere revisiones y recursos, y detecta conflictos.
+- **Sincronización:** autentica, consulta y transfiere revisiones y recursos, y detecta conflictos.
 - **Adaptadores de plataforma:** manejan entrada del lápiz, selectores de archivos y almacenamiento seguro de credenciales.
 
 ## Configuración y verificación
 
-La conexión real con Drive requiere configurar un proyecto de Google Cloud, habilitar Drive API y registrar las credenciales OAuth correspondientes a Android y a la aplicación de escritorio. Las credenciales del conector de Drive de esta conversación no configuran la nueva aplicación. Los tokens se guardan en el almacenamiento seguro del dispositivo.
+La conexión utiliza la URL HTTPS y las credenciales que describe el [diseño del servidor](2026-11-24-servidor-nala-design.md). Los tokens se guardan en el almacenamiento seguro del dispositivo.
 
 El proyecto se considerará listo para su primera entrega cuando:
 
@@ -86,10 +86,10 @@ El proyecto se considerará listo para su primera entrega cuando:
 2. Se pueda importar un PDF, escribir sobre una página, añadir una hoja de apuntes y exportar el resultado.
 3. Dibujar, seleccionar y borrar funcione con distintos niveles de zoom sin desplazar las anotaciones respecto del fondo.
 4. En la Tab S10 real se pueda escribir apoyando la mano, con presión y gestos de navegación utilizables. Esta prueba requiere el dispositivo; un emulador no confirma la experiencia del S Pen.
-5. Con la misma cuenta, un cambio guardado en la tablet aparezca editable en Linux y viceversa.
+5. Con ambos dispositivos conectados al servidor, un cambio guardado en la tablet aparezca editable en Linux y viceversa.
 6. Las ediciones sin internet se recuperen y sincronicen después; dos ediciones concurrentes conserven ambas versiones sin duplicarlas en cada reintento.
 
-La validación incluye pruebas del modelo y del guardado, pruebas de sincronización con dos clientes, revisión de la interfaz en ambos tamaños y una prueba real con Google Drive después de conectar la cuenta.
+La validación incluye pruebas del modelo y del guardado, pruebas de sincronización con dos clientes, revisión de la interfaz en ambos tamaños y una prueba real contra el servidor.
 
 ## Fuentes
 
@@ -97,6 +97,3 @@ La validación incluye pruebas del modelo y del guardado, pruebas de sincronizac
 - [Plataformas soportadas por Flutter](https://docs.flutter.dev/reference/supported-platforms).
 - [Presión en eventos de entrada de Flutter](https://api.flutter.dev/flutter/gestures/PointerEvent/pressure.html).
 - [Entrada con lápiz en Android](https://developer.android.com/develop/ui/compose/touch-input/stylus-input/advanced-stylus-features).
-- [Permisos de Google Drive API](https://developers.google.com/workspace/drive/api/guides/api-specific-auth).
-- [Carga de archivos en Google Drive](https://developers.google.com/workspace/drive/api/guides/manage-uploads).
-- [OAuth para aplicaciones de escritorio](https://developers.google.com/identity/protocols/oauth2/native-app).

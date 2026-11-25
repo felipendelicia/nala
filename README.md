@@ -16,11 +16,11 @@ El encabezado muestra dos filas al editar y una en lectura. **Más herramientas*
 
 El código 0.5 incorpora formas y regla, copiar/cortar/pegar entre cuadernos, texto e imágenes editables, lápices favoritos, pestañas y vista dividida, plantillas Cornell/semanales o propias y portadas. La búsqueda incluye texto del PDF, textos insertados y manuscritos reconocidos; Android ofrece un modelo español local de descarga explícita y Linux indica la disponibilidad de Tesseract. El audio de clase se vincula a los trazos y se puede escuchar desde ese momento; las tarjetas guardan preguntas, respuestas y próximas fechas de repaso. Instrucciones en [herramientas y estudio](docs/study-tools.md).
 
-La sincronización automática con Drive está incorporada al código: carpetas, revisiones, PDF y voz, con reintentos y bibliotecas separadas por cuenta. La versión pública conserva el guardado local porque todavía necesita registrar los clientes OAuth en Google Cloud. Ver [configuración de Drive](docs/drive-setup.md) y [estado](docs/status.md).
+La Tab S10 y Linux pueden compartir una biblioteca privada mediante el servidor de Nala. Cada equipo guarda primero en el dispositivo y sincroniza cuando hay conexión. Para instalar el servicio y conectar los clientes, seguí la [guía del servidor](docs/server-setup.md).
 
 La versión 0.6 agrega elementos reutilizables, enlaces entre páginas de apuntes, recorte y opacidad de imágenes con original recuperable, bloqueo de objetos, barra configurable, backup completo restaurable y fórmulas LaTeX con vista previa local. La restauración crea copias y conserva la biblioteca actual. Ver [la guía de estas herramientas](docs/notebook-workflow.md).
 
-La [versión de prueba 0.6.0](https://github.com/felipendelicia/nala/releases/tag/v0.6.0) incluye estas herramientas, las mejoras de estudio y el encabezado compacto. Descargas: [APK para la Tab S10 (Android ARM64)](https://github.com/felipendelicia/nala/releases/download/v0.6.0/Nala.apk), [Linux x64](https://github.com/felipendelicia/nala/releases/download/v0.6.0/Nala-Linux-x64.tar.gz), [guía de uso](https://github.com/felipendelicia/nala/releases/download/v0.6.0/GUIA-0.6.md) y [sumas de comprobación](https://github.com/felipendelicia/nala/releases/download/v0.6.0/SHA256SUMS). La entrega local está en `dist/`, con 0.5.1 conservada como respaldo. La primera versión corresponde al editor previo al trabajo de PDF; su APK fue probado en la tablet. Los archivos compilados se distribuyen como adjuntos de la release y no se incluyen en el historial de código.
+La versión **0.7.0** incorpora el servidor privado. La [versión de prueba pública 0.6.0](https://github.com/felipendelicia/nala/releases/tag/v0.6.0) incluye las herramientas de estudio y el encabezado compacto. La [primera versión](https://github.com/felipendelicia/nala/releases/tag/v0.1.0) fue probada en la tablet antes de incorporar el flujo de PDF.
 
 En Linux, descomprimí el paquete y ejecutá `Abrir-Nala.sh` manteniéndolo junto a `Nala-Linux/`. En Android, copiá `Nala.apk`, abrilo y permití la instalación desde la aplicación que lo abre. Es un APK de prueba firmado con una clave de desarrollo.
 
@@ -40,6 +40,8 @@ tool/flutter-safe test --no-pub integration_test/study_tools_test.dart -d linux
 tool/flutter-safe test --no-pub integration_test/notebook_workflow_test.dart -d linux
 tool/flutter-safe build apk --release --target-platform android-arm64
 ```
+
+Las pruebas del servicio y la sincronización local de punta a punta requieren Python 3. Consultá la [guía del servidor](docs/server-setup.md#pruebas-de-desarrollo).
 
 `tool/flutter-safe` ejecuta las tareas de a una dentro de un servicio con un límite total de 2300 MiB de RAM, 256 MiB de swap y dos CPU. Requiere Linux con una sesión systemd de usuario. Gradle además tiene un límite de heap de 512 MiB, un solo worker y no deja un daemon persistente. La compilación de Linux usa Ninja con un solo trabajo. Estos límites se añadieron para una PC de 7.5 GiB de RAM. No ejecutar tareas de Flutter por fuera del script al mismo tiempo que se genera el APK.
 

@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Crear una app de apuntes con escritura y PDFs, editable en una Samsung Tab S10 y Linux, con guardado local y sincronización automática con Google Drive.
 
-**Architecture:** Una aplicación Flutter comparte el modelo, el editor y la sincronización entre Android y Linux. SQLite confirma el documento y su revisión pendiente en una transacción; Drive almacena revisiones inmutables y PDFs originales identificados por contenido. La sincronización conserva ramas concurrentes y muestra sus versiones, sin sobrescribir notas.
+**Architecture:** Una aplicación Flutter comparte el modelo, el editor y la sincronización entre Android y Linux. SQLite confirma el documento y su revisión pendiente en una transacción. El almacenamiento remoto conserva revisiones inmutables y PDFs originales identificados por contenido. La sincronización conserva ramas concurrentes y muestra sus versiones, sin sobrescribir notas.
 
-**Tech Stack:** Flutter estable 3.47, Dart, sqlite3 3.7.0, pdfrx 2.6.5, pdf 3.13.1, google_sign_in 7.2.0 para Android, oauth2 2.0.5 para Linux, flutter_secure_storage 11.2.0 y file_selector 1.1.0. También http, crypto, uuid, path, path_provider, url_launcher y vector_math, resueltos y fijados en pubspec.lock al crear el proyecto.
+
+**Tech Stack:** Flutter, Dart, SQLite, Flutter Secure Storage, PDF y selectores nativos.
 
 **Spec:** [Diseño aprobado](../specs/2026-10-06-apuntes-design.md).
 
@@ -18,7 +18,6 @@
 - "Los cambios se guardan automáticamente en el dispositivo."
 - "El desplazamiento y el zoom no modifican esas coordenadas."
 - "La actividad de red y la preparación de documentos no bloquean la escritura."
-- "Solicita el alcance `drive.file` para trabajar con los archivos creados por la aplicación."
 - "La primera versión garantiza este comportamiento con la aplicación activa; sincronizar con la aplicación cerrada requiere trabajo específico según el sistema operativo."
 - "Volver a sincronizar no crea copias nuevas del mismo conflicto."
 - "Los tokens se guardan en el almacenamiento seguro del dispositivo."
@@ -33,7 +32,7 @@
 
 ## Entregas y entorno
 
-Las tareas 1–3 producen un editor local que se puede probar con el S Pen. La tarea 4 añade el flujo PDF completo. Las tareas 5–7 completan Drive y la entrega en ambos dispositivos. Son etapas del mismo proyecto porque comparten documentos, coordenadas y revisiones.
+Las tareas 1–3 producen un editor local que se puede probar con el S Pen. La tarea 4 añade el flujo PDF completo. Las tareas 5–7 completan la sincronización y la entrega en ambos dispositivos. Son etapas del mismo proyecto porque comparten documentos, coordenadas y revisiones.
 
 El código se creará en `apuntes/`, dentro del workspace actual. Los comandos de aplicación se ejecutan desde esa carpeta. El workspace todavía no contiene una app ni un repositorio Git válido. No se modifican los repositorios previos de Felipe.
 
@@ -77,38 +76,26 @@ apuntes/
       sync_engine.dart
       sync_coordinator.dart
       sync_state.dart
-      drive_remote_store.dart
-      drive_http.dart
-    account/
-      account.dart
-      auth_service.dart
-      android_auth_service.dart
-      linux_auth_service.dart
-      token_store.dart
-      account_controller.dart
     ui/
       app_theme.dart
       sync_indicator.dart
   test/
     support/fixtures.dart
     support/fake_remote_store.dart
-    support/fake_auth_service.dart
     document/
     editor/
     library/
     pdf/
     sync/
-    account/
   integration_test/
     local_notebook_test.dart
     pdf_round_trip_test.dart
   docs/
-    drive-setup.md
     verification.md
   README.md
 ```
 
-Los archivos se separan por responsabilidad. No concentrar el lienzo, OAuth y la persistencia en una pantalla o un servicio único.
+Los archivos se separan por responsabilidad. No concentrar el lienzo, la conexión remota y la persistencia en una pantalla o un servicio único.
 
 ### Tipos de documento, definidos en tarea 1
 
@@ -176,7 +163,6 @@ Desde `apuntes/`, resolver dependencias y conservar `pubspec.lock`:
 
 ```bash
 flutter pub add sqlite3:3.7.0 pdfrx:2.6.5 pdf:3.13.1
-flutter pub add google_sign_in:7.2.0 oauth2:2.0.5 flutter_secure_storage:11.2.0 file_selector:1.1.0
 flutter pub add http crypto uuid path path_provider url_launcher vector_math
 flutter doctor -v
 ```
@@ -511,97 +497,15 @@ El engine comunica fallos por SyncStatus y absorbe fallos de transporte esperabl
 
 - [ ] Conectar estados al editor y biblioteca. Mostrar dos entradas con dispositivo y fecha ante conflicto; abrir una entrada usa su headId. Confirmar esta entrega con las pruebas de ambos clientes pasando.
 
-## Task 6: Google Drive real y autenticación por plataforma
+## Task 6: Integración remota
 
-**Files:** Crear todos los archivos de `lib/account/`, `lib/sync/drive_remote_store.dart`, `drive_http.dart`, `test/account/auth_test.dart`, `test/sync/drive_remote_store_test.dart`, `test/support/fake_auth_service.dart` y `docs/drive-setup.md`; modificar bootstrap, biblioteca y AndroidManifest.xml.
-
-**Interfaces:** `GoogleAccount` tiene `String id, email`. `AuthService` expone `Future<GoogleAccount?> restore()`, `Future<GoogleAccount> signIn()`, `Future<Map<String,String>> authorizationHeaders()`, `Future<void> signOut()`. `TokenStore` expone read/write/delete de credenciales serializadas en almacenamiento seguro. `DriveRemoteStore(AuthService auth, http.Client client)` implementa RemoteStore. `AccountController` cambia el repositorio y engine activos al cambiar de cuenta.
-
-- [ ] Escribir pruebas HTTP con MockClient de `package:http/testing.dart`: dos páginas en files.list; multipart de revisión; asset existente; 401 y autorización revocada; creación con timeout después de éxito y deduplicación por appProperties.revisionId. Escribir prueba de cambio de cuenta con el fake de auth, confirmando que el engine antiguo se detiene y sus pendientes no se suben con la sesión nueva.
-
-```dart
-test('el adaptador consume todas las páginas del listado', () async {
-  final client = MockClient((request) async {
-    final second = request.url.queryParameters['pageToken'] == 'page-2';
-    return Response(jsonEncode(second
-      ? {'files': secondPageFiles}
-      : {'files': firstPageFiles, 'nextPageToken': 'page-2'}), 200);
-  });
-  final remote = DriveRemoteStore(fakeAuth, client);
-  final revisions = await remote.listRevisions();
-  expect(revisions.map((r) => r.id).toSet(), {'r1', 'r2'});
-});
-```
-
-firstPageFiles y secondPageFiles describen ids y appProperties de revisiones; MockClient también responde los GET `alt=media` con el JSON serializado de r1 y r2. La prueba distingue esos requests por alt, no devuelve metadata como contenido.
-
-- [ ] Ejecutar los tests para confirmar el fallo. Implementar Drive API v3 con alcance drive.file. Crear carpeta visible `Apuntes Universidad` y appProperties `application: apuntes-v1, kind: root`. Revisión usa kind: revision, revisionId, documentId; recurso usa kind: asset, assetId. Consultar objetos por propiedades de aplicación además de carpeta para descubrir datos si dos dispositivos crearon carpetas al mismo tiempo.
-
-```dart
-final listUri = Uri.https('www.googleapis.com', '/drive/v3/files', {
-  'q': "trashed = false and appProperties has { key='application' and value='apuntes-v1' }",
-  'fields': 'nextPageToken,files(id,name,appProperties)',
-  'pageSize': '1000',
-  if (pageToken != null) 'pageToken': pageToken,
-});
-```
-
-Consultar antes de crear y después de un timeout. Deduplicar revisiones por revisionId y recursos por SHA-256. Tratar todas las carpetas raíz encontradas como parte de la misma biblioteca y elegir una de forma determinista para subir nuevos archivos. Nunca reemplazar revisiones existentes con contenido diferente.
-
-- [ ] Implementar subida multipart para JSON pequeño y subida resumable para PDFs, con reanudación y consulta de rango después de interrupción. Guardar localmente sesión y progreso de subida, vinculados a accountId y assetId. Después de subir, comprobar el hash de contenido usado para ese asset. Timeouts 30 s, reintentos con jitter para 429/5xx; 401 intenta renovar una vez y luego expone needsSignIn. Respetar Retry-After si está presente.
-
-```dart
-final startUpload = Uri.https('www.googleapis.com', '/upload/drive/v3/files', {
-  'uploadType': 'resumable',
-});
-final headers = {
-  ...await auth.authorizationHeaders(),
-  'Content-Type': 'application/json; charset=UTF-8',
-  'X-Upload-Content-Type': 'application/pdf',
-  'X-Upload-Content-Length': bytes.length.toString(),
-};
-```
-
-La sesión retorna Location. Enviar bloques múltiplos de 256 KiB salvo el último, con Content-Range. Ante interrupción, consultar con un PUT vacío `Content-Range: bytes */TOTAL` y continuar después del último byte confirmado por Range. No loguear Location ni Authorization. Añadir prueba de respuesta 308 y de sesión expirada que crea una nueva sin perder el pendiente local.
-
-- [ ] Implementar Android con google_sign_in 7.2.0 y el web OAuth client ID como serverClientId. Restaurar la cuenta con autenticación ligera y obtener autorización de drive.file a través de authorizationClient. Solo invocar autorización interactiva desde Conectar Drive o Reconectar.
-
-```dart
-await GoogleSignIn.instance.initialize(serverClientId: webClientId);
-final account = await GoogleSignIn.instance.authenticate();
-final authorization = await account.authorizationClient
-    .authorizeScopes(['https://www.googleapis.com/auth/drive.file']);
-final headers = {'Authorization': 'Bearer ${authorization.accessToken}'};
-```
-
-En authorizationHeaders, obtener un token vigente con authorizationForScopes, renovando según el SDK; no reutilizar de forma indefinida el accessToken del ejemplo.
-
-- [ ] Implementar Linux con OAuth Authorization Code + PKCE, navegador del sistema y callback en 127.0.0.1 con puerto efímero. Validar state, limitar callback a esa interfaz, cerrar listener al cancelar o terminar y no copiar códigos a logs. Incluir openid y email para obtener un id de cuenta estable desde userinfo; Drive conserva únicamente drive.file para acceso a archivos.
-
-```dart
-final grant = oauth2.AuthorizationCodeGrant(
-  desktopClientId,
-  Uri.parse('https://accounts.google.com/o/oauth2/v2/auth'),
-  Uri.parse('https://oauth2.googleapis.com/token'),
-  secret: desktopClientSecret.isEmpty ? null : desktopClientSecret,
-  basicAuth: false,
-  onCredentialsRefreshed: (credentials) => tokenStore.write(credentials.toJson()),
-);
-```
-
-Usar state generado con Random.secure y PKCE del paquete; pedir access_type=offline. Recuperar refresh token mediante Credentials.fromJson y mantenerlo en el llavero. Si el llavero no está disponible, no guardar tokens en texto plano: conservar la sesión en memoria y explicar que deberá reconectar al reiniciar.
-
-- [ ] Separar almacenamiento por id de cuenta. Las notas creadas antes de conectar Drive se asocian a la primera cuenta elegida mediante una acción explícita de sincronización. Cerrar sesión conserva los datos de esa cuenta en el dispositivo; otra cuenta abre otra partición. Un cambio de cuenta cancela timers y peticiones del engine anterior antes de construir el nuevo.
-
-- [ ] Documentar configuración real de Google Cloud: habilitar Drive API, pantalla de consentimiento y usuario de prueba, cliente Android con package y SHA del APK, cliente web para serverClientId y cliente Desktop para Linux. Proveer ids mediante dart-define/configuración local ignorada por Git; no inventar credenciales. Escribir los comandos de SHA para debug y release, y verificar configuración antes de habilitar el botón de conexión. Explicar que estas credenciales pertenecen a la app y no se obtienen del conector de esta conversación.
-
-- [ ] Ejecutar `flutter test test/account test/sync`. Después de configurar OAuth, usar dos dispositivos reales con la misma cuenta y un cuaderno de prueba creado para esta app. Confirmar envío en ambas direcciones y desconexión/reconexión sin pérdida. Registrar el resultado real; pruebas con FakeRemoteStore no confirman acceso a Google Drive.
+Ver el [plan del servidor privado](2026-11-24-servidor-nala.md).
 
 ## Task 7: Interfaz coherente, empaquetado y verificación completa
 
 **Files:** Crear `lib/ui/app_theme.dart`, `sync_indicator.dart`, `test/library/library_layout_test.dart`, `test/editor/editor_layout_test.dart` y `docs/verification.md`; modificar biblioteca, editor, README y configuración de builds.
 
-**Interfaces:** Consume todos los contratos anteriores. Los widgets muestran SyncStatus y DocumentEntry sin interpretar respuestas HTTP u OAuth. Bootstrap elige implementaciones reales; las pruebas inyectan repositorio, assets y auth temporales.
+**Interfaces:** Consume todos los contratos anteriores. Los widgets muestran SyncStatus y DocumentEntry sin interpretar respuestas HTTP. Bootstrap elige implementaciones reales; las pruebas inyectan repositorio, assets y auth temporales.
 
 - [ ] Definir una apariencia consistente: fondo cálido claro, papel blanco, tinta grafito y un único acento verde oscuro. Usar tipografía y espaciado de un mismo tema. Biblioteca con materias en panel lateral y editor con barra compacta y páginas plegables. Controles táctiles de al menos 48 dp, etiquetas accesibles, estados de foco y mensajes en español. El papel mantiene contraste legible aunque la interfaz esté en modo oscuro.
 
@@ -639,17 +543,16 @@ flutter build linux --release
 flutter build apk --debug
 ```
 
-El APK debug sirve para la primera prueba física con su SHA registrado. Una entrega release requiere su keystore y un cliente OAuth Android con el SHA correspondiente. No sustituir el release por una clave desconocida ni afirmar que una conexión validada en debug funciona en release sin probarla.
+El APK debug sirve para la primera prueba física con su SHA registrado. Una entrega release requiere su keystore. No sustituir el release por una clave desconocida ni afirmar que una conexión validada en debug funciona en release sin probarla.
 
-- [ ] En Linux, ejecutar el flujo completo de crear, escribir, cambiar patrón, cerrar y recuperar, importar PDF, insertar hoja, exportar y reconectar Drive. En la tablet repetir con S Pen y orientación vertical y horizontal. Tomar capturas de biblioteca, hoja y PDF anotado para revisar el conjunto visual; registrar limitaciones observadas, no supuestas.
 
-- [ ] Verificar los seis criterios de entrega del spec en `docs/verification.md`, con comando/dispositivo, resultado y fecha. Si falta la tablet o la configuración OAuth, registrar explícitamente ese punto como pendiente de comprobación externa, preservar el resto de la entrega y proporcionar el APK y las instrucciones para probarlo.
+- [ ] Verificar los seis criterios de entrega del spec en `docs/verification.md`, con comando/dispositivo, resultado y fecha. Si falta la tablet o el acceso al servidor, registrar explícitamente ese punto como pendiente de comprobación externa, preservar el resto de la entrega y proporcionar el APK y las instrucciones para probarlo.
 
 - [ ] Realizar la revisión final según el método de ejecución elegido. Resolver defectos que puedan causar pérdida de datos, tinta desplazada o subida a una cuenta incorrecta, repetir solamente los checks afectados y entregar enlaces al código, build de Linux y APK que realmente existan.
 
 ## Revisión del plan
 
-Cobertura del spec: biblioteca y materias (2,7); editor y herramientas (1,3,7); hojas y páginas mixtas (1,3,4); PDFs y exportación (4); guardado y recuperación (2); Drive, conflictos y errores (5,6); adaptación a plataformas (3,6,7); validación real (3,6,7).
+Cobertura del spec: biblioteca y materias (2,7); editor y herramientas (1,3,7); hojas y páginas mixtas (1,3,4); PDFs y exportación (4); guardado y recuperación (2); sincronización, conflictos y errores (5,6); adaptación a plataformas (3,6,7); validación real (3,6,7).
 
 La decisión adicional que debe quedar visible al revisar el plan es la exportación PDF: la primera entrega comparte una copia visual con el fondo rasterizado a 200 dpi y tinta vectorial. Mantener texto seleccionable del fondo exportado sería una ampliación del exportador; el original permanece completo en el documento de la app.
 
@@ -663,8 +566,5 @@ Ejecución recomendada: **Native**, implementando las tareas en esta sesión, po
 - [pdfrx](https://pub.dev/packages/pdfrx) y [PdfPage](https://pub.dev/documentation/pdfrx_engine/latest/pdfrx_engine/PdfPage-class.html).
 - [pdf](https://pub.dev/packages/pdf).
 - [sqlite3](https://pub.dev/packages/sqlite3).
-- [google_sign_in](https://pub.dev/packages/google_sign_in) y [configuración Android](https://pub.dev/packages/google_sign_in_android).
-- [OAuth PKCE](https://pub.dev/documentation/oauth2/latest/oauth2/AuthorizationCodeGrant/AuthorizationCodeGrant.html).
 - [Almacenamiento seguro](https://pub.dev/packages/flutter_secure_storage).
 - [Selector nativo de archivos](https://pub.dev/packages/file_selector).
-- [Drive: alcances](https://developers.google.com/workspace/drive/api/guides/api-specific-auth), [subidas](https://developers.google.com/workspace/drive/api/guides/manage-uploads) y [OAuth Desktop](https://developers.google.com/identity/protocols/oauth2/native-app).

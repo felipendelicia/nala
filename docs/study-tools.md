@@ -76,7 +76,7 @@ En **Repasar pendientes**, intentá responder antes de pulsar **Mostrar respuest
 
 ## Guardado y alcance
 
-Las herramientas funcionan con guardado local y no requieren una cuenta ni servicios pagos. La conexión opcional a Google Drive sigue dependiendo de completar la configuración OAuth pendiente de la integración previa.
+Las herramientas funcionan con guardado local. Para compartir la biblioteca entre dispositivos, consultá la [guía del servidor privado](server-setup.md).
 
 **Opciones del cuaderno → Exportar PDF** conserva fondos, tinta, texto e imágenes. Las grabaciones y tarjetas se consultan dentro de Nala.
 

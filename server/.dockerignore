@@ -1,0 +1,5 @@
+**
+!Dockerfile
+!nala-server
+!nala_server/
+!nala_server/*.py

@@ -10,7 +10,7 @@ Pasaron las 28 pruebas unitarias y la prueba de integración en Linux que crea u
 
 Las compilaciones y pruebas se ejecutaron de a una en servicios de systemd con un límite total de 2300 MiB de RAM, 256 MiB de swap y dos CPU. Android terminó en unos 39 segundos, con un pico registrado de 1.7 GiB y sin usar swap. Linux release terminó en unos 38 segundos. No se registraron nuevos eventos de falta de memoria en el kernel durante estas comprobaciones. `tool/flutter-safe` conserva estos límites para las siguientes tareas e impide dos ejecuciones simultáneas del mismo proyecto.
 
-Esta entrega permite probar cuadernos con guardado local y el editor. Importar/exportar PDF, sincronizar con Drive y validar el lápiz físico en la tablet siguen pendientes. No representa la finalización del plan de implementación completo.
+Esta entrega permite probar cuadernos con guardado local y el editor. Importar/exportar PDF y validar el lápiz físico en la tablet siguen pendientes. No representa la finalización del plan de implementación completo.
 
 ## Publicación en GitHub y checkpoint de PDF
 
@@ -40,19 +40,12 @@ La suite local completa terminó con 56/56 pruebas y analyze no encontró proble
 
 Las pruebas de audio usan el dispositivo externo simulado y almacenamiento real de archivos/hash; ninguna automatización encendió el micrófono real. La presión, latencia física, captura/reproducción y selector Android quedan pendientes de validación en la Tab S10.
 
-La compilación Linux x64 release de esta etapa terminó correctamente. Los instaladores de checkpoint están en dist/editor-checkpoint; los entregables finales se regenerarán después de Drive/revisión. El editor nuevo conserva la base y recursos de las versiones previas.
+La compilación Linux x64 release de esta etapa terminó correctamente. Los instaladores de checkpoint están en dist/editor-checkpoint; los entregables finales se regenerarán después de la revisión. El editor nuevo conserva la base y recursos de las versiones previas.
 
 
-## Drive y cuentas
+## Motor de sincronización
 
-Se implementó un motor con dos repositorios SQLite reales y recursos PDF/audio por hash. Los tests de red simulada cubren ediciones concurrentes, reintento de confirmación perdida, descarga dañada, hijo recibido antes del padre, carpetas borradas y movimientos cruzados. El planificador agrupa guardados, suspende sondeos al pasar la app al fondo y respeta el backoff del servidor.
-
-El adaptador HTTP cubre paginación, multipart idempotente, 401/revocación, Retry-After, subidas de recursos en bloques reanudables, consulta de rango 308 y sesiones expiradas. OAuth Linux se prueba con un callback HTTP real en loopback, PKCE, state incorrecto, cancelación y almacenamiento de credenciales simulado. Se reprodujo una renovación tardía que devolvía el token de otra sesión; ahora se rechaza. También se reprodujo una superposición de desconexión y nueva conexión; ambas operaciones quedaron serializadas.
-
-Las pruebas de cuenta usan particiones SQLite y directorios reales: primera adopción, copia de recursos y carpetas, datos offline después de salir, cambio A/B, reinicio y cancelación de peticiones antiguas. El editor aplica sólo un avance remoto descendiente de su versión guardada, después de soltar el lápiz; conserva la edición actual cuando existen dos ramas. El panel no muestra una conexión ficticia si faltan clientes OAuth.
-
-No se conectó una cuenta Google real. La compilación pública no contiene clientes OAuth; requiere los pasos de docs/drive-setup.md para habilitar Drive. Los tests del SDK Android, los permisos de micrófono y el S Pen necesitan comprobación física.
-
+Se verificó el motor con dos repositorios SQLite reales y recursos PDF/audio por hash. Las pruebas de red simulada cubrieron ediciones concurrentes, reintento de confirmación perdida, descarga dañada, hijo recibido antes del padre, carpetas borradas y movimientos cruzados. El planificador agrupa guardados, suspende sondeos al pasar la app al fondo y respeta la espera indicada por el servidor.
 
 ## Revisión final y correcciones
 
@@ -70,7 +63,7 @@ La prueba nativa PDF final pasó 1/1 con el origen de la hoja estable durante el
 
 ## Entregables finales 0.2.0
 
-Ambas compilaciones finales corresponden al código `a9c5cc7d13487843c8205058a8b04aa5e0ccfba3`, después de corregir la revisión. Los commits posteriores sólo documentan la entrega. Se ejecutaron consecutivamente mediante `tool/flutter-safe`, con los límites de recursos descritos arriba: Android release ARM64 terminó en 63 segundos y Linux x64 release en 45 segundos. Los datos OAuth no están configurados en estos binarios.
+Ambas compilaciones finales corresponden al código `a9c5cc7d13487843c8205058a8b04aa5e0ccfba3`, después de corregir la revisión. Los commits posteriores sólo documentan la entrega. Se ejecutaron consecutivamente mediante `tool/flutter-safe`, con los límites de recursos descritos arriba: Android release ARM64 terminó en 63 segundos y Linux x64 release en 45 segundos.
 
 - APK: 31 164 727 bytes, versión 0.2.0+2, package `com.felipe.apuntes`, API mínima 24 y target 36. `apksigner verify` confirmó firma v2 válida; conserva el certificado de la primera versión y puede actualizarla. Es una firma de desarrollo para pruebas.
 - Linux: archivo completo de 18 021 201 bytes con bibliotecas, recursos, icono, fuente/licencia y lanzador ejecutable. Se verificaron 35 entradas del paquete, resolución de todas las bibliotecas, sintaxis del lanzador y acceso del menú. La versión anterior se conserva como respaldo local.
@@ -86,7 +79,7 @@ ab221f87861c09f055a9bae2cfdc38279593d238b32f086f118bb974f0747161  Nala.apk
 
 Antes de publicar se revisaron 149 archivos y 264 blobs históricos: ninguna ruta privada prohibida ni patrón conocido de credenciales. El repositorio sigue público y main recibió los commits sin sobrescribir cambios remotos.
 
-La prueba física con S Pen, audio y selector Android, y una conexión Google real entre dos dispositivos, siguen pendientes. Las decisiones de alcance y sus costes están en [decisiones](decisions.md).
+La prueba física con S Pen, audio y selector Android siguen pendientes. Las decisiones de alcance y sus costes están en [decisiones](decisions.md).
 
 ## Editor continuo y apariencia 0.3.0
 
@@ -102,7 +95,7 @@ Al ejecutar todos los archivos nativos en un mismo proceso Flutter, el primer ca
 
 Capturas nativas en .dart_tool/ui-qa: biblioteca clara/oscura, editor oscuro, navegación continua y lectura; la captura clara selecciona Claro explícitamente porque el sistema de la PC está en modo oscuro. Se inspeccionaron ambas bibliotecas, el editor continuo y lectura; controles legibles y papel conservado. No se interpreta el MemoryPeak impreso por systemd-run como una medida real de consumo; cada compilación mantiene límite de memoria y CPU.
 
-La suite completa de cierre pasó 102/102 después de añadir orientaciones mixtas, separación sin tinta y origen estable al cruzarla. Se reprodujo un overflow del estado local de biblioteca con texto a 1.5 en 800×1200; ahora ese estado tiene ancho limitado o icono con descripción, como los controles de Drive. La suite posterior pasó y analyze siguió sin problemas.
+La suite completa de cierre pasó 102/102 después de añadir orientaciones mixtas, separación sin tinta y origen estable al cruzarla. Se reprodujo un overflow del estado local de biblioteca con texto a 1.5 en 800×1200; ahora ese estado tiene ancho limitado o icono con descripción, como los controles de sincronización. La suite posterior pasó y analyze siguió sin problemas.
 
 También se reprodujo que los permisos por defecto de un PDF temporal Linux permitían lectura a grupo/otros. Compartir ahora usa carpetas 0700, archivos 0600 y rechaza una raíz temporal que sea enlace. La prueba examina los permisos reales antes del canal de entrega y pasó junto con compartir desde el editor (2/2). Android usa su caché privada y FileProvider limitado a nala-share/. No se abrió ningún cliente de correo ni se cambió el portapapeles real durante la automatización.
 
@@ -144,7 +137,7 @@ aff77e4086b58dffd5c6fcb683118f2ab58cd51cab675833c86ea45011fd2a8c  Nala.apk
 e156a83331c1bc973640dcb66696b514895c3c504736082a94c65892300f41a2  Nala-Linux-x64.tar.gz
 ```
 
-La comprobación física del S Pen y del selector/permisos Android queda para la tablet; recepción en aplicaciones externas y Drive real siguen con los límites documentados.
+La comprobación física del S Pen y del selector/permisos Android queda para la tablet; la recepción en aplicaciones externas sigue con los límites documentados.
 
 Se publicó la [prerelease v0.3.0](https://github.com/felipendelicia/nala/releases/tag/v0.3.0), con tag en `5b973184923d7b1aa82724c391b75b06aade92e9` (el código compilado y documentación de entrega). La API de GitHub confirmó que el repositorio continúa público, los tres archivos están subidos y sus tamaños/digests SHA-256 coinciden exactamente con los locales: APK, paquete Linux y SHA256SUMS. Main recibió el historial por avance directo.
 
@@ -181,7 +174,7 @@ Se publicó la [prerelease v0.4.0](https://github.com/felipendelicia/nala/releas
 
 Código compilado: `7455da3424e5352f65793dfdc86d799992bd1a2a`. El commit `c39e418` contiene la implementación verificada; los tres siguientes ajustan sólo el empaquetado Android y su documentación. Incorpora las nueve funciones del pedido autónomo: formas/regla, selección completa, texto/imágenes, favoritos, pestañas/vista dividida, plantillas/portadas, búsqueda, audio ligado a tinta y tarjetas con repetición espaciada. La [guía de uso](study-tools.md) describe cada control y los requisitos de reconocimiento/audio.
 
-Verificación final de fuente: **206/206** pruebas unitarias/widget en 1min34,1s; análisis global sin incidencias. Se conservaron las pruebas anteriores de presión/S Pen, PDF, comentarios, organización y Drive simulado. Las nuevas cubren codec y medios, geometría/portapapeles, favoritos, imágenes/fondos, búsqueda PDF real y huellas de reconocimiento, foco y primer gesto entre paneles, plantillas pequeñas, recuperación de audio y programación de tarjetas.
+Verificación final de fuente: **206/206** pruebas unitarias/widget en 1min34,1s; análisis global sin incidencias. Se conservaron las pruebas anteriores de presión/S Pen, PDF, comentarios, organización y sincronización simulada. Las nuevas cubren codec y medios, geometría/portapapeles, favoritos, imágenes/fondos, búsqueda PDF real y huellas de reconocimiento, foco y primer gesto entre paneles, plantillas pequeñas, recuperación de audio y programación de tarjetas.
 
 La revisión independiente encontró cuatro defectos iniciales y dos interacciones posteriores, corregidos antes de esta suite: pérdida del WAV al fallar almacenamiento, primer gesto cancelado, teclado dirigido al panel anterior, medidas negativas con una plantilla pequeña, recuperación de audio con varios paneles laterales y borrado normal del audio pendiente que se deshacía al reintentar. Se reprodujeron también la goma temporal conservada al cerrar nuevos menús, el desplazamiento de cámara al entrar en lectura y el reconocimiento por mantener la punta con muestras pequeñas. Una última regresión demuestra que un comentario visible sobre tinta con audio mantiene prioridad al tocarlo. La [revisión](study-tools-review.md) conserva sus hallazgos y la comprobación posterior de código.
 
@@ -189,7 +182,7 @@ Pasaron tres recorridos nativos Linux, cada uno en un proceso Flutter: estudio (
 
 Se inspeccionaron las capturas de editor, estudio y dos paneles. Poppler confirmó el PDF nuevo de una página A4, con texto Unicode seleccionable, imagen azul, forma vectorial y guías Cornell correctas. Un fallo inicial del build Linux se debía a una caché del SDK con el directorio de cabeceras vacío; regenerar la caché resolvió la compilación sin cambiar CMake.
 
-Las pruebas usan apuntes temporales y audio sintético. No se activó el micrófono real ni se modificó la biblioteca personal. Android reconoce tinta escrita en Nala después de descargar explícitamente el modelo español; su precisión/descarga y el S Pen/micrófono/selector requieren comprobación en la Tab S10. Linux no tiene Tesseract con español en este equipo: informa que el OCR no está disponible y permite ingresar texto manualmente o buscar lo reconocido/guardado en Android. Drive real sigue pendiente de configurar OAuth y probar dos dispositivos.
+Las pruebas usan apuntes temporales y audio sintético. No se activó el micrófono real ni se modificó la biblioteca personal. Android reconoce tinta escrita en Nala después de descargar explícitamente el modelo español; su precisión/descarga y el S Pen/micrófono/selector requieren comprobación en la Tab S10. Linux no tiene Tesseract con español en este equipo: informa que el OCR no está disponible y permite ingresar texto manualmente o buscar lo reconocido/guardado en Android.
 
 
 ### Paquetes locales verificados
@@ -278,3 +271,11 @@ ab03af0738987a1c9c67802aff5335d10763d3bfd73f5f9b1a3389789584c1c1  Vista-Nala-0.6
 Publicación completada el **7 de octubre de 2026, 17:34:23 UTC**, en [GitHub v0.6.0](https://github.com/felipendelicia/nala/releases/tag/v0.6.0), como prerelease. `main` y `codex/study-tools` se actualizaron por avance directo y la etiqueta anotada `v0.6.0` identifica **56bfcfa1e6e29a7d17f84b7a2c56a9f9ed71df2b**, con el mismo código de aplicación compilado en bbd21ec.
 
 Los seis adjuntos se descargaron mientras la release era borrador y se compararon byte por byte/hash/tamaño con `dist/`; todos coincidieron. Después de publicar, la API confirmó `isDraft=false`, la misma lista de IDs/tamaños/estado de los adjuntos y la URL final. El manifiesto se descargó sin autenticación y coincidió con el local; los cinco enlaces públicos restantes devolvieron HTTP 200. Evidencia en `.dart_tool/github-v060-{draft,published}.json`, `github-v060-draft-check.json` y `github-v060-public-SHA256SUMS`. No se publicó ninguna base de apuntes ni configuración privada.
+
+## Servidor privado 0.7.0
+
+El análisis de Flutter quedó limpio y pasaron **279 pruebas**. El recorrido HTTP de punta a punta usó el servicio real y dos bibliotecas SQLite temporales. Verificó la primera carga de una revisión que ya existía localmente, una carpeta, un PDF y un adjunto de más de 4 MiB. Detuvo el servicio, guardó una edición en cada biblioteca, cerró y reabrió un cliente, y comprobó que ambas versiones del cuaderno llegaron a los dos clientes. También verificó la revocación de una credencial con los apuntes aún accesibles en el equipo.
+
+Pasaron **15 pruebas HTTP del servidor**. Se verificó Docker Compose con una subida, una copia en caliente y una restauración en otro volumen. La copia recuperó el adjunto y la restauración rechazó las credenciales anteriores, emitió una identidad nueva y aceptó una credencial recién generada.
+
+El build Linux x64 **0.7.0+8** abrió una biblioteca temporal con `PRAGMA quick_check=ok`. Una segunda apertura reutilizó la ventana existente y se comprobó el bloqueo exclusivo de la biblioteca. La validación del servidor de Felipe y de la Tab S10 física se hará con el acceso al servidor.

@@ -14,9 +14,9 @@ class SyncStatus {
   String get label => switch (phase) {
     SyncPhase.localOnly => 'Guardado en este dispositivo',
     SyncPhase.pending => 'Cambios pendientes de sincronizar',
-    SyncPhase.syncing => 'Sincronizando con Drive…',
-    SyncPhase.synced => 'Sincronizado con Drive',
-    SyncPhase.error => 'Guardado local · Drive pendiente',
-    SyncPhase.needsSignIn => 'Guardado local · Reconectar Drive',
+    SyncPhase.syncing => 'Sincronizando con el servidor…',
+    SyncPhase.synced => 'Sincronizado con el servidor',
+    SyncPhase.error => 'Guardado local · Sincronización pendiente',
+    SyncPhase.needsSignIn => 'Guardado local · Reconectar servidor',
   };
 }

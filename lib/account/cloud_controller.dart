@@ -5,83 +5,216 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
+import 'package:uuid/uuid.dart';
 import '../bootstrap.dart';
 import '../document/sqlite_notebook_repository.dart';
-import '../document/folders.dart';
 import '../sync/remote_store.dart';
-import '../sync/drive_remote_store.dart';
-import '../sync/upload_session_store.dart';
+import '../sync/server_remote_store.dart';
 import '../sync/sync_state.dart';
-import 'auth_service.dart';
+import 'token_store.dart';
 
-typedef RemoteFactory =
-    RemoteStore Function(GoogleAccount account, String root);
+class LocalCatalog {
+  const LocalCatalog._(this.id, this.root, this.label);
+
+  final String? id;
+  final String root, label;
+}
+
+class ServerDestination {
+  const ServerDestination(this.url, this.id);
+
+  final Uri url;
+  final String id;
+
+  String get _scope =>
+      sha256.convert(utf8.encode(jsonEncode([url.toString(), id]))).toString();
+}
+
+class ServerConnectionProbe {
+  const ServerConnectionProbe._(
+    this.destination,
+    this.isNewDestination,
+    this.requiresUpload,
+    this._token,
+  );
+
+  final ServerDestination destination;
+  final bool isNewDestination, requiresUpload;
+  final String _token;
+}
+
+class _SavedConnection {
+  const _SavedConnection(
+    this.destination, {
+    this.enabled = true,
+    this.credentialId,
+  });
+
+  final ServerDestination destination;
+  final bool enabled;
+  final String? credentialId;
+
+  factory _SavedConnection.fromJson(Map<String, dynamic> json) =>
+      _SavedConnection(
+        ServerDestination(
+          Uri.parse(json['url'] as String),
+          json['id'] as String,
+        ),
+        enabled: json['enabled'] as bool,
+        credentialId: json['credentialId'] as String?,
+      );
+
+  Map<String, Object?> toJson() => {
+    'url': destination.url.toString(),
+    'id': destination.id,
+    'enabled': enabled,
+    'credentialId': ?credentialId,
+  };
+}
 
 class CloudController extends ChangeNotifier {
-  CloudController._(this.root, this.auth, this.remoteFactory, this.autoStart);
-  final String root;
-  final AuthService? auth;
-  final RemoteFactory remoteFactory;
-  final bool autoStart;
-  late AppServices services;
-  GoogleAccount? account;
-  String? message;
-  bool busy = false, _closed = false;
-  int _epoch = 0;
-  Future<void>? _operation, _closing;
-  bool get configured => auth != null;
-  bool get connected => services.sync != null;
-  SyncStatus get status =>
-      services.sync?.status ?? const SyncStatus(SyncPhase.localOnly);
-  String _accountRoot(GoogleAccount account) => p.join(
-    root,
-    'accounts',
-    sha256.convert(utf8.encode(account.id)).toString(),
+  CloudController._(
+    this.root,
+    this.catalogs,
+    this._activeCatalog,
+    this._tokenStore,
+    this._clientFactory,
+    this._autoStart,
+    this._allowInsecureLoopback,
   );
-  File get _selection => File(p.join(root, 'active-account.json'));
+
+  final String root;
+  final List<LocalCatalog> catalogs;
+  LocalCatalog _activeCatalog;
+  LocalCatalog get activeCatalog => _activeCatalog;
+  final TokenStore _tokenStore;
+  final http.Client Function() _clientFactory;
+  final bool _autoStart, _allowInsecureLoopback;
+  late AppServices services;
+  _SavedConnection? _saved;
+  ServerConnectionProbe? _pending;
+  http.Client? _probeClient;
+  Future<void>? _operation, _closing;
+  bool _closed = false, _needsCredentials = false;
+  int _probeEpoch = 0;
+  String? message;
+
+  bool get busy => _operation != null;
+  bool get verifying => _probeClient != null;
+  bool get connected => services.sync != null;
+  ServerDestination? get destination => _saved?.destination;
+  ServerConnectionProbe? get pendingConnection => _pending;
+  SyncStatus get status =>
+      services.sync?.status ??
+      SyncStatus(
+        _needsCredentials ? SyncPhase.needsSignIn : SyncPhase.localOnly,
+      );
+  File get _connectionFile =>
+      File(p.join(activeCatalog.root, 'server-connection.json'));
+  SqliteNotebookRepository get _repository =>
+      services.repository as SqliteNotebookRepository;
 
   static Future<CloudController> open(
     String root, {
-    AuthService? auth,
-    RemoteFactory? remoteFactory,
+    TokenStore? tokenStore,
+    http.Client Function()? clientFactory,
     bool autoStart = true,
+    bool allowInsecureLoopback = false,
   }) async {
+    await Directory(root).create(recursive: true);
+    final selection = await _readJson(
+      File(p.join(root, 'active-library.json')),
+    );
+    final legacyFile = File(p.join(root, 'active-account.json'));
+    final legacy = selection == null
+        ? await _readJson(legacyFile)
+        : await _readJson(legacyFile).catchError((Object _) => null);
+    final priorId = legacy?['id'];
+    if (selection == null && legacy != null && priorId is! String ||
+        selection != null && !selection.containsKey('catalog')) {
+      throw const FormatException('Selección de biblioteca inválida.');
+    }
+    final legacyId = priorId is! String
+        ? null
+        : sha256.convert(utf8.encode(priorId)).toString();
+    final selectedId = selection == null
+        ? legacyId
+        : selection['catalog'] as String?;
+    final catalogs = await _findCatalogs(
+      root,
+      selectedId,
+      legacyId,
+      legacy?['email'],
+    );
+    final active = catalogs
+        .where((catalog) => catalog.id == selectedId)
+        .firstOrNull;
+    if (active == null) {
+      throw FileSystemException(
+        'No se encontró la biblioteca seleccionada',
+        root,
+      );
+    }
     final cloud = CloudController._(
       root,
-      auth,
-      remoteFactory ??
-          ((account, partition) => DriveRemoteStore(
-            auth: auth!,
-            client: http.Client(),
-            accountId: account.id,
-            sessions: FileUploadSessionStore(
-              p.join(partition, 'upload-sessions'),
-            ),
-          )),
+      List.unmodifiable(catalogs),
+      active,
+      tokenStore ?? const SecureTokenStore(),
+      clientFactory ?? http.Client.new,
       autoStart,
+      allowInsecureLoopback,
     );
-    await Directory(root).create(recursive: true);
-    var reconnect = true;
-    if (await cloud._selection.exists()) {
-      // Never fall back silently to an empty library if the saved catalog fails.
-      final selection =
-          jsonDecode(await cloud._selection.readAsString())
-              as Map<String, dynamic>;
-      cloud.account = GoogleAccount.fromJson(selection);
-      reconnect = selection['connected'] != false;
-    }
-    cloud.services = await AppServices.open(
-      cloud.account == null ? root : cloud._accountRoot(cloud.account!),
-    );
-    GoogleAccount? restored;
-    try {
-      if (reconnect) restored = await auth?.restore();
-    } catch (_) {
-      cloud.message =
-          'No se pudo restaurar Drive. Tus apuntes están disponibles sin conexión.';
-    }
-    if (restored != null && restored.id == cloud.account?.id) cloud._attach();
+    cloud.services = await AppServices.open(active.root);
+    await cloud._restoreConnection();
     return cloud;
+  }
+
+  static Future<List<LocalCatalog>> _findCatalogs(
+    String root,
+    String? selectedId,
+    String? legacyId,
+    Object? legacyLabel,
+  ) async {
+    final catalogs = <LocalCatalog>[];
+    if (selectedId == null || await _catalogExists(root)) {
+      catalogs.add(
+        LocalCatalog._(null, root, 'Biblioteca de este dispositivo'),
+      );
+    }
+    final accounts = Directory(p.join(root, 'accounts'));
+    if (!await accounts.exists()) return catalogs;
+
+    final archived = <LocalCatalog>[];
+    final partitionId = RegExp(r'^[a-f0-9]{64}$');
+    await for (final directory in accounts.list(followLinks: false)) {
+      final id = p.basename(directory.path);
+      if (directory is! Directory ||
+          !partitionId.hasMatch(id) ||
+          !await _catalogExists(directory.path)) {
+        continue;
+      }
+      final label =
+          id == legacyId && legacyLabel is String && legacyLabel.isNotEmpty
+          ? legacyLabel
+          : 'Biblioteca local ${id.substring(0, 8)}';
+      archived.add(LocalCatalog._(id, directory.path, label));
+    }
+    archived.sort((a, b) => a.label.compareTo(b.label));
+    return catalogs..addAll(archived);
+  }
+
+  static Future<bool> _catalogExists(String root) =>
+      File(p.join(root, 'local', 'notes.db')).exists();
+
+  static Future<Map<String, dynamic>?> _readJson(File file) async =>
+      await file.exists()
+      ? jsonDecode(await file.readAsString()) as Map<String, dynamic>
+      : null;
+
+  static Future<void> _writeJson(File file, Map<String, Object?> value) async {
+    final temporary = File('${file.path}.tmp');
+    await temporary.writeAsString(jsonEncode(value), flush: true);
+    await temporary.rename(file.path);
   }
 
   void _changed() {
@@ -91,19 +224,30 @@ class CloudController extends ChangeNotifier {
   void _syncChanged() {
     _changed();
     if (status.phase == SyncPhase.synced) {
-      // An open editor keeps its in-memory branch; downloaded heads are shown
-      // after returning to the library, without overwriting handwriting.
       unawaited(services.library.refresh().catchError((Object _) {}));
     }
   }
 
-  void _attach() {
+  void _attach(ServerDestination destination, String token) {
     services.attachSync(
-      remoteFactory(account!, services.root),
+      ServerRemoteStore(
+        baseUrl: destination.url,
+        token: token,
+        serverId: destination.id,
+        cursorPath: p.join(
+          services.root,
+          'server-sync',
+          '${destination._scope}.json',
+        ),
+        client: _clientFactory(),
+        allowInsecureLoopback: _allowInsecureLoopback,
+      ),
       autoStart: false,
     );
+    _needsCredentials = false;
     services.sync!.addListener(_syncChanged);
-    if (autoStart) services.coordinator!.start();
+    services.sync!.notifyPending();
+    if (_autoStart) services.coordinator!.start();
   }
 
   Future<void> _stop() async {
@@ -111,167 +255,258 @@ class CloudController extends ChangeNotifier {
     await services.stopSync();
   }
 
-  Future<void> synchronize() => services.sync?.synchronize() ?? Future.value();
-
-  Future<void> connect() {
-    if (_closed || busy) return _operation ?? Future.value();
-    if (auth == null) {
-      message =
-          'Esta versión necesita configurar la conexión con Google Drive.';
-      _changed();
-      return Future.value();
-    }
-    busy = true;
-    message = null;
-    final epoch = ++_epoch;
-    _changed();
-    return _operation = _connect(epoch).whenComplete(() {
-      busy = false;
-      _operation = null;
-      _changed();
-    });
-  }
-
-  void _check(int epoch) {
-    if (_closed || epoch != _epoch) throw const AuthCancelled();
-  }
-
-  Future<void> _connect(int epoch) async {
-    AppServices? replacement;
+  Future<void> _restoreConnection() async {
+    _saved = null;
+    _needsCredentials = false;
     try {
-      // Cancel and finish old I/O before the auth adapter can change identity.
-      await _stop();
-      _check(epoch);
-      final selected = await auth!.signIn();
-      _check(epoch);
-      if (selected.id != account?.id) {
-        replacement = await AppServices.open(_accountRoot(selected));
-        _check(epoch);
-        if (account == null) await _adoptLocal(selected, replacement, epoch);
-        _check(epoch);
-        await _saveSelection(selected);
-        final previous = services;
-        services = replacement;
-        replacement = null;
-        account = selected;
-        await previous.close();
-      }
-      _check(epoch);
-      await _saveSelection(selected);
-      _check(epoch);
-      _attach();
-      if (!auth!.secureStorageAvailable) {
-        message =
-            'Conectado por esta sesión. Para recordar la cuenta necesitás habilitar el llavero del sistema.';
-      }
-    } on AuthCancelled {
-      message = 'Conexión cancelada. Tus apuntes siguen guardados acá.';
+      final config = await _readJson(_connectionFile);
+      if (config == null) return;
+      final saved = _saved = _SavedConnection.fromJson(config);
+      if (!saved.enabled || _closed) return;
+
+      _needsCredentials = true;
+      final key = _credentialKey(saved);
+      if (key == null) return;
+      final token = await _tokenStore.read(key);
+      if (token != null && !_closed) _attach(saved.destination, token);
     } catch (_) {
       message =
-          'No se pudo conectar con Drive. Tus apuntes siguen guardados acá.';
-    } finally {
-      await replacement?.close();
+          'No se pudo restaurar la conexión. Tus apuntes siguen guardados acá.';
     }
   }
 
-  Future<void> _saveSelection(
-    GoogleAccount value, {
-    bool connected = true,
-  }) async {
-    final temporary = File('${_selection.path}.tmp');
-    await temporary.writeAsString(
-      jsonEncode({...value.toJson(), 'connected': connected}),
-      flush: true,
-    );
-    await temporary.rename(_selection.path);
+  Future<void> _run(Future<void> Function() action, {required String failure}) {
+    if (_closed || busy) return _operation ?? Future.value();
+    message = null;
+    final operation = _operation = action()
+        .catchError((Object _) {
+          message = failure;
+        })
+        .whenComplete(() {
+          _operation = null;
+          _changed();
+        });
+    _changed();
+    return operation;
   }
 
-  Future<void> _adoptLocal(
-    GoogleAccount selected,
-    AppServices target,
-    int epoch,
-  ) async {
-    final marker = File(p.join(root, 'local-adoption.json'));
-    _check(epoch);
-    // If the local partition is still selected, no account has ever begun
-    // syncing this copy. Recopy its current state even after a completed marker.
-    await (target.repository as SqliteNotebookRepository).resetForAdoption();
-    await marker.writeAsString(
-      jsonEncode({'accountId': selected.id, 'completed': false}),
-      flush: true,
-    );
-    // Preserve the original local database as a backup. Only the first selected
-    // account adopts it; a different account always starts in its own partition.
-    await (target.repository as FolderRepository).mergeFolders(
-      await (services.repository as FolderRepository).listFolders(
-        includeDeleted: true,
-      ),
-    );
-    final assets = Directory(p.join(services.root, 'local', 'assets'));
-    if (await assets.exists()) {
-      await for (final file in assets.list()) {
-        _check(epoch);
-        final id = p.basename(file.path);
-        if (file is File && RegExp(r'^[a-f0-9]{64}$').hasMatch(id)) {
-          await target.assets.put(await services.assets.read(id));
+  Future<void> synchronize() {
+    if (busy || status.phase == SyncPhase.needsSignIn) return Future.value();
+    return services.sync?.synchronize() ?? Future.value();
+  }
+
+  Future<void> probe(String url, String token) => _run(
+    () async {
+      final epoch = ++_probeEpoch;
+      _pending = null;
+      final rawUrl = url.trim().replaceFirst(RegExp(r'/$'), '');
+      final baseUrl = Uri.tryParse(rawUrl);
+      final credential = token.trim();
+      if (baseUrl == null ||
+          baseUrl.host.isEmpty ||
+          (baseUrl.scheme != 'https' && !_allowInsecureLoopback) ||
+          baseUrl.hasQuery ||
+          baseUrl.hasFragment ||
+          baseUrl.authority.contains('@')) {
+        message = 'Ingresá una URL HTTPS válida para el servidor.';
+        return;
+      }
+      if (credential.isEmpty ||
+          RegExp(r'[\x00-\x20\x7f]').hasMatch(credential)) {
+        message = 'Ingresá una credencial válida para este dispositivo.';
+        return;
+      }
+
+      // Quiesce the previous destination before beginning a new handshake.
+      await _stop();
+      final previous = _saved;
+      if (previous != null && previous.enabled) {
+        final paused = _SavedConnection(
+          previous.destination,
+          enabled: false,
+          credentialId: previous.credentialId,
+        );
+        await _writeJson(_connectionFile, paused.toJson());
+        _saved = paused;
+      }
+      _needsCredentials = previous != null;
+      if (_closed || epoch != _probeEpoch) return;
+
+      final client = _probeClient = _clientFactory();
+      _changed();
+      try {
+        final id = await ServerRemoteStore.identify(
+          baseUrl: baseUrl,
+          token: credential,
+          client: client,
+          allowInsecureLoopback: _allowInsecureLoopback,
+        );
+        if (_closed || epoch != _probeEpoch) return;
+        final target = ServerDestination(baseUrl, id);
+        final current = previous?.destination;
+        final newDestination =
+            current?.id != target.id || current?.url != target.url;
+        final hasLocalLibrary =
+            newDestination && await _repository.hasSyncContent();
+        if (_closed || epoch != _probeEpoch) return;
+        _pending = ServerConnectionProbe._(
+          target,
+          newDestination,
+          hasLocalLibrary,
+          credential,
+        );
+      } on RemoteSignInRequired {
+        if (!_closed && epoch == _probeEpoch) {
+          message = 'El servidor rechazó la credencial de este dispositivo.';
+        }
+      } catch (_) {
+        if (!_closed && epoch == _probeEpoch) {
+          message =
+              'No se pudo verificar el servidor. Revisá la URL y la conexión.';
+        }
+      } finally {
+        if (identical(_probeClient, client)) {
+          _probeClient = null;
+          client.close();
         }
       }
-    }
-    final documents = (await services.repository.list())
-        .map((e) => e.notebook.id)
-        .toSet();
-    for (final id in documents) {
-      _check(epoch);
-      for (final revision in await services.repository.history(id)) {
-        await target.repository.acceptRemote(revision);
-      }
-    }
-    await (target.repository as SqliteNotebookRepository).queueAllForUpload();
-    await target.library.refresh();
-    _check(epoch);
-    await marker.writeAsString(
-      jsonEncode({'accountId': selected.id, 'completed': true}),
-      flush: true,
+    },
+    failure:
+        'No se pudo preparar la conexión. Tus apuntes siguen guardados acá.',
+  );
+
+  Future<void> confirmConnection({bool remember = true}) {
+    final pending = _pending;
+    if (pending == null) return Future.value();
+    return _run(
+      () async {
+        // The current database remains the source. Freeze its retained revisions
+        // before exposing the new destination to the synchronization coordinator.
+        if (pending.isNewDestination) await _repository.queueAllForUpload();
+
+        final oldKey = _credentialKey(_saved);
+        var saved = _SavedConnection(pending.destination);
+        if (remember) {
+          final remembered = _SavedConnection(
+            pending.destination,
+            credentialId: const Uuid().v4(),
+          );
+          final secureKey = _credentialKey(remembered)!;
+          try {
+            await _tokenStore.write(secureKey, pending._token);
+            saved = remembered;
+          } catch (_) {
+            await _forgetCredential(secureKey);
+            message =
+                'Conectado por esta sesión. El llavero del sistema no está disponible.';
+          }
+        }
+        try {
+          await _writeJson(_connectionFile, saved.toJson());
+        } catch (_) {
+          await _forgetCredential(_credentialKey(saved));
+          rethrow;
+        }
+        _saved = saved;
+        _pending = null;
+        if (!_closed) _attach(saved.destination, pending._token);
+        await _forgetCredential(oldKey);
+        if (!remember) message = 'Conectado por esta sesión.';
+      },
+      failure:
+          'No se pudo guardar la conexión. Tus apuntes siguen guardados acá.',
     );
   }
 
   Future<void> cancelConnection() async {
-    _epoch++;
-    await auth?.cancelSignIn();
-  }
-
-  Future<void> disconnect() {
-    if (busy || _closed) return _operation ?? Future.value();
-    busy = true;
-    _changed();
-    return _operation = _disconnect().whenComplete(() {
-      busy = false;
-      _operation = null;
+    _probeEpoch++;
+    final client = _probeClient;
+    _probeClient = null;
+    client?.close();
+    final cancelled = _pending != null || client != null;
+    _pending = null;
+    if (cancelled) {
+      message = 'Conexión cancelada. Tus apuntes siguen guardados acá.';
       _changed();
-    });
-  }
-
-  Future<void> _disconnect() async {
-    await _stop();
-    try {
-      if (account != null) await _saveSelection(account!, connected: false);
-      await auth?.signOut();
-      message = auth?.secureStorageAvailable == false
-          ? 'Drive quedó desconectado. No se pudo limpiar el llavero; no se reconectará automáticamente.'
-          : null;
-    } catch (_) {
-      message = 'Drive quedó detenido. No se pudo cerrar la sesión de Google.';
     }
   }
 
+  String? _credentialKey(_SavedConnection? saved) {
+    final id = saved?.credentialId;
+    if (id == null) return null;
+    // A config file copied to another catalog or edited to use a different
+    // endpoint cannot recover the credential for the previously trusted one.
+    final scope = jsonEncode([
+      p.normalize(p.absolute(activeCatalog.root)),
+      saved!.destination._scope,
+      id,
+    ]);
+    return 'nala-server-${sha256.convert(utf8.encode(scope))}';
+  }
+
+  Future<bool> _forgetCredential(String? key) async {
+    if (key == null) return true;
+    try {
+      await _tokenStore.delete(key);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> disconnect() => _run(
+    () async {
+      await _stop();
+      final saved = _saved;
+      if (saved != null) {
+        final offline = _SavedConnection(saved.destination, enabled: false);
+        await _writeJson(_connectionFile, offline.toJson());
+        _saved = offline;
+        if (!await _forgetCredential(_credentialKey(saved))) {
+          message =
+              'El servidor quedó desconectado. No se pudo borrar la credencial del llavero.';
+        }
+      }
+      _needsCredentials = false;
+      _pending = null;
+    },
+    failure:
+        'No se pudo guardar la desconexión. La sincronización está detenida en esta sesión.',
+  );
+
+  Future<void> selectCatalog(LocalCatalog catalog) {
+    if (catalog == activeCatalog || !catalogs.contains(catalog)) {
+      return Future.value();
+    }
+    return _run(() async {
+      _pending = null;
+      await _stop();
+      final replacement = await AppServices.open(catalog.root);
+      try {
+        await _writeJson(File(p.join(root, 'active-library.json')), {
+          'catalog': catalog.id,
+        });
+      } catch (_) {
+        await replacement.close();
+        rethrow;
+      }
+      final previous = services;
+      services = replacement;
+      _activeCatalog = catalog;
+      await _restoreConnection();
+      _changed();
+      await previous.close();
+    }, failure: 'No se pudo abrir la biblioteca seleccionada.');
+  }
+
   Future<void> close() => _closing ??= _close();
+
   Future<void> _close() async {
     _closed = true;
     await cancelConnection();
     await _operation;
     await _stop();
     await services.close();
-    auth?.dispose();
     super.dispose();
   }
 }

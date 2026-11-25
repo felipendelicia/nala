@@ -26,7 +26,7 @@ Biblioteca: navegación lateral negra, marca con la perrita, título de carpeta 
 
 Pruebas de cámara/bloqueos, scroll y escritura en la segunda página, tamaños mixtos, separación sin tinta, miles de páginas con widgets visibles limitados, parámetros independientes, compartir con PDF real y canales nativos simulados, fallos de compartir y movimiento persistente entre carpetas. Inspección de capturas Linux/tablet simulada, suite completa y pruebas nativas. Builds Android/Linux secuenciales con tool/flutter-safe.
 
-La sensación física y latencia del S Pen requieren la Tab S10. No se afirma equivalencia física con Notewise. Drive no cambia su configuración externa.
+La sensación física y latencia del S Pen requieren la Tab S10. No se afirma equivalencia física con Notewise.
 
 Referencias de implementación: [FileProvider](https://developer.android.com/reference/androidx/core/content/FileProvider), [Manrope/OFL](https://github.com/google/fonts/tree/main/ofl/manrope). Linux no tiene un panel general de compartir equivalente al de Android; se presentan destinos disponibles con nombres explícitos.
 

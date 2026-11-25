@@ -24,6 +24,6 @@ Cada comentario pertenece a una página y tiene posición, texto y una grabació
 
 Resolver la prueba de flujo nativo pendiente: importar, dibujar, insertar hoja, exportar y reabrir. Los originales se conservan, las contraseñas quedan en memoria y la exportación prepara fondos a 200 dpi con tinta vectorial. Las compilaciones y pruebas se ejecutan de a una mediante tool/flutter-safe. Generar APK release de prueba y Linux release, incrementar versión, publicar código y binarios en el repositorio autorizado. Una revisión independiente final comprueba pérdida de datos, entradas canceladas, grabación y cambios de vista.
 
-## Última etapa: Drive
+## Sincronización
 
-Después de verificar los flujos locales se ejecutan las tareas de motor de sincronización y OAuth del plan inicial. Recursos de PDF y audio se incluyen por hash; las carpetas también deben viajar con sus documentos. La conexión real requiere credenciales OAuth del proyecto de Google Cloud. No se inventan credenciales ni se incluyen tokens en GitHub. Si faltan, se prepara la conexión configurable y se informa el requisito externo con el resto de la app funcionando.
+El [diseño del servidor privado](2026-11-24-servidor-nala-design.md) describe la integración vigente.
