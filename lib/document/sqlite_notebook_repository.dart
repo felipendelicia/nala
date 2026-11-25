@@ -10,7 +10,11 @@ import 'revision.dart';
 import 'folders.dart';
 
 class SqliteNotebookRepository
-    implements NotebookRepository, FolderRepository, RevisionLookupRepository {
+    implements
+        NotebookRepository,
+        FolderRepository,
+        RevisionLookupRepository,
+        NotebookCatalogRepository {
   SqliteNotebookRepository._(
     this._port,
     this._receive,
@@ -113,6 +117,18 @@ class SqliteNotebookRepository
         .toList()
       ..sort((a, b) => b.notebook.updatedAt.compareTo(a.notebook.updatedAt));
   }
+
+  @override
+  Future<List<CatalogEntry>> listCatalog() async =>
+      (await _call('listCatalog')) as List<CatalogEntry>;
+
+  @override
+  Future<NotebookPage?> loadPreview(
+    String documentId, {
+    required String headId,
+  }) async =>
+      (await _call('loadPreview', {'documentId': documentId, 'headId': headId}))
+          as NotebookPage?;
 
   @override
   Future<Notebook?> load(String documentId, {String? headId}) async {
@@ -256,6 +272,9 @@ const _notDeleted =
   SELECT 1 FROM revisions d WHERE d.document_id=r.document_id
     AND d.id $_deletionIdPattern
 )''';
+const _visibleHead = '''$_notDeleted AND NOT EXISTS (
+  SELECT 1 FROM revisions c WHERE c.parent_id=r.id AND c.document_id=r.document_id
+)''';
 
 void _databaseWorker((SendPort, String) config) {
   final (reply, path) = config;
@@ -289,6 +308,7 @@ void _databaseWorker((SendPort, String) config) {
     return;
   }
   final requests = ReceivePort();
+  final catalog = _CatalogSummary();
   reply.send(requests.sendPort);
   requests.listen((message) {
     final request = message as Map;
@@ -596,16 +616,34 @@ void _databaseWorker((SendPort, String) config) {
             );
           });
         case 'list':
-          final (version, ids, payloads) = _readCatalog(
+          final (version, ids, rows) = _readCatalogRows(
             db,
             request['dataVersion'] as int?,
             (request['cachedIds'] as List).cast<String>(),
+            'r.payload',
           );
           result = (
             version,
             ids,
-            payloads.map(NotebookCodec.decodeRevision).toList(),
+            [
+              for (final row in rows)
+                NotebookCodec.decodeRevision(row['payload'] as String),
+            ],
           );
+        case 'listCatalog':
+          result = catalog.read(db);
+        case 'loadPreview':
+          final rows = db.select(
+            r"SELECT json_extract(r.payload, '$.notebook.pages[0]') AS page "
+            'FROM revisions r WHERE r.id=? AND r.document_id=? AND $_visibleHead',
+            [request['headId'], request['documentId']],
+          );
+          result = rows.isEmpty
+              ? null
+              : NotebookPage.fromJson(
+                  jsonDecode(rows.single['page'] as String)
+                      as Map<String, dynamic>,
+                );
         case 'load':
           final visibility = request['visibleOnly'] == true
               ? ' AND $_notDeleted'
@@ -742,26 +780,24 @@ void _databaseWorker((SendPort, String) config) {
   });
 }
 
-(int, List<String>, List<String>) _readCatalog(
+(int, List<String>, List<Row>) _readCatalogRows(
   Database db,
   int? cachedVersion,
-  List<String> cachedIds,
+  Iterable<String> cachedIds,
+  String projection,
 ) => _transaction(db, write: false, () {
   // Revisions are immutable. Invalidate the cache if another connection
   // changed the database, and read IDs and payloads within the same snapshot.
   final version =
       db.select('PRAGMA data_version').single['data_version'] as int;
   final known = version == cachedVersion ? cachedIds.toSet() : const <String>{};
-  final columns = known.isEmpty ? 'r.id, r.payload' : 'r.id';
-  final rows = db.select('''
-    SELECT $columns FROM revisions r WHERE $_notDeleted
-      AND NOT EXISTS (
-        SELECT 1 FROM revisions c WHERE c.parent_id=r.id AND c.document_id=r.document_id
-      )
-  ''');
+  final columns = known.isEmpty ? 'r.id, $projection' : 'r.id';
+  final rows = db.select(
+    'SELECT $columns FROM revisions r WHERE $_visibleHead',
+  );
   final ids = [for (final row in rows) row['id'] as String];
   if (known.isEmpty) {
-    return (version, ids, [for (final row in rows) row['payload'] as String]);
+    return (version, ids, rows.toList());
   }
   return (
     version,
@@ -769,13 +805,92 @@ void _databaseWorker((SendPort, String) config) {
     [
       for (final id in ids)
         if (!known.contains(id))
-          db.select('SELECT payload FROM revisions WHERE id=?', [
-                id,
-              ]).single['payload']
-              as String,
+          db.select('SELECT r.id, $projection FROM revisions r WHERE r.id=?', [
+            id,
+          ]).single,
     ],
   );
 });
+
+const _catalogProjection = r'''r.document_id,
+  json_extract(r.payload, '$.deviceId') AS device_id,
+  json_extract(r.payload, '$.notebook.title') AS title,
+  json_extract(r.payload, '$.notebook.subject') AS subject,
+  json_extract(r.payload, '$.notebook.updatedAt') AS updated_at,
+  json_extract(r.payload, '$.notebook.folderId') AS folder_id,
+  json_extract(r.payload, '$.notebook.coverAssetId') AS cover_asset_id,
+  json_array_length(r.payload, '$.notebook.pages') AS page_count,
+  json_extract(r.payload, '$.notebook.pages[0].id') AS first_page_id,
+  json_extract(r.payload, '$.notebook.pages[0].width') AS first_page_width,
+  json_extract(r.payload, '$.notebook.pages[0].height') AS first_page_height,
+  json_extract(r.payload, '$.notebook.pages[0].background.kind') AS first_page_background
+''';
+
+class _CatalogSummary {
+  int? _version;
+  Map<String, Row> _rows = const {};
+  List<CatalogEntry> _entries = const [];
+
+  List<CatalogEntry> read(Database db) {
+    final (version, ids, fresh) = _readCatalogRows(
+      db,
+      _version,
+      _rows.keys,
+      _catalogProjection,
+    );
+    if (version == _version && fresh.isEmpty && _sameHeads(ids)) {
+      return _entries;
+    }
+    final available = {
+      if (version == _version) ..._rows,
+      for (final row in fresh) row['id'] as String: row,
+    };
+    final rows = {for (final id in ids) id: available[id]!};
+    final entries = _catalogEntries(rows.values);
+    _version = version;
+    _rows = rows;
+    return _entries = entries;
+  }
+
+  bool _sameHeads(List<String> ids) {
+    if (ids.length != _rows.length) return false;
+    var index = 0;
+    for (final id in _rows.keys) {
+      if (id != ids[index++]) return false;
+    }
+    return true;
+  }
+}
+
+List<CatalogEntry> _catalogEntries(Iterable<Row> rows) {
+  final counts = <String, int>{};
+  for (final row in rows) {
+    counts.update(
+      row['document_id'] as String,
+      (n) => n + 1,
+      ifAbsent: () => 1,
+    );
+  }
+  return [
+    for (final row in rows)
+      CatalogEntry(
+        documentId: row['document_id'] as String,
+        title: row['title'] as String,
+        subject: row['subject'] as String,
+        updatedAt: DateTime.parse(row['updated_at'] as String).toUtc(),
+        folderId: row['folder_id'] as String?,
+        headId: row['id'] as String,
+        deviceId: row['device_id'] as String,
+        isConflict: counts[row['document_id']]! > 1,
+        pageCount: row['page_count'] as int,
+        coverAssetId: row['cover_asset_id'] as String?,
+        firstPageId: row['first_page_id'] as String,
+        firstPageWidth: (row['first_page_width'] as num).toDouble(),
+        firstPageHeight: (row['first_page_height'] as num).toDouble(),
+        isPdf: row['first_page_background'] == 'pdf',
+      ),
+  ]..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+}
 
 T _transaction<T>(Database db, T Function() action, {bool write = true}) {
   db.execute(write ? 'BEGIN IMMEDIATE' : 'BEGIN');

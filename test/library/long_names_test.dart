@@ -53,7 +53,7 @@ void main() {
       await tester.tap(find.text('Cancelar'));
       await tester.pumpAndSettle();
       expect(
-        services.library.entries.single.notebook.folderId,
+        services.library.entries.single.folderId,
         services.library.currentFolderId,
       );
       await tester.pumpWidget(const SizedBox());

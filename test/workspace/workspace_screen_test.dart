@@ -5,11 +5,41 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:apuntes/bootstrap.dart';
 import 'package:apuntes/document/notebook.dart';
+import 'package:apuntes/document/notebook_repository.dart';
+import 'package:apuntes/document/revision.dart';
 import 'package:apuntes/editor/editor_screen.dart';
 import 'package:apuntes/library/library_controller.dart';
 import 'package:apuntes/ui/app_theme.dart';
 import 'package:apuntes/workspace/document_workspace.dart';
 import '../support/memory_repository.dart';
+
+class _CatalogRepository extends MemoryRepository
+    implements NotebookCatalogRepository {
+  int fullCatalogReads = 0;
+  final loadedHeads = <String?>[];
+
+  @override
+  Future<List<DocumentEntry>> list() {
+    fullCatalogReads++;
+    return super.list();
+  }
+
+  @override
+  Future<List<CatalogEntry>> listCatalog() async =>
+      (await super.list()).map(CatalogEntry.fromDocument).toList();
+
+  @override
+  Future<Notebook?> load(String documentId, {String? headId}) {
+    loadedHeads.add(headId);
+    return super.load(documentId, headId: headId);
+  }
+
+  @override
+  Future<NotebookPage?> loadPreview(
+    String documentId, {
+    required String headId,
+  }) => throw UnimplementedError();
+}
 
 void main() {
   for (final size in [const Size(1500, 1000), const Size(800, 1200)]) {
@@ -22,7 +52,7 @@ void main() {
         addTearDown(() => directory.deleteSync(recursive: true));
         await tester.binding.setSurfaceSize(size);
         addTearDown(() => tester.binding.setSurfaceSize(null));
-        final repository = MemoryRepository();
+        final repository = _CatalogRepository();
         final library = LibraryController(
           repository: repository,
           deviceId: 'pc',
@@ -32,7 +62,7 @@ void main() {
           subject: '',
           pattern: PaperPattern.blank,
         );
-        await library.createNotebook(
+        final second = await library.createNotebook(
           title: 'Segundo',
           subject: '',
           pattern: PaperPattern.blank,
@@ -64,8 +94,11 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text('Abrir otro apunte'));
         await tester.pumpAndSettle();
+        expect(repository.fullCatalogReads, 0);
+        expect(repository.loadedHeads, isEmpty);
         await tester.tap(find.text('Segundo').last);
         await tester.pumpAndSettle();
+        expect(repository.loadedHeads, [second.headId]);
         expect(find.byType(EditorScreen), findsOneWidget);
         expect(find.byTooltip('Cerrar espacio de trabajo'), findsOneWidget);
         expect(find.byType(InputChip), findsNWidgets(2));

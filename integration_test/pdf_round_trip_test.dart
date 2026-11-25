@@ -94,7 +94,12 @@ void main() {
           .map((text) => text.data)
           .join(' | '),
     );
-    final firstPageId = services.library.entries.single.notebook.pages.first.id;
+    final importedPages = tester
+        .widget<EditorScreen>(find.byType(EditorScreen))
+        .controller
+        .notebook
+        .pages;
+    final firstPageId = importedPages.first.id;
     var canvas = find.byKey(ValueKey('canvas-$firstPageId'));
     final center = tester.getCenter(canvas);
     final gesture = await tester.startGesture(
@@ -139,11 +144,7 @@ void main() {
     await tester.tap(find.byTooltip('Hoja siguiente'));
     await tester.pump();
     expect(find.text('3/3'), findsOneWidget);
-    canvas = find.byKey(
-      ValueKey(
-        'canvas-${services.library.entries.single.notebook.pages.last.id}',
-      ),
-    );
+    canvas = find.byKey(ValueKey('canvas-${importedPages.last.id}'));
     final exportOrigin = tester.getTopLeft(canvas);
     await pumpUntil(tester, () => files.saved != null, 'el PDF exportado');
     debugPrint('pdf-flow: export received');

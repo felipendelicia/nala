@@ -189,8 +189,7 @@ void main() {
         tester,
         () =>
             services.library.entries
-                .firstWhere((e) => e.notebook.id == 'analysis')
-                .notebook
+                .firstWhere((e) => e.documentId == 'analysis')
                 .folderId ==
             folder.id,
       );
@@ -208,9 +207,13 @@ void main() {
       await tester.pumpWidget(const SizedBox());
       await services.close();
       final reopened = await AppServices.open(root.path);
-      final stored = reopened.library.entries
-          .firstWhere((e) => e.notebook.id == 'analysis')
-          .notebook;
+      final summary = reopened.library.entries.firstWhere(
+        (e) => e.documentId == 'analysis',
+      );
+      final stored = (await reopened.repository.load(
+        summary.documentId,
+        headId: summary.headId,
+      ))!;
       expect(stored.folderId, folder.id);
       expect(stored.pages[0].strokes, isEmpty);
       expect(stored.pages[1].strokes, hasLength(1));

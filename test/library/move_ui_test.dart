@@ -35,14 +35,14 @@ void main() {
       await tester.pumpAndSettle();
       final destination = services.library.folders.single.id;
       final deadline = DateTime.now().add(const Duration(seconds: 10));
-      while (services.library.entries.single.notebook.folderId != destination &&
+      while (services.library.entries.single.folderId != destination &&
           DateTime.now().isBefore(deadline)) {
         await tester.pump();
         await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 20)),
         );
       }
-      expect(services.library.entries.single.notebook.folderId, destination);
+      expect(services.library.entries.single.folderId, destination);
       await tester.pumpAndSettle();
       expect(find.text('Clase importante'), findsNothing);
       await tester.pumpWidget(const SizedBox());
@@ -50,11 +50,8 @@ void main() {
         final folderId = services.library.folders.single.id;
         await services.close();
         final reopened = await AppServices.open(root.path);
-        expect(reopened.library.entries.single.notebook.folderId, folderId);
-        expect(
-          reopened.library.entries.single.notebook.title,
-          'Clase importante',
-        );
+        expect(reopened.library.entries.single.folderId, folderId);
+        expect(reopened.library.entries.single.title, 'Clase importante');
         await reopened.close();
         await root.delete(recursive: true);
       });

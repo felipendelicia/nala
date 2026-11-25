@@ -70,7 +70,7 @@ void main() {
         () => find.byType(EditorScreen).evaluate().isNotEmpty,
       );
       expect(
-        services.library.entries.single.notebook.folderId,
+        services.library.entries.single.folderId,
         services.library.currentFolderId,
       );
       await tester.tap(find.byTooltip('Comentarios'));

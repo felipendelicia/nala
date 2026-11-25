@@ -74,11 +74,26 @@ class LibraryController extends ChangeNotifier {
     await refresh();
   }
 
-  Future<void> moveNotebook(DocumentEntry entry, String? folderId) async {
+  Future<void> moveNotebook(CatalogEntry entry, String? folderId) async {
     if (folderId != null && !folders.any((f) => f.id == folderId)) {
       throw StateError('La carpeta de destino no existe');
     }
-    await updateNotebook(entry, entry.notebook.copyWith(folderId: folderId));
+    final document = await _loadEditableEntry(entry);
+    await updateNotebook(
+      document,
+      document.notebook.copyWith(folderId: folderId),
+    );
+  }
+
+  Future<void> renameNotebook(CatalogEntry entry, String title) async {
+    final document = await _loadEditableEntry(entry);
+    await updateNotebook(document, document.notebook.copyWith(title: title));
+  }
+
+  Future<DocumentEntry> _loadEditableEntry(CatalogEntry entry) async {
+    final document = await loadEntry(entry);
+    if (document == null) throw StateError('El apunte ya no está disponible.');
+    return document;
   }
 
   Future<void> updateNotebook(DocumentEntry entry, Notebook book) async {
@@ -94,9 +109,8 @@ class LibraryController extends ChangeNotifier {
     await refresh();
   }
 
-  Future<void> deleteNotebook(DocumentEntry entry) async {
+  Future<void> deleteNotebook(CatalogEntry entry) async {
     final now = DateTime.now().toUtc();
-    final book = entry.notebook;
     await repository.commit(
       Revision(
         id: Revision.deletionId(const Uuid().v4()),
@@ -106,9 +120,9 @@ class LibraryController extends ChangeNotifier {
         // The sync protocol requires a notebook with a page. The retained
         // parent holds the content, so the deletion depends on no assets.
         notebook: Notebook.blank(
-          id: book.id,
-          pageId: book.pages.first.id,
-          title: book.title,
+          id: entry.documentId,
+          pageId: entry.firstPageId,
+          title: entry.title,
           pattern: PaperPattern.blank,
           now: now,
         ),
@@ -119,9 +133,32 @@ class LibraryController extends ChangeNotifier {
 
   final NotebookRepository repository;
   final String deviceId;
-  List<DocumentEntry> entries = [];
+  List<CatalogEntry> entries = [];
+
+  Future<DocumentEntry?> loadEntry(CatalogEntry entry) async {
+    final notebook = await repository.load(
+      entry.documentId,
+      headId: entry.headId,
+    );
+    return notebook == null ? null : entry.withNotebook(notebook);
+  }
+
+  Future<NotebookPage?> loadPreview(CatalogEntry entry) async {
+    if (repository case final NotebookCatalogRepository catalog) {
+      return catalog.loadPreview(entry.documentId, headId: entry.headId);
+    }
+    return (await loadEntry(entry))?.notebook.pages.first;
+  }
+
   Future<void> refresh() async {
-    entries = await repository.list();
+    if (repository case final NotebookCatalogRepository catalog) {
+      entries = await catalog.listCatalog();
+    } else {
+      entries = [
+        for (final document in await repository.list())
+          CatalogEntry.fromDocument(document),
+      ];
+    }
     folders = await folderRepository?.listFolders() ?? [];
     if (currentFolderId != null &&
         !folders.any((f) => f.id == currentFolderId)) {
@@ -157,20 +194,25 @@ class LibraryController extends ChangeNotifier {
     );
     await repository.commit(revision);
     await refresh();
-    return entries.firstWhere((e) => e.headId == revision.id);
+    return entries
+        .firstWhere((e) => e.headId == revision.id)
+        .withNotebook(book);
   }
 
-  List<DocumentEntry> filtered({String query = '', String subject = ''}) =>
-      entries
-          .where(
-            (e) =>
-                (e.notebook.folderId == currentFolderId ||
-                    (currentFolderId == null &&
-                        !folders.any((f) => f.id == e.notebook.folderId))) &&
-                (subject.isEmpty || e.notebook.subject == subject) &&
-                _normalize(e.notebook.title).contains(_normalize(query)),
-          )
-          .toList();
+  List<CatalogEntry> filtered({String query = '', String subject = ''}) {
+    final normalized = _normalize(query);
+    final folderIds = currentFolderId == null
+        ? {for (final folder in folders) folder.id}
+        : const <String>{};
+    return entries.where((entry) {
+      final folderId = entry.folderId;
+      return (folderId == currentFolderId ||
+              (currentFolderId == null && !folderIds.contains(folderId))) &&
+          (subject.isEmpty || entry.subject == subject) &&
+          (normalized.isEmpty || _normalize(entry.title).contains(normalized));
+    }).toList();
+  }
+
   static String _normalize(String text) {
     const accents = 'áéíóúüñ';
     const plain = 'aeiouun';

@@ -185,18 +185,41 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   bool closing = false, allowPop = false;
   String? closingId;
   Future<void> _choose({bool split = false}) async {
-    await widget.services.library.refresh();
+    final library = widget.services.library;
+    await library.refresh();
     if (!mounted) return;
-    final entry = await showDialog<DocumentEntry>(
+    final selection = await showDialog<CatalogEntry>(
       context: context,
       builder: (context) => _DocumentPicker(
-        entries: widget.services.library.entries,
+        entries: library.entries,
         excludedId: split ? workspace.visibleIds.firstOrNull : null,
       ),
     );
-    if (entry == null || !mounted) return;
+    if (selection == null || !mounted || closing) return;
     final anchor = workspace.visibleIds.firstOrNull;
-    final tab = workspace.open(entry);
+    final openTab = workspace.tabs
+        .where((tab) => tab.id == selection.documentId)
+        .firstOrNull;
+    final WorkspaceTab tab;
+    if (openTab != null) {
+      tab = openTab;
+      workspace.select(tab.id);
+    } else {
+      DocumentEntry? entry;
+      try {
+        entry = await library.loadEntry(selection);
+      } catch (_) {
+        // A revision can become unavailable while its catalog row is visible.
+      }
+      if (!mounted || closing) return;
+      if (entry == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo abrir el apunte.')),
+        );
+        return;
+      }
+      tab = workspace.open(entry);
+    }
     if (split && anchor != null) {
       workspace.select(anchor);
       workspace.splitWith(tab.id);
@@ -483,7 +506,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
 
 class _DocumentPicker extends StatefulWidget {
   const _DocumentPicker({required this.entries, this.excludedId});
-  final List<DocumentEntry> entries;
+  final List<CatalogEntry> entries;
   final String? excludedId;
   @override
   State<_DocumentPicker> createState() => _DocumentPickerState();
@@ -493,13 +516,12 @@ class _DocumentPickerState extends State<_DocumentPicker> {
   String query = '';
   @override
   Widget build(BuildContext context) {
+    final filter = query.toLowerCase();
     final entries = widget.entries
         .where(
           (e) =>
-              e.notebook.id != widget.excludedId &&
-              '${e.notebook.title} ${e.notebook.subject}'
-                  .toLowerCase()
-                  .contains(query.toLowerCase()),
+              e.documentId != widget.excludedId &&
+              '${e.title} ${e.subject}'.toLowerCase().contains(filter),
         )
         .toList();
     return AlertDialog(
@@ -521,16 +543,17 @@ class _DocumentPickerState extends State<_DocumentPicker> {
             Expanded(
               child: entries.isEmpty
                   ? const Center(child: Text('No hay otros apuntes.'))
-                  : ListView(
-                      children: [
-                        for (final entry in entries)
-                          ListTile(
-                            title: Text(entry.notebook.title),
-                            subtitle: Text(entry.notebook.subject),
-                            leading: const Icon(Icons.menu_book_outlined),
-                            onTap: () => Navigator.pop(context, entry),
-                          ),
-                      ],
+                  : ListView.builder(
+                      itemCount: entries.length,
+                      itemBuilder: (context, index) {
+                        final entry = entries[index];
+                        return ListTile(
+                          title: Text(entry.title),
+                          subtitle: Text(entry.subject),
+                          leading: const Icon(Icons.menu_book_outlined),
+                          onTap: () => Navigator.pop(context, entry),
+                        );
+                      },
                     ),
             ),
           ],

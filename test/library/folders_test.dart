@@ -35,8 +35,12 @@ void main() {
       throwsStateError,
     );
     await expectLater(repo.deleteFolder(unit.id), throwsStateError);
-    await expectLater(library.moveNotebook(note, 'missing'), throwsStateError);
-    await library.moveNotebook(note, subject.id);
+    final summary = library.entries.single;
+    await expectLater(
+      library.moveNotebook(summary, 'missing'),
+      throwsStateError,
+    );
+    await library.moveNotebook(summary, subject.id);
     await library.renameFolder(unit, 'Práctica');
     await library.moveFolder(unit, null);
     await repo.close();
@@ -45,12 +49,13 @@ void main() {
     library = LibraryController(repository: repo, deviceId: 'pc');
     await library.refresh();
     library.openFolder(subject.id);
-    expect(library.filtered().single.notebook.title, 'Clase 1');
+    final moved = library.filtered().single;
+    expect(moved.title, 'Clase 1');
     expect(
-      library.filtered().single.notebook.pages.single.background.pattern,
+      (await library.loadPreview(moved))?.background.pattern,
       PaperPattern.grid,
     );
-    expect(library.filtered().single.notebook.folderId, subject.id);
+    expect(moved.folderId, subject.id);
     expect(
       library.folders.singleWhere((f) => f.id == unit.id).name,
       'Práctica',

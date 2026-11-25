@@ -16,3 +16,11 @@ abstract interface class NotebookRepository {
 abstract interface class RevisionLookupRepository {
   Future<Revision?> lookupRevision(String documentId, String revisionId);
 }
+
+abstract interface class NotebookCatalogRepository {
+  Future<List<CatalogEntry>> listCatalog();
+  Future<NotebookPage?> loadPreview(
+    String documentId, {
+    required String headId,
+  });
+}

@@ -38,11 +38,7 @@ void main() {
       await editor.flush();
       await library.refresh();
       expect(
-        library
-            .filtered(query: 'ALGEBRA', subject: 'Matemática')
-            .single
-            .notebook
-            .title,
+        library.filtered(query: 'ALGEBRA', subject: 'Matemática').single.title,
         'Álgebra II',
       );
       expect(library.filtered(subject: 'Física'), isEmpty);

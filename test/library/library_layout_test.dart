@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -9,7 +10,11 @@ import 'package:apuntes/bootstrap.dart';
 import 'package:apuntes/document/asset_store.dart';
 import 'package:apuntes/document/folders.dart';
 import 'package:apuntes/document/notebook.dart';
+import 'package:apuntes/document/notebook_repository.dart';
+import 'package:apuntes/document/revision.dart';
+import 'package:apuntes/editor/paper_canvas.dart';
 import 'package:apuntes/library/library_controller.dart';
+import 'package:apuntes/workspace/document_workspace.dart';
 import '../support/memory_repository.dart';
 
 class _CountingCovers extends MemoryAssets {
@@ -25,7 +30,138 @@ class _CountingCovers extends MemoryAssets {
   }
 }
 
+class _CountingCatalog extends MemoryRepository
+    implements NotebookCatalogRepository {
+  int fullLists = 0;
+  final opened = <(String, String?)>[];
+  final previews = <String>[];
+  final delayedPreviews = <String, Completer<NotebookPage?>>{};
+
+  @override
+  Future<List<DocumentEntry>> list() {
+    fullLists++;
+    return super.list();
+  }
+
+  @override
+  Future<List<CatalogEntry>> listCatalog() async => [
+    for (final entry in await super.list()) CatalogEntry.fromDocument(entry),
+  ];
+
+  @override
+  Future<Notebook?> load(String documentId, {String? headId}) {
+    opened.add((documentId, headId));
+    return super.load(documentId, headId: headId);
+  }
+
+  @override
+  Future<NotebookPage?> loadPreview(
+    String documentId, {
+    required String headId,
+  }) async {
+    previews.add(headId);
+    final delayed = delayedPreviews[headId];
+    if (delayed != null) return delayed.future;
+    return (await super.load(documentId, headId: headId))?.pages.first;
+  }
+}
+
+Revision _catalogRevision(int index, {String? parent, bool cover = false}) =>
+    Revision(
+      id: 'head-$index',
+      deviceId: 'tab',
+      parentId: parent,
+      createdAt: DateTime.utc(2026),
+      notebook: Notebook.blank(
+        id: 'apunte-${parent == null ? index : 0}',
+        pageId: 'page-$index',
+        title: 'Apunte $index',
+        subject: '',
+        pattern: PaperPattern.grid,
+        now: DateTime.utc(2026),
+      ).copyWith(coverAssetId: cover ? 'c' * 64 : null),
+    );
+
 void main() {
+  testWidgets('el catálogo solo carga las vistas previas visibles', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(820, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final repository = _CountingCatalog();
+    final library = LibraryController(repository: repository, deviceId: 'tab');
+    final services = AppServices(
+      root: '/unused',
+      deviceId: 'tab',
+      repository: repository,
+      assets: MemoryAssets(),
+      library: library,
+    );
+    addTearDown(services.close);
+    for (var i = 0; i < 30; i++) {
+      await repository.acceptRemote(_catalogRevision(i, cover: i == 1));
+    }
+    await library.refresh();
+    expect(repository.previews, isEmpty);
+    await tester.pumpWidget(
+      MaterialApp(home: LibraryScreen(services: services)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repository.fullLists, 0);
+    expect(repository.opened, isEmpty);
+    expect(repository.previews, contains('head-0'));
+    expect(repository.previews, isNot(contains('head-1')));
+    expect(repository.previews, isNot(contains('head-29')));
+
+    await tester.tap(find.text('Apunte 0'));
+    await tester.pumpAndSettle();
+    expect(find.byType(WorkspaceScreen), findsOneWidget);
+    expect(repository.opened, [('apunte-0', 'head-0')]);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('una vista previa tardía no reemplaza la revisión nueva', (
+    tester,
+  ) async {
+    final repository = _CountingCatalog();
+    final library = LibraryController(repository: repository, deviceId: 'tab');
+    final services = AppServices(
+      root: '/unused',
+      deviceId: 'tab',
+      repository: repository,
+      assets: MemoryAssets(),
+      library: library,
+    );
+    addTearDown(services.close);
+    final original = _catalogRevision(0);
+    final pending = Completer<NotebookPage?>();
+    repository.delayedPreviews[original.id] = pending;
+    await repository.acceptRemote(original);
+    await library.refresh();
+    await tester.pumpWidget(
+      MaterialApp(home: LibraryScreen(services: services)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(PaperCanvas), findsNothing);
+
+    await repository.acceptRemote(_catalogRevision(1, parent: original.id));
+    await library.refresh();
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<PaperCanvas>(find.byType(PaperCanvas)).page.id,
+      'page-1',
+    );
+
+    pending.complete(original.notebook.pages.first);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<PaperCanvas>(find.byType(PaperCanvas)).page.id,
+      'page-1',
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('una portada visible no se vuelve a leer al filtrar', (
     tester,
   ) async {

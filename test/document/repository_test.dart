@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
+import 'package:apuntes/document/notebook.dart';
 import 'package:apuntes/document/notebook_codec.dart';
 import 'package:apuntes/document/sqlite_notebook_repository.dart';
 import 'package:apuntes/document/revision.dart';
@@ -107,6 +108,145 @@ void main() {
     }
 
     expect((await repo.list()).single.notebook.title, 'Biblioteca reemplazada');
+  });
+  test('proyecta los metadatos de la versión y la primera página', () async {
+    final cover = 'a' * 64;
+    final background = 'b' * 64;
+    final date = DateTime.utc(2026, 11, 1, 2, 3, 4, 5, 6);
+    final page = fixtureNotebook().pages.single;
+    final book = fixtureNotebook().copyWith(
+      title: 'Funciones y límites',
+      subject: 'Análisis',
+      updatedAt: date,
+      folderId: 'materias',
+      coverAssetId: cover,
+      pages: [
+        page.copyWith(
+          width: 400,
+          height: 500.25,
+          background: PageBackground.pdf(background, 2),
+        ),
+        NotebookPage(
+          id: 'page-2',
+          width: 1200,
+          height: 900,
+          background: const PageBackground.paper(PaperPattern.dots),
+        ),
+      ],
+    );
+    await repo.acceptRemote(
+      Revision(
+        id: 'pdf',
+        deviceId: 'pc',
+        parentId: null,
+        createdAt: date,
+        notebook: book,
+      ),
+    );
+
+    final entry = (await repo.listCatalog()).single;
+    expect(entry.documentId, 'doc-1');
+    expect(entry.title, 'Funciones y límites');
+    expect(entry.subject, 'Análisis');
+    expect(entry.updatedAt, date);
+    expect(entry.folderId, 'materias');
+    expect(entry.headId, 'pdf');
+    expect(entry.deviceId, 'pc');
+    expect(entry.isConflict, isFalse);
+    expect(entry.pageCount, 2);
+    expect(entry.coverAssetId, cover);
+    expect(entry.firstPageId, 'page-1');
+    expect(entry.firstPageWidth, 400.0);
+    expect(entry.firstPageHeight, 500.25);
+    expect(entry.isPdf, isTrue);
+
+    final preview = (await repo.loadPreview('doc-1', headId: 'pdf'))!;
+    expect(preview.id, 'page-1');
+    expect(preview.background.assetId, background);
+    expect(preview.background.pageNumber, 2);
+    expect(preview.strokes.single.points.last.x, 30);
+
+    final full = (await repo.list()).single;
+    expect(full.notebook.pages, hasLength(2));
+    final converted = CatalogEntry.fromDocument(full);
+    expect(converted.firstPageHeight, 500.25);
+    expect(converted.isPdf, isTrue);
+    final materialized = converted.withNotebook(book);
+    expect(materialized.notebook, same(book));
+    expect(materialized.headId, 'pdf');
+    expect(materialized.deviceId, 'pc');
+    expect(materialized.isConflict, isFalse);
+  });
+  test(
+    'catálogo y vista previa respetan cabeceras, conflictos y borrado',
+    () async {
+      await repo.acceptRemote(revision('base', null));
+      await repo.commit(revision('a', 'base', title: 'Tablet'));
+      expect((await repo.listCatalog()).single.isConflict, isFalse);
+      await repo.acceptRemote(revision('b', 'base', title: 'PC'));
+      await repo.acceptRemote(
+        Revision(
+          id: 'c',
+          deviceId: 'pc',
+          parentId: null,
+          createdAt: DateTime.utc(2026),
+          notebook: fixtureNotebook(
+            id: 'second',
+          ).copyWith(updatedAt: DateTime.utc(2026, 11)),
+        ),
+      );
+
+      final entries = await repo.listCatalog();
+      expect(
+        entries.map((entry) => entry.headId),
+        (await repo.list()).map((entry) => entry.headId),
+      );
+      expect(entries.first.headId, 'c');
+      expect(entries.first.isConflict, isFalse);
+      expect(entries.skip(1).every((entry) => entry.isConflict), isTrue);
+      expect(entries.first.coverAssetId, isNull);
+      expect(entries.first.isPdf, isFalse);
+      expect(await repo.loadPreview('doc-1', headId: 'base'), isNull);
+      expect(await repo.loadPreview('second', headId: 'a'), isNull);
+      expect(await repo.loadPreview('doc-1', headId: 'a'), isNotNull);
+      expect(await repo.loadPreview('doc-1', headId: 'b'), isNotNull);
+
+      final sql = sqlite3.open(getPath());
+      try {
+        sql.execute('DELETE FROM revisions WHERE id=?', ['b']);
+      } finally {
+        sql.close();
+      }
+      final remaining = await repo.listCatalog();
+      expect(remaining.map((entry) => entry.headId), ['c', 'a']);
+      expect(remaining.every((entry) => !entry.isConflict), isTrue);
+
+      await repo.acceptRemote(revision(Revision.deletionId('gone'), 'a'));
+      expect((await repo.listCatalog()).single.headId, 'c');
+      expect(await repo.loadPreview('doc-1', headId: 'a'), isNull);
+      expect(await repo.loadPreview('doc-1', headId: 'b'), isNull);
+    },
+  );
+  test('lee datos existentes sin decodificar las otras páginas', () async {
+    await repo.acceptRemote(revision('head', null));
+    expect((await repo.listCatalog()).single.title, 'Álgebra');
+    final sql = sqlite3.open(getPath());
+    try {
+      sql.execute(
+        '''UPDATE revisions SET payload=json_set(payload,
+          '\$.notebook.title', 'Cambio desde otra conexión',
+          '\$.notebook.pages[#]', json('{"id":"segunda-inválida"}')) WHERE id=?''',
+        ['head'],
+      );
+    } finally {
+      sql.close();
+    }
+
+    final entry = (await repo.listCatalog()).single;
+    expect(entry.title, 'Cambio desde otra conexión');
+    expect(entry.pageCount, 2);
+    expect((await repo.loadPreview('doc-1', headId: 'head'))!.id, 'page-1');
+    await expectLater(repo.load('doc-1', headId: 'head'), throwsStateError);
   });
   test('cien guardados locales se agrupan sin perder el último', () async {
     String? parent;

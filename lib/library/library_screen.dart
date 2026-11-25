@@ -18,6 +18,7 @@ import '../search/search_service.dart';
 import '../editor/paper_canvas.dart';
 import '../ui/app_theme.dart';
 import '../ui/appearance.dart';
+import 'library_controller.dart';
 import 'notebook_dialog.dart';
 import '../pdf/password_dialog.dart';
 import '../pdf/pdf_page_background.dart';
@@ -51,6 +52,30 @@ class LibraryScreen extends StatefulWidget {
 class _LibraryScreenState extends State<LibraryScreen> {
   String query = '', subject = '';
   bool importing = false;
+  bool _openingNotebook = false;
+
+  Future<void> _openCatalogEntry(
+    CatalogEntry entry, {
+    int initialPageIndex = 0,
+  }) async {
+    if (_openingNotebook) return;
+    _openingNotebook = true;
+    final services = widget.services;
+    try {
+      final document = await services.library.loadEntry(entry);
+      if (!mounted || !identical(services, widget.services)) return;
+      if (document == null) {
+        _error(StateError('El apunte ya no está disponible.'));
+        return;
+      }
+      await _open(document, initialPageIndex: initialPageIndex);
+    } catch (error) {
+      if (mounted && identical(services, widget.services)) _error(error);
+    } finally {
+      _openingNotebook = false;
+    }
+  }
+
   Future<void> _open(DocumentEntry entry, {int initialPageIndex = 0}) async {
     final services = widget.services;
     Widget workspace(BuildContext _) => WorkspaceScreen(
@@ -101,7 +126,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
     String fingerprint,
     String text,
   ) async {
-    final heads = (await widget.services.repository.list())
+    final services = widget.services;
+    final heads = (await services.repository.list())
         .where((e) => e.notebook.id == notebookId)
         .toList();
     if (heads.length != 1) return false;
@@ -111,13 +137,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
       return false;
     }
     // Hashing is asynchronous. Recheck the revision before committing the cache.
-    final latest = (await widget.services.repository.list())
+    final latest = (await services.repository.list())
         .where((e) => e.notebook.id == notebookId)
         .toList();
-    if (latest.length != 1 || latest.single.headId != entry.headId) {
+    if (!mounted ||
+        !identical(services, widget.services) ||
+        latest.length != 1 ||
+        latest.single.headId != entry.headId) {
       return false;
     }
-    await widget.services.library.updateNotebook(
+    await services.library.updateNotebook(
       entry,
       entry.notebook.copyWith(
         pages: [
@@ -135,26 +164,36 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   Future<void> _search() async {
-    await widget.services.library.refresh();
-    if (!mounted) return;
-    final notebooks = {
-      for (final e in widget.services.library.entries)
-        e.notebook.id: e.notebook,
-    }.values.toList();
+    final services = widget.services;
+    final searched = {
+      for (final entry in await services.repository.list())
+        entry.notebook.id: entry,
+    };
+    if (!mounted || !identical(services, widget.services)) return;
     final hit = await showDialog<SearchHit>(
       context: context,
       builder: (_) => NotebookSearchDialog(
-        notebooks: notebooks,
-        pdf: widget.services.pdf,
-        assets: widget.services.assets,
+        notebooks: [for (final entry in searched.values) entry.notebook],
+        pdf: services.pdf,
+        assets: services.assets,
         onRecognized: _saveRecognized,
       ),
     );
-    if (hit == null || !mounted) return;
-    final entry = widget.services.library.entries
-        .where((e) => e.notebook.id == hit.notebookId)
-        .firstOrNull;
-    if (entry != null) await _open(entry, initialPageIndex: hit.pageIndex);
+    if (hit == null || !mounted || !identical(services, widget.services)) {
+      return;
+    }
+    await services.library.refresh();
+    if (!mounted || !identical(services, widget.services)) return;
+    final heads = services.library.entries
+        .where((entry) => entry.documentId == hit.notebookId)
+        .toList();
+    final searchedHead = searched[hit.notebookId]?.headId;
+    final entry =
+        heads.where((head) => head.headId == searchedHead).firstOrNull ??
+        heads.singleOrNull;
+    if (entry != null) {
+      await _openCatalogEntry(entry, initialPageIndex: hit.pageIndex);
+    }
   }
 
   Future<void> _backup() async {
@@ -296,22 +335,26 @@ class _LibraryScreenState extends State<LibraryScreen> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Future<void> _noteAction(DocumentEntry entry, String action) async {
+  Future<void> _noteAction(CatalogEntry entry, String action) async {
     final library = widget.services.library;
+    bool sameLibrary() =>
+        mounted && identical(library, widget.services.library);
     try {
       if (action == 'move') {
         final target = await showDialog<FolderDestination>(
           context: context,
           builder: (_) => FolderPickerDialog(library: library),
         );
-        if (target != null) await library.moveNotebook(entry, target.id);
+        if (target != null && sameLibrary()) {
+          await library.moveNotebook(entry, target.id);
+        }
       } else if (action == 'delete') {
         final confirmed = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('¿Eliminar apunte?'),
             content: Text(
-              '«${entry.notebook.title}» se quitará de tu biblioteca y de los '
+              '«${entry.title}» se quitará de tu biblioteca y de los '
               'dispositivos sincronizados.',
             ),
             actions: [
@@ -326,21 +369,20 @@ class _LibraryScreenState extends State<LibraryScreen> {
             ],
           ),
         );
-        if (mounted && confirmed == true) await library.deleteNotebook(entry);
+        if (confirmed == true && sameLibrary()) {
+          await library.deleteNotebook(entry);
+        }
       } else if (action == 'rename') {
         final name = await showDialog<String>(
           context: context,
           builder: (_) => NameDialog(
             title: 'Renombrar apunte',
             label: 'Nombre del apunte',
-            value: entry.notebook.title,
+            value: entry.title,
           ),
         );
-        if (name != null) {
-          await library.updateNotebook(
-            entry,
-            entry.notebook.copyWith(title: name),
-          );
+        if (name != null && sameLibrary()) {
+          await library.renameNotebook(entry, name);
         }
       }
     } catch (error) {
@@ -356,8 +398,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
     widget.services.library.openFolder(folder);
   }
 
-  ValueKey<(String, String?)> _tileKey(DocumentEntry entry) =>
-      ValueKey((entry.notebook.id, entry.isConflict ? entry.headId : null));
+  ValueKey<(String, String?)> _tileKey(CatalogEntry entry) =>
+      ValueKey((entry.documentId, entry.isConflict ? entry.headId : null));
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -371,7 +413,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       };
       final subjects =
           library.entries
-              .map((e) => e.notebook.subject)
+              .map((e) => e.subject)
               .where((s) => s.isNotEmpty)
               .toSet()
               .toList()
@@ -745,9 +787,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 itemBuilder: (_, index) => _NotebookTile(
                                   key: _tileKey(entries[index]),
                                   entry: entries[index],
+                                  library: library,
                                   pdf: widget.services.pdf,
                                   assets: widget.services.assets,
-                                  onTap: () => _open(entries[index]),
+                                  onTap: () =>
+                                      _openCatalogEntry(entries[index]),
                                   onAction: (a) =>
                                       _noteAction(entries[index], a),
                                 ),
@@ -769,12 +813,14 @@ class _NotebookTile extends StatelessWidget {
   const _NotebookTile({
     super.key,
     required this.entry,
+    required this.library,
     required this.onTap,
     required this.pdf,
     required this.assets,
     required this.onAction,
   });
-  final DocumentEntry entry;
+  final CatalogEntry entry;
+  final LibraryController library;
   final VoidCallback onTap;
   final PdfService pdf;
   final AssetStore assets;
@@ -782,9 +828,7 @@ class _NotebookTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final page = entry.notebook.pages.first;
-    final isPdf = page.background.pageNumber != null;
-    final cover = entry.notebook.coverAssetId;
+    final cover = entry.coverAssetId;
     return Material(
       color: scheme.surface,
       borderRadius: BorderRadius.circular(16),
@@ -828,30 +872,23 @@ class _NotebookTile extends StatelessWidget {
                                 ),
                               ],
                             ),
-                            child: IgnorePointer(
-                              child: cover != null
-                                  ? SizedBox(
-                                      width: page.width,
-                                      height: page.height,
-                                      child: _NotebookCover(
+                            child: SizedBox(
+                              width: entry.firstPageWidth,
+                              height: entry.firstPageHeight,
+                              child: IgnorePointer(
+                                child: cover != null
+                                    ? _NotebookCover(
                                         assets: assets,
                                         assetId: cover,
+                                      )
+                                    : _NotebookPreview(
+                                        key: ValueKey((library, entry.headId)),
+                                        library: library,
+                                        entry: entry,
+                                        pdf: pdf,
+                                        assets: assets,
                                       ),
-                                    )
-                                  : PaperCanvas(
-                                      assets: assets,
-                                      page: page,
-                                      tool: EditorTool.pen,
-                                      onStroke: (_) {},
-                                      externalInput: true,
-                                      background: isPdf
-                                          ? PdfPageBackground(
-                                              pdf: pdf,
-                                              page: page,
-                                              scale: .25,
-                                            )
-                                          : null,
-                                    ),
+                              ),
                             ),
                           ),
                         ),
@@ -870,7 +907,7 @@ class _NotebookTile extends StatelessWidget {
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
-                          isPdf ? 'PDF' : 'Cuaderno',
+                          entry.isPdf ? 'PDF' : 'Cuaderno',
                           style: Theme.of(context).textTheme.labelSmall,
                         ),
                       ),
@@ -905,7 +942,7 @@ class _NotebookTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    entry.notebook.title,
+                    entry.title,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleMedium,
@@ -917,9 +954,9 @@ class _NotebookTile extends StatelessWidget {
                         child: Text(
                           entry.isConflict
                               ? 'Versiones distintas'
-                              : entry.notebook.subject.isEmpty
+                              : entry.subject.isEmpty
                               ? 'Sin materia'
-                              : entry.notebook.subject,
+                              : entry.subject,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.bodySmall
@@ -934,7 +971,7 @@ class _NotebookTile extends StatelessWidget {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        '${entry.notebook.pages.length}',
+                        '${entry.pageCount}',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
@@ -947,6 +984,47 @@ class _NotebookTile extends StatelessWidget {
       ),
     );
   }
+}
+
+class _NotebookPreview extends StatefulWidget {
+  const _NotebookPreview({
+    super.key,
+    required this.library,
+    required this.entry,
+    required this.pdf,
+    required this.assets,
+  });
+
+  final LibraryController library;
+  final CatalogEntry entry;
+  final PdfService pdf;
+  final AssetStore assets;
+
+  @override
+  State<_NotebookPreview> createState() => _NotebookPreviewState();
+}
+
+class _NotebookPreviewState extends State<_NotebookPreview> {
+  late final _page = widget.library.loadPreview(widget.entry);
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<NotebookPage?>(
+    future: _page,
+    builder: (context, snapshot) {
+      final page = snapshot.data;
+      if (page == null) return const SizedBox.shrink();
+      return PaperCanvas(
+        assets: widget.assets,
+        page: page,
+        tool: EditorTool.pen,
+        onStroke: (_) {},
+        externalInput: true,
+        background: page.background.isPdf
+            ? PdfPageBackground(pdf: widget.pdf, page: page, scale: .25)
+            : null,
+      );
+    },
+  );
 }
 
 class _NotebookCover extends StatefulWidget {
