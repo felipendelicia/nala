@@ -46,5 +46,5 @@ All routes below are under `/v1`. Requests use `Authorization: Bearer <token>`. 
 ### 4. Delivery and integration
 
 - [x] Replace obsolete instructions with `docs/server-setup.md`, covering HTTPS, deployment, portable backups and device setup. Update current documentation and clean out older integration instructions.
-- [ ] Run a client-to-server round trip with two temporary SQLite catalogs, attachment migration, restart and offline conflicts. Run Flutter analysis and the Flutter suite. Build Android ARM64 and Linux x64.
+- [x] Run a client-to-server round trip with two temporary SQLite catalogs, attachment migration, restart and offline conflicts. Run Flutter analysis and the Flutter suite. Build Android ARM64 and Linux x64.
 - [ ] Deploy to the owner's server once the host, access, HTTPS endpoint and backup destination are available. Verify the deployed endpoint and both clients as access permits.

@@ -1,4 +1,4 @@
-# Estado de Nala — 2026-11-24
+# Estado de Nala — 2026-11-25
 
 Nala se desarrolla para tomar apuntes universitarios con S Pen en Samsung Tab S10 y continuar en Linux. El nombre y el icono se basan en la perrita de Felipe.
 
@@ -40,6 +40,8 @@ Felipe confirmó que la primera versión funciona en la tablet. La presión/late
 ## Servidor privado
 
 La versión 0.7.0 usa un servidor propio para sincronizar cuadernos, carpetas y adjuntos entre Android y Linux. Cada equipo conserva una biblioteca local para trabajar sin conexión. Ver la [guía del servidor](server-setup.md).
+
+La entrega local incluye el APK ARM64, el paquete Linux x64 y el servicio Docker Compose en `dist/`. El acceso **Nala** del menú abre la versión 0.7.0. El despliegue en el servidor de Felipe y la sincronización con la tablet física se comprobarán cuando esté disponible el acceso.
 
 ## Publicación
 
