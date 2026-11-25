@@ -267,15 +267,14 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     try {
       await workspace.flush();
       if (!mounted) return;
-      setState(() => allowPop = true);
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) Navigator.pop(context);
-      });
+      if (ModalRoute.of(context)?.isCurrent == true) {
+        Navigator.pop(context);
+        return;
+      }
     } catch (_) {
       _error();
-    } finally {
-      if (mounted) setState(() => closing = false);
     }
+    if (mounted) setState(() => closing = false);
   }
 
   @override

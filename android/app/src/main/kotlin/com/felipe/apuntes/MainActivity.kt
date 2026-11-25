@@ -2,11 +2,13 @@ package com.felipe.apuntes
 
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.embedding.engine.FlutterShellArgs
 import io.flutter.plugin.common.MethodChannel
 import android.view.MotionEvent
 import android.app.Activity
 import android.content.Intent
 import android.content.ClipData
+import android.os.Build
 import androidx.core.content.FileProvider
 import java.io.File
 import java.util.concurrent.Executors
@@ -21,6 +23,14 @@ class MainActivity : FlutterActivity() {
     private var pending: PendingDocument? = null
     private val writer = Executors.newSingleThreadExecutor()
     private val saveRequest = 40731
+
+    override fun getFlutterShellArgs(): FlutterShellArgs = super.getFlutterShellArgs().apply {
+        // Vulkan misses frames on the Galaxy Tab S10 FE Wi-Fi. Recheck when updating Flutter.
+        if (Build.MANUFACTURER.equals("samsung", ignoreCase = true) && Build.MODEL == "SM-X520") {
+            remove(FlutterShellArgs.ARG_ENABLE_IMPELLER)
+            add(FlutterShellArgs.ARG_DISABLE_IMPELLER)
+        }
+    }
 
     private fun stylusEvent(event: MotionEvent) {
         if (!stylusListening) return

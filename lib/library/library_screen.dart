@@ -27,6 +27,12 @@ import '../account/cloud_panel.dart';
 
 const _notebookTileMaxWidth = 360.0;
 const _notebookPreviewSidePadding = 40.0;
+final _workspaceSlide = Tween(begin: const Offset(.04, 0), end: Offset.zero);
+
+AnimationStyle? _libraryMenuAnimation(BuildContext context) =>
+    Theme.of(context).platform == TargetPlatform.android
+    ? AnimationStyle.noAnimation
+    : null;
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({
@@ -46,17 +52,47 @@ class _LibraryScreenState extends State<LibraryScreen> {
   String query = '', subject = '';
   bool importing = false;
   Future<void> _open(DocumentEntry entry, {int initialPageIndex = 0}) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => WorkspaceScreen(
-          services: widget.services,
-          initialEntry: entry,
-          initialPageIndex: initialPageIndex,
-          cloud: widget.cloud,
-        ),
-      ),
+    final services = widget.services;
+    Widget workspace(BuildContext _) => WorkspaceScreen(
+      services: services,
+      initialEntry: entry,
+      initialPageIndex: initialPageIndex,
+      cloud: widget.cloud,
     );
-    if (mounted) await widget.services.library.refresh();
+
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    CurvedAnimation? workspaceMotion;
+    final route = Theme.of(context).platform == TargetPlatform.android
+        ? PageRouteBuilder<void>(
+            pageBuilder: (context, _, _) => workspace(context),
+            transitionDuration: reduceMotion
+                ? Duration.zero
+                : const Duration(milliseconds: 220),
+            reverseTransitionDuration: reduceMotion
+                ? Duration.zero
+                : const Duration(milliseconds: 185),
+            transitionsBuilder: (context, animation, _, child) {
+              if (reduceMotion) return child;
+              final motion = workspaceMotion ??= CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeOutCubic,
+                reverseCurve: Curves.easeOutCubic.flipped,
+              );
+              return SlideTransition(
+                position: motion.drive(_workspaceSlide),
+                textDirection: Directionality.of(context),
+                child: child,
+              );
+            },
+          )
+        : MaterialPageRoute<void>(builder: workspace);
+    await Navigator.of(context).push(route);
+    // The popped result arrives while the reverse animation is still running.
+    await route.completed;
+    workspaceMotion?.dispose();
+    if (mounted && identical(services, widget.services)) {
+      await services.library.refresh();
+    }
   }
 
   Future<bool> _saveRecognized(
@@ -365,6 +401,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             ),
             PopupMenuButton<String>(
               tooltip: 'Más opciones de la biblioteca',
+              popUpAnimationStyle: _libraryMenuAnimation(context),
               onSelected: (action) {
                 if (action == 'backup') _backup();
               },
@@ -375,7 +412,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     children: [
                       Icon(Icons.backup_outlined, size: 20),
                       SizedBox(width: 12),
-                      Text('Backup de la biblioteca'),
+                      Flexible(child: Text('Backup de la biblioteca')),
                     ],
                   ),
                 ),
@@ -635,6 +672,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                         ),
                                         PopupMenuButton<String>(
                                           tooltip: 'Opciones de carpeta',
+                                          popUpAnimationStyle:
+                                              _libraryMenuAnimation(context),
                                           onSelected: (a) =>
                                               _folderAction(folder, a),
                                           itemBuilder: (_) => const [
@@ -841,6 +880,7 @@ class _NotebookTile extends StatelessWidget {
                       right: 6,
                       child: PopupMenuButton<String>(
                         tooltip: 'Opciones de apunte',
+                        popUpAnimationStyle: _libraryMenuAnimation(context),
                         onSelected: onAction,
                         itemBuilder: (_) => const [
                           PopupMenuItem(value: 'move', child: Text('Mover a…')),

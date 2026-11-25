@@ -1598,7 +1598,6 @@ class _EditorScreenState extends State<EditorScreen>
       throw StateError('El audio está pendiente de guardar.');
     }
     await audioPlayer?.stop();
-    await widget.controller.flush();
   }
 
   void deleteSelection() {
@@ -1905,16 +1904,16 @@ class _EditorScreenState extends State<EditorScreen>
   }
 
   Future<void> close() async {
+    if (widget.workspaceManaged) {
+      widget.onClose?.call();
+      return;
+    }
     if (closing) return;
-    router.reset();
     closing = true;
     try {
       await prepareClose();
+      await widget.controller.flush();
       if (!mounted) return;
-      if (widget.workspaceManaged) {
-        widget.onClose?.call();
-        return;
-      }
       setState(() => allowPop = true);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) Navigator.pop(context);
