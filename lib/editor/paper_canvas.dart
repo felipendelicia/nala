@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:uuid/uuid.dart';
@@ -20,6 +21,7 @@ class PaperCanvas extends StatefulWidget {
     this.background,
     this.externalInput = false,
     this.assets,
+    this.previewRasterScale,
   });
   final NotebookPage page;
   final ValueChanged<InkStroke> onStroke;
@@ -29,6 +31,7 @@ class PaperCanvas extends StatefulWidget {
   final Widget? background;
   final bool externalInput;
   final AssetStore? assets;
+  final double? previewRasterScale;
   @override
   State<PaperCanvas> createState() => _PaperCanvasState();
 }
@@ -38,7 +41,7 @@ class _PaperCanvasState extends State<PaperCanvas> {
   final ink = DraftInk();
   final _images = <String, Future<Uint8List>>{};
 
-  Widget storedImage(String assetId) {
+  Widget storedImage(String assetId, Size size) {
     final assets = widget.assets;
     if (assets == null) {
       return const Center(child: Icon(Icons.broken_image_outlined));
@@ -50,9 +53,16 @@ class _PaperCanvasState extends State<PaperCanvas> {
           return const Center(child: Icon(Icons.broken_image_outlined));
         }
         if (!snapshot.hasData) return const SizedBox.shrink();
+        final scale = widget.previewRasterScale;
         return Image.memory(
           snapshot.data!,
           fit: BoxFit.fill,
+          cacheWidth: scale == null
+              ? null
+              : math.max(1, (size.width * scale).ceil()),
+          cacheHeight: scale == null
+              ? null
+              : math.max(1, (size.height * scale).ceil()),
           gaplessPlayback: true,
           errorBuilder: (_, _, _) =>
               const Center(child: Icon(Icons.broken_image_outlined)),
@@ -64,7 +74,10 @@ class _PaperCanvasState extends State<PaperCanvas> {
   Widget pageBackground() => widget.page.background.isImage
       ? ColoredBox(
           color: Colors.white,
-          child: storedImage(widget.page.background.assetId!),
+          child: storedImage(
+            widget.page.background.assetId!,
+            Size(widget.page.width, widget.page.height),
+          ),
         )
       : CustomPaint(
           painter: PaperBackgroundPainter(
@@ -83,7 +96,7 @@ class _PaperCanvasState extends State<PaperCanvas> {
         opacity: object.opacity,
         child: ClipRect(
           child: object.kind != PageObjectKind.text
-              ? storedImage(object.assetId!)
+              ? storedImage(object.assetId!, Size(object.width, object.height))
               : Text(
                   object.text,
                   textScaler: TextScaler.noScaling,

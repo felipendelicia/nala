@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart' show SynchronousFuture;
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import 'package:pdfrx_engine/pdfrx_engine.dart' show PdfPasswordException;
@@ -825,10 +827,57 @@ class _NotebookTile extends StatelessWidget {
   final PdfService pdf;
   final AssetStore assets;
   final ValueChanged<String> onAction;
+
+  Widget _thumbnail(BuildContext context, BoxConstraints constraints) {
+    final pageSize = Size(entry.firstPageWidth, entry.firstPageHeight);
+    final fitted = applyBoxFit(
+      BoxFit.contain,
+      pageSize,
+      constraints.biggest,
+    ).destination;
+    if (fitted.isEmpty) return const SizedBox.shrink();
+    final physicalSize = fitted * MediaQuery.devicePixelRatioOf(context);
+    final cover = entry.coverAssetId;
+    return FittedBox(
+      fit: BoxFit.contain,
+      alignment: Alignment.topCenter,
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 18,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: SizedBox.fromSize(
+          size: pageSize,
+          child: IgnorePointer(
+            child: cover != null
+                ? _NotebookCover(
+                    assets: assets,
+                    assetId: cover,
+                    physicalSize: physicalSize,
+                  )
+                : _NotebookPreview(
+                    key: ValueKey((library, entry.headId)),
+                    library: library,
+                    entry: entry,
+                    pdf: pdf,
+                    assets: assets,
+                    rasterScale: physicalSize.width / pageSize.width,
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final cover = entry.coverAssetId;
     return Material(
       color: scheme.surface,
       borderRadius: BorderRadius.circular(16),
@@ -859,39 +908,7 @@ class _NotebookTile extends StatelessWidget {
                           _notebookPreviewSidePadding,
                           0,
                         ),
-                        child: FittedBox(
-                          alignment: Alignment.topCenter,
-                          child: DecoratedBox(
-                            decoration: const BoxDecoration(
-                              color: Colors.white,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black12,
-                                  blurRadius: 18,
-                                  offset: Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: SizedBox(
-                              width: entry.firstPageWidth,
-                              height: entry.firstPageHeight,
-                              child: IgnorePointer(
-                                child: cover != null
-                                    ? _NotebookCover(
-                                        assets: assets,
-                                        assetId: cover,
-                                      )
-                                    : _NotebookPreview(
-                                        key: ValueKey((library, entry.headId)),
-                                        library: library,
-                                        entry: entry,
-                                        pdf: pdf,
-                                        assets: assets,
-                                      ),
-                              ),
-                            ),
-                          ),
-                        ),
+                        child: LayoutBuilder(builder: _thumbnail),
                       ),
                     ),
                     Positioned(
@@ -993,12 +1010,14 @@ class _NotebookPreview extends StatefulWidget {
     required this.entry,
     required this.pdf,
     required this.assets,
+    required this.rasterScale,
   });
 
   final LibraryController library;
   final CatalogEntry entry;
   final PdfService pdf;
   final AssetStore assets;
+  final double rasterScale;
 
   @override
   State<_NotebookPreview> createState() => _NotebookPreviewState();
@@ -1019,6 +1038,7 @@ class _NotebookPreviewState extends State<_NotebookPreview> {
         tool: EditorTool.pen,
         onStroke: (_) {},
         externalInput: true,
+        previewRasterScale: widget.rasterScale,
         background: page.background.isPdf
             ? PdfPageBackground(pdf: widget.pdf, page: page, scale: .25)
             : null,
@@ -1028,10 +1048,15 @@ class _NotebookPreviewState extends State<_NotebookPreview> {
 }
 
 class _NotebookCover extends StatefulWidget {
-  const _NotebookCover({required this.assets, required this.assetId});
+  const _NotebookCover({
+    required this.assets,
+    required this.assetId,
+    required this.physicalSize,
+  });
 
   final AssetStore assets;
   final String assetId;
+  final Size physicalSize;
 
   @override
   State<_NotebookCover> createState() => _NotebookCoverState();
@@ -1060,20 +1085,57 @@ class _NotebookCoverState extends State<_NotebookCover> {
       );
       final bytes = snapshot.data;
       if (bytes == null) return placeholder;
-      final ratio = MediaQuery.devicePixelRatioOf(context);
       return Image(
-        image: ResizeImage(
+        image: _CoverThumbnailImage(
           MemoryImage(bytes),
-          width:
-              ((_notebookTileMaxWidth - 2 * _notebookPreviewSidePadding) *
-                      ratio)
-                  .ceil(),
-          height: (320 * ratio).ceil(),
-          policy: ResizeImagePolicy.fit,
+          math.max(1, widget.physicalSize.width.ceil()),
+          math.max(1, widget.physicalSize.height.ceil()),
         ),
         fit: BoxFit.cover,
+        gaplessPlayback: true,
         errorBuilder: (_, _, _) => placeholder,
       );
     },
   );
+}
+
+class _CoverThumbnailImage extends ImageProvider<_CoverThumbnailImage> {
+  const _CoverThumbnailImage(this.source, this.width, this.height);
+
+  final MemoryImage source;
+  final int width, height;
+
+  @override
+  Future<_CoverThumbnailImage> obtainKey(ImageConfiguration configuration) =>
+      SynchronousFuture(this);
+
+  @override
+  ImageStreamCompleter loadImage(
+    _CoverThumbnailImage key,
+    ImageDecoderCallback decode,
+  ) => key.source.loadImage(key.source, (buffer, {getTargetSize}) {
+    assert(getTargetSize == null);
+    return decode(buffer, getTargetSize: key._targetSize);
+  });
+
+  ui.TargetImageSize _targetSize(int intrinsicWidth, int intrinsicHeight) {
+    final widthScale = width / intrinsicWidth;
+    final heightScale = height / intrinsicHeight;
+    if (widthScale >= 1 || heightScale >= 1) return const ui.TargetImageSize();
+    // The other dimension follows the source aspect ratio. The image still
+    // crops with BoxFit.cover and retains enough pixels on its fitted axis.
+    return widthScale >= heightScale
+        ? ui.TargetImageSize(width: width)
+        : ui.TargetImageSize(height: height);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is _CoverThumbnailImage &&
+      other.source == source &&
+      other.width == width &&
+      other.height == height;
+
+  @override
+  int get hashCode => Object.hash(source, width, height);
 }
