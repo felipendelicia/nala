@@ -77,7 +77,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 ? services.library.visiblePreview(entry)
                 : null,
             loadEntry: () async {
-              final document = await services.library.loadEntry(entry);
+              final document = await services.library.loadForEditing(
+                entry,
+                initialPageIndex: initialPageIndex,
+              );
               return mounted && identical(services, widget.services)
                   ? document
                   : null;

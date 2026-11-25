@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:isolate';
+import 'deferred_notebook_page.dart';
 import 'notebook.dart';
 import 'revision.dart';
 import 'notebook_recording.dart';
@@ -50,27 +51,54 @@ class NotebookCodec {
 
   static Revision decodeRevision(String json) {
     reportWork('decode-revision');
-    return _validated(() {
-      final map = jsonDecode(json) as Map<String, dynamic>;
-      _version(map);
-      final id = nonEmpty(map['id']);
-      final parent = map['parentId'] == null ? null : nonEmpty(map['parentId']);
-      if (parent == id) throw const FormatException('Revisión cíclica');
-      return Revision(
-        id: id,
-        deviceId: nonEmpty(map['deviceId']),
-        parentId: parent,
-        createdAt: DateTime.parse(map['createdAt'] as String).toUtc(),
-        notebook: _fromJson(map['notebook'] as Map<String, dynamic>),
-      );
-    });
+    return _decodeRevision(json);
   }
 
-  static Notebook _fromJson(Map<String, dynamic> map) {
+  /// Decodes a revision header projected by SQLite, with bodies supplied separately.
+  static Revision decodeRevisionForEditing(
+    String header,
+    List<DeferredNotebookPage> pages,
+  ) => _decodeRevision(header, editingPages: pages);
+
+  static NotebookPage decodeEditingPage(String json) => _validated(() {
+    final page = NotebookPage.fromJson(
+      jsonDecode(json) as Map<String, dynamic>,
+    );
+    _validatePage(page, <String>{}, <String>{}, <String>{});
+    return page;
+  });
+
+  static Revision _decodeRevision(
+    String json, {
+    List<DeferredNotebookPage>? editingPages,
+  }) => _validated(() {
+    final map = jsonDecode(json) as Map<String, dynamic>;
     _version(map);
-    final pages = (map['pages'] as List)
-        .map((p) => NotebookPage.fromJson(p as Map<String, dynamic>))
-        .toList();
+    final id = nonEmpty(map['id']);
+    final parent = map['parentId'] == null ? null : nonEmpty(map['parentId']);
+    if (parent == id) throw const FormatException('Revisión cíclica');
+    return Revision(
+      id: id,
+      deviceId: nonEmpty(map['deviceId']),
+      parentId: parent,
+      createdAt: DateTime.parse(map['createdAt'] as String).toUtc(),
+      notebook: _fromJson(
+        map['notebook'] as Map<String, dynamic>,
+        editingPages: editingPages,
+      ),
+    );
+  });
+
+  static Notebook _fromJson(
+    Map<String, dynamic> map, {
+    List<DeferredNotebookPage>? editingPages,
+  }) {
+    _version(map);
+    final pages =
+        editingPages ??
+        (map['pages'] as List)
+            .map((p) => NotebookPage.fromJson(p as Map<String, dynamic>))
+            .toList();
     if (pages.isEmpty) throw const FormatException('Cuaderno sin páginas');
     final pageIds = <String>{};
     final strokeIds = <String>{};
@@ -98,25 +126,8 @@ class NotebookCodec {
       if (!pageIds.add(page.id)) {
         throw const FormatException('Página duplicada');
       }
-      for (final comment in page.comments) {
-        if (!commentIds.add(comment.id) ||
-            comment.x > page.width ||
-            comment.y > page.height) {
-          throw const FormatException(
-            'Comentario duplicado o fuera de la hoja',
-          );
-        }
-      }
-      for (final stroke in page.strokes) {
-        if (!strokeIds.add(stroke.id)) {
-          throw const FormatException('Trazo duplicado');
-        }
-      }
-      for (final object in page.objects) {
-        if (!objectIds.add(object.id)) {
-          throw const FormatException('Objeto duplicado');
-        }
-      }
+      if (page is DeferredNotebookPage && !page.isReady) continue;
+      _validatePage(page, commentIds, strokeIds, objectIds);
     }
     return Notebook(
       id: nonEmpty(map['id']),
@@ -131,6 +142,31 @@ class NotebookCodec {
           ? null
           : validAssetId(map['coverAssetId']),
     );
+  }
+
+  static void _validatePage(
+    NotebookPage page,
+    Set<String> commentIds,
+    Set<String> strokeIds,
+    Set<String> objectIds,
+  ) {
+    for (final comment in page.comments) {
+      if (!commentIds.add(comment.id) ||
+          comment.x > page.width ||
+          comment.y > page.height) {
+        throw const FormatException('Comentario duplicado o fuera de la hoja');
+      }
+    }
+    for (final stroke in page.strokes) {
+      if (!strokeIds.add(stroke.id)) {
+        throw const FormatException('Trazo duplicado');
+      }
+    }
+    for (final object in page.objects) {
+      if (!objectIds.add(object.id)) {
+        throw const FormatException('Objeto duplicado');
+      }
+    }
   }
 
   static void _version(Map<String, dynamic> json) {

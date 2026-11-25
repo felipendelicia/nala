@@ -24,3 +24,12 @@ abstract interface class NotebookCatalogRepository {
     required String headId,
   });
 }
+
+abstract interface class EditableNotebookRepository {
+  Future<Notebook?> loadForEditing(
+    String documentId, {
+    required String headId,
+    required int initialPageIndex,
+    String? preparedPagePayload,
+  });
+}

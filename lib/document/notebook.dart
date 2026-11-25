@@ -167,10 +167,11 @@ class NotebookPage {
     List<PageComment> comments = const [],
     List<PageObject> objects = const [],
     this.recognizedText = '',
-    this.recognitionFingerprint,
+    String? recognitionFingerprint,
   }) : strokes = List.unmodifiable(strokes),
        comments = List.unmodifiable(comments),
-       objects = List.unmodifiable(objects) {
+       objects = List.unmodifiable(objects),
+       recognitionFingerprint = recognitionFingerprint {
     if (recognitionFingerprint != null) validAssetId(recognitionFingerprint);
   }
   final String id;

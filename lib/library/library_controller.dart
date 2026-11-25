@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+import '../document/deferred_notebook_page.dart';
 import '../document/notebook.dart';
 import '../document/notebook_repository.dart';
 import '../document/revision.dart';
@@ -136,8 +137,18 @@ class LibraryController extends ChangeNotifier {
   List<CatalogEntry> entries = [];
   final _visiblePreviews = <(String, String), WeakReference<NotebookPage>>{};
 
-  NotebookPage? visiblePreview(CatalogEntry entry) =>
+  NotebookPage? _loadedPreview(CatalogEntry entry) =>
       _visiblePreviews[(entry.documentId, entry.headId)]?.target;
+
+  NotebookPage? visiblePreview(CatalogEntry entry) {
+    final page = _loadedPreview(entry);
+    if (page == null ||
+        page.background.pattern == null ||
+        page.objects.any((object) => object.assetId != null)) {
+      return null;
+    }
+    return page;
+  }
 
   Future<DocumentEntry?> loadEntry(CatalogEntry entry) async {
     final notebook = await repository.load(
@@ -147,6 +158,35 @@ class LibraryController extends ChangeNotifier {
     return notebook == null ? null : entry.withNotebook(notebook);
   }
 
+  Future<DocumentEntry?> loadForEditing(
+    CatalogEntry entry, {
+    required int initialPageIndex,
+  }) async {
+    if (repository case final EditableNotebookRepository editable) {
+      final preview = initialPageIndex == 0 ? _loadedPreview(entry) : null;
+      final decodedPreview = preview is DeferredNotebookPage && preview.isReady
+          ? preview
+          : null;
+      final notebook = await editable.loadForEditing(
+        entry.documentId,
+        headId: entry.headId,
+        initialPageIndex: initialPageIndex,
+        preparedPagePayload: decodedPreview?.encoded,
+      );
+      if (notebook == null) return null;
+      final active =
+          notebook.pages[initialPageIndex.clamp(0, notebook.pages.length - 1)];
+      if (active is DeferredNotebookPage && !active.isReady) {
+        if (decodedPreview == null ||
+            !active.reuseDecodedPage(decodedPreview)) {
+          await active.prepare();
+        }
+      }
+      return entry.withNotebook(notebook);
+    }
+    return loadEntry(entry);
+  }
+
   Future<NotebookPage?> loadPreview(CatalogEntry entry) async {
     final NotebookPage? page;
     if (repository case final NotebookCatalogRepository catalog) {
@@ -154,9 +194,7 @@ class LibraryController extends ChangeNotifier {
     } else {
       page = (await loadEntry(entry))?.notebook.pages.first;
     }
-    if (page != null &&
-        page.background.pattern != null &&
-        !page.objects.any((object) => object.assetId != null)) {
+    if (page != null) {
       // The visible tile holds the page. Leave it collectible with the tile.
       final key = (entry.documentId, entry.headId);
       _visiblePreviews.remove(key);

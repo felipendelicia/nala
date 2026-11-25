@@ -1,8 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:isolate';
 
 import 'package:apuntes/bootstrap.dart';
+import 'package:apuntes/document/deferred_notebook_page.dart';
 import 'package:apuntes/document/notebook.dart';
+import 'package:apuntes/document/notebook_codec.dart';
 import 'package:apuntes/document/notebook_repository.dart';
+import 'package:apuntes/document/page_comment.dart';
 import 'package:apuntes/document/revision.dart';
 import 'package:apuntes/editor/editor_screen.dart';
 import 'package:apuntes/editor/paper_canvas.dart';
@@ -12,6 +17,7 @@ import 'package:apuntes/library/library_screen.dart';
 import 'package:apuntes/ui/app_theme.dart';
 import 'package:apuntes/workspace/document_workspace.dart';
 import 'package:apuntes/workspace/workspace_opening_screen.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -52,24 +58,76 @@ class _CountingRepository extends MemoryRepository
   }) async => (await super.load(documentId, headId: headId))?.pages.first;
 }
 
+class _PageFirstRepository extends _CountingRepository
+    implements EditableNotebookRepository {
+  _PageFirstRepository(this.offscreen);
+
+  final DeferredNotebookPage offscreen;
+  final ready = Completer<void>();
+  final editingRequests = <(String, String, int)>[];
+
+  @override
+  Future<Notebook?> load(String documentId, {String? headId}) async {
+    loadedHeads.add((documentId, headId));
+    throw StateError('La apertura no debe pedir la carga completa.');
+  }
+
+  @override
+  Future<Notebook?> loadForEditing(
+    String documentId, {
+    required String headId,
+    required int initialPageIndex,
+    String? preparedPagePayload,
+  }) async {
+    editingRequests.add((documentId, headId, initialPageIndex));
+    await ready.future;
+    final notebook = revisions[headId]?.notebook;
+    if (notebook == null || notebook.id != documentId) return null;
+    final active = notebook.pages[initialPageIndex];
+    final opened = DeferredNotebookPage(
+      id: active.id,
+      width: active.width,
+      height: active.height,
+      background: active.background,
+      encoded: jsonEncode(active.toJson()),
+      decoded: active,
+    );
+    return notebook.copyWith(
+      pages: [
+        for (final page in notebook.pages)
+          if (page.id == offscreen.id)
+            offscreen
+          else if (page.id == opened.id)
+            opened
+          else
+            page,
+      ],
+    );
+  }
+}
+
+Future<String> _encodeSavedRevision(Revision revision) =>
+    Isolate.run(() => NotebookCodec.encodeRevision(revision));
+
 Future<_CountingRepository> _mountLibrary(
   WidgetTester tester, {
   bool reduceMotion = false,
+  _CountingRepository? repository,
+  Notebook? notebook,
 }) async {
   await tester.binding.setSurfaceSize(const Size(820, 1100));
   addTearDown(() => tester.binding.setSurfaceSize(null));
-  final repository = _CountingRepository();
-  final library = LibraryController(repository: repository, deviceId: 'tablet');
+  final repo = repository ?? _CountingRepository();
+  final library = LibraryController(repository: repo, deviceId: 'tablet');
   final services = AppServices(
     root: '/unused',
     deviceId: 'tablet',
-    repository: repository,
+    repository: repo,
     library: library,
     assets: MemoryAssets(),
   );
   addTearDown(services.close);
-  final note = fixtureNotebook();
-  await library.add(note);
+  await library.add(notebook ?? fixtureNotebook());
   await tester.pumpWidget(
     MaterialApp(
       theme: nalaTheme().copyWith(platform: TargetPlatform.android),
@@ -81,7 +139,7 @@ Future<_CountingRepository> _mountLibrary(
     ),
   );
   await tester.pumpAndSettle();
-  return repository;
+  return repo;
 }
 
 Future<_CountingRepository> _openNotebook(WidgetTester tester) async {
@@ -223,6 +281,123 @@ void main() {
     expect(find.text('Cargando apunte…'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets(
+    'abrir un resultado permite escribir sin hidratar hojas lejanas',
+    (tester) async {
+      final notebook = fixtureNotebook();
+      final first = notebook.pages.single;
+      NotebookPage blankPage(String id) => NotebookPage(
+        id: id,
+        width: first.width,
+        height: first.height,
+        background: first.background,
+      );
+
+      final distant = blankPage('page-5').copyWith(
+        strokes: List.generate(
+          2500,
+          (index) => fixtureStroke(id: 'ink-$index'),
+        ),
+        recognizedText: 'Texto conservado en la última página',
+      );
+      const query = 'ecuación objetivo';
+      final selected = blankPage('page-3').copyWith(
+        comments: [
+          PageComment(
+            id: 'selected-comment',
+            x: 20,
+            y: 20,
+            text: query,
+            createdAt: notebook.updatedAt,
+          ),
+        ],
+      );
+      final offscreen = DeferredNotebookPage(
+        id: distant.id,
+        width: distant.width,
+        height: distant.height,
+        background: distant.background,
+        encoded: jsonEncode(distant.toJson()),
+      );
+      final repository = _PageFirstRepository(offscreen);
+      await _mountLibrary(
+        tester,
+        repository: repository,
+        notebook: notebook.copyWith(
+          pages: [
+            first,
+            blankPage('page-2'),
+            selected,
+            blankPage('page-4'),
+            distant,
+          ],
+        ),
+      );
+      final originalHead = repository.revisions.keys.single;
+
+      await tester.tap(find.byTooltip('Buscar en todos los apuntes'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              widget.decoration?.hintText ==
+                  'Título, materia, comentario o texto',
+        ),
+        query,
+      );
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Álgebra · página 3'));
+      await tester.pumpAndSettle();
+
+      expect(repository.loadedHeads, isEmpty);
+      expect(repository.editingRequests, [(notebook.id, originalHead, 2)]);
+      expect(find.byType(EditorScreen), findsNothing);
+      repository.ready.complete();
+      await tester.pumpAndSettle();
+
+      final editor = tester.widget<EditorScreen>(find.byType(EditorScreen));
+      expect(editor.controller.notebook.pages.last, same(offscreen));
+      expect(offscreen.isReady, isFalse);
+      final canvas = find.byWidgetPredicate(
+        (widget) => widget is PaperCanvas && widget.page.id == 'page-3',
+      );
+      final bounds = tester.renderObject<RenderBox>(canvas);
+      final pen = await tester.createGesture(kind: PointerDeviceKind.stylus);
+      await pen.down(bounds.localToGlobal(const Offset(100, 120)));
+      await pen.moveTo(bounds.localToGlobal(const Offset(130, 140)));
+      await pen.up();
+      await tester.pumpAndSettle();
+
+      expect(offscreen.isReady, isFalse);
+      expect(repository.loadedHeads, isEmpty);
+      final committed = repository.revisions.values.singleWhere(
+        (revision) => revision.parentId == originalHead,
+      );
+      final encoded = await tester.runAsync(
+        () => _encodeSavedRevision(committed),
+      );
+      final saved = NotebookCodec.decodeRevision(encoded!);
+      expect(offscreen.isReady, isFalse);
+      expect(saved.parentId, originalHead);
+      expect(saved.notebook.pages.map((page) => page.id), [
+        'page-1',
+        'page-2',
+        'page-3',
+        'page-4',
+        'page-5',
+      ]);
+      final savedPage = saved.notebook.pages[2];
+      final stroke = savedPage.strokes.single;
+      expect(stroke.points.first.x, closeTo(100, .01));
+      expect(stroke.points.first.y, closeTo(120, .01));
+      expect(savedPage.comments.single.text, query);
+      expect(saved.notebook.pages.last.toJson(), distant.toJson());
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   testWidgets('atrás cancela la apertura y descarta una respuesta tardía', (
     tester,

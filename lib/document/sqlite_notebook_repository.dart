@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:convert';
 import 'package:sqlite3/sqlite3.dart';
+import 'deferred_notebook_page.dart';
 import 'notebook.dart';
 import 'notebook_codec.dart';
 import 'notebook_repository.dart';
@@ -14,7 +15,8 @@ class SqliteNotebookRepository
         NotebookRepository,
         FolderRepository,
         RevisionLookupRepository,
-        NotebookCatalogRepository {
+        NotebookCatalogRepository,
+        EditableNotebookRepository {
   SqliteNotebookRepository._(
     this._port,
     this._receive,
@@ -129,6 +131,21 @@ class SqliteNotebookRepository
   }) async =>
       (await _call('loadPreview', {'documentId': documentId, 'headId': headId}))
           as NotebookPage?;
+
+  @override
+  Future<Notebook?> loadForEditing(
+    String documentId, {
+    required String headId,
+    required int initialPageIndex,
+    String? preparedPagePayload,
+  }) async =>
+      (await _call('loadForEditing', {
+            'documentId': documentId,
+            'headId': headId,
+            'initialPageIndex': initialPageIndex,
+            'preparedPagePayload': preparedPagePayload,
+          }))
+          as Notebook?;
 
   @override
   Future<Notebook?> load(String documentId, {String? headId}) async {
@@ -313,11 +330,14 @@ void _databaseWorker((SendPort, String) config) {
   requests.listen((message) {
     final request = message as Map;
     try {
+      Revision? validatedRevision;
       if (request['revision'] is Revision) {
         request['payload'] = NotebookCodec.encodeRevision(
           request['revision'] as Revision,
         );
-        NotebookCodec.decodeRevision(request['payload'] as String);
+        validatedRevision = NotebookCodec.decodeRevision(
+          request['payload'] as String,
+        );
       }
       Object? result;
       switch (request['op']) {
@@ -638,12 +658,26 @@ void _databaseWorker((SendPort, String) config) {
             'FROM revisions r WHERE r.id=? AND r.document_id=? AND $_visibleHead',
             [request['headId'], request['documentId']],
           );
-          result = rows.isEmpty
-              ? null
-              : NotebookPage.fromJson(
-                  jsonDecode(rows.single['page'] as String)
-                      as Map<String, dynamic>,
-                );
+          if (rows.isNotEmpty) {
+            final encoded = rows.single['page'] as String;
+            final page = NotebookCodec.decodeEditingPage(encoded);
+            result = DeferredNotebookPage(
+              id: page.id,
+              width: page.width,
+              height: page.height,
+              background: page.background,
+              encoded: encoded,
+              decoded: page,
+            );
+          }
+        case 'loadForEditing':
+          result = _loadForEditing(
+            db,
+            request['documentId'] as String,
+            request['headId'] as String,
+            request['initialPageIndex'] as int,
+            request['preparedPagePayload'] as String?,
+          );
         case 'load':
           final visibility = request['visibleOnly'] == true
               ? ' AND $_notDeleted'
@@ -671,9 +705,7 @@ void _databaseWorker((SendPort, String) config) {
               .toList();
         case 'commit':
           _transaction(db, () {
-            var revision = NotebookCodec.decodeRevision(
-              request['payload'] as String,
-            );
+            var revision = validatedRevision!;
             if (revision.deleted) {
               // A head from the menu may have been coalesced while its
               // confirmation was open. Keep an existing revision as parent.
@@ -738,9 +770,7 @@ void _databaseWorker((SendPort, String) config) {
             request['revisionId'],
           ]);
         case 'remote':
-          final revision = NotebookCodec.decodeRevision(
-            request['payload'] as String,
-          );
+          final revision = validatedRevision!;
           final existing = db.select(
             'SELECT payload FROM revisions WHERE id=?',
             [revision.id],
@@ -779,6 +809,58 @@ void _databaseWorker((SendPort, String) config) {
     }
   });
 }
+
+Notebook? _loadForEditing(
+  Database db,
+  String documentId,
+  String headId,
+  int initialPageIndex,
+  String? preparedPagePayload,
+) => _transaction(db, write: false, () {
+  final revision = db.select(
+    r"SELECT json_remove(r.payload, '$.notebook.pages') AS header, "
+    r"json_type(r.payload, '$.notebook.pages') AS pages_type "
+    'FROM revisions r WHERE r.id=? AND r.document_id=? AND $_notDeleted',
+    [headId, documentId],
+  );
+  if (revision.isEmpty) return null;
+  if (revision.single['pages_type'] != 'array') {
+    throw const FormatException('Colección de páginas inválida');
+  }
+  final rows = db.select(
+    r'''SELECT p.key AS position, p.value AS encoded,
+      json_extract(p.value, '$.id', '$.width', '$.height', '$.background') AS metadata
+    FROM revisions r, json_each(r.payload, '$.notebook.pages') p
+    WHERE r.id=? AND r.document_id=?''',
+    [headId, documentId],
+  );
+  if (rows.isEmpty) throw const FormatException('Cuaderno sin páginas');
+  final selected = initialPageIndex.clamp(0, rows.length - 1);
+  final pages = List<DeferredNotebookPage?>.filled(rows.length, null);
+  for (final row in rows) {
+    final index = row['position'] as int;
+    final encoded = row['encoded'] as String;
+    final metadata = jsonDecode(row['metadata'] as String) as List;
+    pages[index] = DeferredNotebookPage(
+      id: nonEmpty(metadata[0]),
+      width: finiteNumber(metadata[1], positive: true),
+      height: finiteNumber(metadata[2], positive: true),
+      background: PageBackground.fromJson(metadata[3] as Map<String, dynamic>),
+      encoded: encoded,
+      decoded: index == selected && encoded != preparedPagePayload
+          ? NotebookPage.fromJson(jsonDecode(encoded) as Map<String, dynamic>)
+          : null,
+    );
+  }
+  final decoded = NotebookCodec.decodeRevisionForEditing(
+    revision.single['header'] as String,
+    [for (final page in pages) page!],
+  );
+  if (decoded.id != headId || decoded.notebook.id != documentId) {
+    throw const FormatException('Identificadores de revisión inválidos');
+  }
+  return decoded.notebook;
+});
 
 (int, List<String>, List<Row>) _readCatalogRows(
   Database db,

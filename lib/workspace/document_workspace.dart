@@ -207,7 +207,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     } else {
       DocumentEntry? entry;
       try {
-        entry = await library.loadEntry(selection);
+        entry = await library.loadForEditing(selection, initialPageIndex: 0);
       } catch (_) {
         // A revision can become unavailable while its catalog row is visible.
       }

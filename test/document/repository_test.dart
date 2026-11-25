@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:apuntes/document/notebook.dart';
+import 'package:apuntes/document/deferred_notebook_page.dart';
 import 'package:apuntes/document/notebook_codec.dart';
 import 'package:apuntes/document/sqlite_notebook_repository.dart';
 import 'package:apuntes/document/revision.dart';
@@ -248,6 +249,115 @@ void main() {
     expect((await repo.loadPreview('doc-1', headId: 'head'))!.id, 'page-1');
     await expectLater(repo.load('doc-1', headId: 'head'), throwsStateError);
   });
+  test(
+    'abre sólo la hoja solicitada y conserva las otras al guardar',
+    () async {
+      const pdfId =
+          'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
+      final book = fixtureNotebook().copyWith(
+        pages: [
+          fixtureNotebook().pages.single,
+          NotebookPage(
+            id: 'page-2',
+            width: 888,
+            height: 1000,
+            background: const PageBackground.pdf(pdfId, 2),
+            strokes: [fixtureStroke(id: 'second-stroke')],
+          ),
+        ],
+      );
+      await repo.acceptRemote(
+        Revision(
+          id: 'head',
+          deviceId: 'pc',
+          parentId: null,
+          createdAt: DateTime.utc(2026),
+          notebook: book,
+        ),
+      );
+
+      final opened = (await repo.loadForEditing(
+        'doc-1',
+        headId: 'head',
+        initialPageIndex: 1,
+      ))!;
+      final inactive = opened.pages.first as DeferredNotebookPage;
+      final active = opened.pages.last as DeferredNotebookPage;
+      expect(inactive.isReady, isFalse);
+      expect(inactive.id, 'page-1');
+      expect(active.isReady, isTrue);
+      expect(active.strokes.single.id, 'second-stroke');
+      expect(active.background.pageNumber, 2);
+
+      final preview =
+          (await repo.loadPreview('doc-1', headId: 'head'))!
+              as DeferredNotebookPage;
+      final withPreview = (await repo.loadForEditing(
+        'doc-1',
+        headId: 'head',
+        initialPageIndex: 0,
+        preparedPagePayload: preview.encoded,
+      ))!;
+      final reused = withPreview.pages.first as DeferredNotebookPage;
+      expect(reused.isReady, isFalse);
+      expect(reused.reuseDecodedPage(preview), isTrue);
+      expect(reused.strokes.single.id, 'stroke-1');
+      expect((withPreview.pages.last as DeferredNotebookPage).isReady, isFalse);
+
+      await repo.commit(
+        Revision(
+          id: 'edit',
+          deviceId: 'tablet',
+          parentId: 'head',
+          createdAt: DateTime.utc(2026),
+          notebook: opened.copyWith(
+            pages: [
+              inactive,
+              active.copyWith(strokes: []),
+            ],
+          ),
+        ),
+      );
+      expect(inactive.isReady, isFalse);
+      final pending = (await repo.pending()).single;
+      expect(pending.notebook.pages.first.strokes.single.id, 'stroke-1');
+      expect(pending.notebook.pages.last.background.assetId, pdfId);
+      expect(pending.notebook.pages.last.strokes, isEmpty);
+      expect(
+        await repo.loadForEditing('other', headId: 'edit', initialPageIndex: 0),
+        isNull,
+      );
+
+      final sql = sqlite3.open(getPath());
+      try {
+        sql.execute(
+          'UPDATE revisions SET payload=json_set(payload, ?, ?) WHERE id=?',
+          [r'$.notebook.pages[0].strokes[0].id', 'second-stroke', 'head'],
+        );
+      } finally {
+        sql.close();
+      }
+      final malformed = (await repo.loadForEditing(
+        'doc-1',
+        headId: 'head',
+        initialPageIndex: 1,
+      ))!;
+      expect((malformed.pages.first as DeferredNotebookPage).isReady, isFalse);
+      await expectLater(
+        repo.commit(
+          Revision(
+            id: 'invalid',
+            deviceId: 'tablet',
+            parentId: 'head',
+            createdAt: DateTime.utc(2026),
+            notebook: malformed,
+          ),
+        ),
+        throwsStateError,
+      );
+      expect((await repo.pending()).single.id, 'edit');
+    },
+  );
   test('cien guardados locales se agrupan sin perder el último', () async {
     String? parent;
     for (var i = 0; i < 100; i++) {

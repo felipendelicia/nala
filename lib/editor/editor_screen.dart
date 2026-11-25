@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 import 'package:pdfrx_engine/pdfrx_engine.dart' show PdfPasswordException;
+import '../document/deferred_notebook_page.dart';
 import '../document/notebook.dart';
 import '../document/page_object.dart';
 import 'advanced_toolbar.dart';
@@ -513,6 +514,44 @@ class _EditorScreenState extends State<EditorScreen>
         0,
         widget.controller.notebook.pages.length - 1,
       )];
+  bool pageReady(NotebookPage source) =>
+      source is! DeferredNotebookPage || source.isReady;
+
+  final preparingPages = <DeferredNotebookPage>{};
+  final failedPages = <DeferredNotebookPage>{};
+
+  void preparePage(NotebookPage source) {
+    if (source is! DeferredNotebookPage ||
+        source.isReady ||
+        failedPages.contains(source) ||
+        !preparingPages.add(source)) {
+      return;
+    }
+    // Let the current canvas paint and accept input before decoding a neighbor.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || disposing) return;
+      try {
+        await source.prepare();
+      } catch (_) {
+        failedPages.add(source);
+      } finally {
+        preparingPages.remove(source);
+        if (mounted && !disposing) setState(() {});
+      }
+    });
+  }
+
+  NotebookPage thumbnailPage(NotebookPage source) => pageReady(source)
+      ? source
+      : NotebookPage(
+          id: source.id,
+          width: source.width,
+          height: source.height,
+          background: source.background.pattern == null
+              ? const PageBackground.paper(PaperPattern.blank)
+              : source.background,
+        );
+
   InkPoint inkPoint(InputSample event) {
     final p = view.pagePoint(event.position), bounds = layout.rect(pageIndex);
     return InkPoint(
@@ -689,6 +728,7 @@ class _EditorScreenState extends State<EditorScreen>
   }
 
   void editPage(NotebookPage Function(NotebookPage) edit) {
+    if (!pageReady(page)) return;
     final id = page.id;
     widget.controller.apply(
       (book) => book.copyWith(
@@ -840,7 +880,7 @@ class _EditorScreenState extends State<EditorScreen>
   }
 
   void pasteSelection({Offset? at}) {
-    if (reading || clipboard.isEmpty) return;
+    if (reading || clipboard.isEmpty || !pageReady(page)) return;
     router.reset();
     final pageId = page.id;
     final previous = {
@@ -1725,14 +1765,25 @@ class _EditorScreenState extends State<EditorScreen>
     }
     paneSize = currentPaneSize;
     viewSize = constraints.biggest;
-    final visible = layout.visible(
-      Rect.fromLTWH(
-        -view.tx / view.scale,
-        -view.ty / view.scale,
-        constraints.maxWidth / view.scale,
-        constraints.maxHeight / view.scale,
-      ),
+    final viewport = Rect.fromLTWH(
+      -view.tx / view.scale,
+      -view.ty / view.scale,
+      constraints.maxWidth / view.scale,
+      constraints.maxHeight / view.scale,
     );
+    final visible = layout.visible(viewport);
+    preparePage(page);
+    for (final index in visible) {
+      final source = controller.notebook.pages[index];
+      if (index == pageIndex || pageReady(source)) continue;
+      final bounds = layout.rect(index);
+      final exposure = bounds.intersect(viewport);
+      // A sliver at an edge does not justify decoding the whole sheet.
+      if (exposure.height >= math.min(bounds.height, viewport.height) / 4 &&
+          exposure.width >= math.min(bounds.width, viewport.width) / 4) {
+        preparePage(source);
+      }
+    }
     final rasterScale = view.scale * MediaQuery.devicePixelRatioOf(context);
     return ClipRect(
       child: Listener(
@@ -1811,13 +1862,14 @@ class _EditorScreenState extends State<EditorScreen>
     final source = widget.controller.notebook.pages[index],
         bounds = layout.rect(index);
     final active = index == pageIndex;
+    final ready = pageReady(source);
     var display = source;
-    if (active && erased.isNotEmpty) {
+    if (ready && active && erased.isNotEmpty) {
       display = display.copyWith(
         strokes: display.strokes.where((s) => !erased.contains(s.id)).toList(),
       );
     }
-    if (active && movingSelection && start != null && latest != null) {
+    if (ready && active && movingSelection && start != null && latest != null) {
       final delta = latest! - start!;
       display = SelectionOperations.translate(display, selected, delta);
     }
@@ -1846,46 +1898,48 @@ class _EditorScreenState extends State<EditorScreen>
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  PaperCanvas(
-                    key: ValueKey('canvas-${source.id}'),
-                    page: display,
-                    assets: assets,
-                    externalInput: true,
-                    tool: tool,
-                    onStroke: (_) {},
-                    background: widget.pdf == null || !source.background.isPdf
-                        ? null
-                        : PdfPageBackground(
-                            key: ValueKey('${source.id}-$pdfRenderVersion'),
-                            pdf: widget.pdf!,
-                            page: source,
-                            scale: rasterScale,
-                            onError: (error) {
-                              if (mounted && source.id == page.id) {
-                                setState(() => pdfError = error);
-                              }
-                            },
-                            onRendered: () =>
-                                preloadNeighbors(visible, rasterScale),
-                          ),
-                  ),
-                  if (active)
+                  if (ready)
+                    PaperCanvas(
+                      key: ValueKey('canvas-${source.id}'),
+                      page: display,
+                      assets: assets,
+                      externalInput: true,
+                      tool: tool,
+                      onStroke: (_) {},
+                      background: widget.pdf == null || !source.background.isPdf
+                          ? null
+                          : PdfPageBackground(
+                              key: ValueKey('${source.id}-$pdfRenderVersion'),
+                              pdf: widget.pdf!,
+                              page: source,
+                              scale: rasterScale,
+                              onError: (error) {
+                                if (mounted && source.id == page.id) {
+                                  setState(() => pdfError = error);
+                                }
+                              },
+                              onRendered: () =>
+                                  preloadNeighbors(visible, rasterScale),
+                            ),
+                    ),
+                  if (ready && active)
                     RepaintBoundary(
                       child: CustomPaint(
                         painter: ShapePreviewPainter(shapePreview, ink: draft),
                       ),
                     ),
-                  if (active && ruler && !reading)
+                  if (ready && active && ruler && !reading)
                     CustomPaint(
                       painter: RulerPainter(
                         angle: rulerAngle,
                         scale: view.scale,
                       ),
                     ),
-                  CustomPaint(
-                    painter: CommentPinsPainter(source.comments, view.scale),
-                  ),
-                  if (active)
+                  if (ready)
+                    CustomPaint(
+                      painter: CommentPinsPainter(source.comments, view.scale),
+                    ),
+                  if (ready && active)
                     CustomPaint(
                       painter: _SelectionPainter(
                         display,
@@ -1939,7 +1993,7 @@ class _EditorScreenState extends State<EditorScreen>
   }
 
   void placeComment() {
-    if (reading) return;
+    if (reading || !pageReady(page)) return;
     router.reset();
     setState(() => placingComment = true);
   }
@@ -2012,6 +2066,16 @@ class _EditorScreenState extends State<EditorScreen>
         selected = {};
         pdfError = null;
       });
+    }
+    if (!pageReady(page)) {
+      final input = sample(event);
+      if (reading ||
+          input.device == InputDevice.touch ||
+          (input.device == InputDevice.mouse &&
+              event.buttons == kMiddleMouseButton)) {
+        router.down(input);
+      }
+      return;
     }
     final bounds = layout.rect(pageIndex);
     final position = math.Point(
@@ -2171,6 +2235,7 @@ class _EditorScreenState extends State<EditorScreen>
       if (index < 0 ||
           index >= pages.length ||
           visible.contains(index) ||
+          !pageReady(pages[index]) ||
           !pages[index].background.isPdf) {
         continue;
       }
@@ -2355,7 +2420,10 @@ class _EditorScreenState extends State<EditorScreen>
     super.dispose();
   }
 
-  Widget buildToolbar({bool fallback = false}) => EditorToolbar(
+  Widget buildToolbar({
+    bool fallback = false,
+    required bool sheetReady,
+  }) => EditorToolbar(
     layout: fallback
         ? ToolbarLayout.defaults().copyWith(
             visible: {
@@ -2371,13 +2439,15 @@ class _EditorScreenState extends State<EditorScreen>
           )
         : toolbarLayout,
     onShortcut: {
-      ToolbarAction.text: () => insertText(),
-      ToolbarAction.image: assets == null ? null : insertImage,
-      ToolbarAction.latex: assets == null ? null : () => insertLatex(),
-      ToolbarAction.link: insertLink,
-      ToolbarAction.elements: root == null ? null : insertElement,
+      ToolbarAction.text: sheetReady ? () => insertText() : null,
+      ToolbarAction.image: sheetReady && assets != null ? insertImage : null,
+      ToolbarAction.latex: sheetReady && assets != null
+          ? () => insertLatex()
+          : null,
+      ToolbarAction.link: sheetReady ? insertLink : null,
+      ToolbarAction.elements: sheetReady && root != null ? insertElement : null,
       ToolbarAction.templates:
-          root == null || widget.pdf == null || assets == null
+          !sheetReady || root == null || widget.pdf == null || assets == null
           ? null
           : templates,
       ToolbarAction.search: widget.pdf == null || assets == null
@@ -2392,7 +2462,7 @@ class _EditorScreenState extends State<EditorScreen>
     onTool: chooseTool,
     onPenSettings: penSettings,
     onOpenMenu: router.reset,
-    onMoreTools: fallback ? null : moreTools,
+    onMoreTools: fallback || !sheetReady ? null : moreTools,
     moreToolsActive: shape != null || ruler || selected.isNotEmpty,
     argb: argb,
     onColor: changeInkColor,
@@ -2414,7 +2484,7 @@ class _EditorScreenState extends State<EditorScreen>
       router.reset();
       editPage((p) => p.copyWith(background: PageBackground.paper(pattern)));
     },
-    onApplyPattern: currentPage.background.pattern == null
+    onApplyPattern: !sheetReady || currentPage.background.pattern == null
         ? null
         : () {
             router.reset();
@@ -2529,7 +2599,10 @@ class _EditorScreenState extends State<EditorScreen>
                             ),
                             SizedBox(
                               height: 56,
-                              child: buildToolbar(fallback: true),
+                              child: buildToolbar(
+                                fallback: true,
+                                sheetReady: pageReady(page),
+                              ),
                             ),
                             const SizedBox(height: 12),
                             Wrap(
@@ -2686,6 +2759,7 @@ class _EditorScreenState extends State<EditorScreen>
         );
       }
       final currentPage = page;
+      final sheetReady = pageReady(currentPage);
       return CallbackShortcuts(
         bindings: widget.active
             ? {
@@ -2870,7 +2944,7 @@ class _EditorScreenState extends State<EditorScreen>
               body: Column(
                 children: [
                   if (!reading && toolbarLayout.dock == ToolbarDock.top)
-                    buildToolbar(),
+                    buildToolbar(sheetReady: sheetReady),
                   Expanded(
                     child: Stack(
                       children: [
@@ -2878,10 +2952,12 @@ class _EditorScreenState extends State<EditorScreen>
                           children: [
                             if (!reading &&
                                 toolbarLayout.dock == ToolbarDock.left)
-                              buildToolbar(),
+                              buildToolbar(sheetReady: sheetReady),
                             if (showPages)
                               PagePanel(
-                                pages: controller.notebook.pages,
+                                pages: controller.notebook.pages
+                                    .map(thumbnailPage)
+                                    .toList(),
                                 currentPage: pageIndex,
                                 onPage: changePage,
                                 onAdd: reading ? null : addPage,
@@ -2892,8 +2968,8 @@ class _EditorScreenState extends State<EditorScreen>
                             ),
                             if (!reading &&
                                 toolbarLayout.dock == ToolbarDock.right)
-                              buildToolbar(),
-                            if (showComments)
+                              buildToolbar(sheetReady: sheetReady),
+                            if (showComments && sheetReady)
                               CommentsPanel(
                                 comments: currentPage.comments,
                                 onOpen: openComment,
@@ -2922,6 +2998,28 @@ class _EditorScreenState extends State<EditorScreen>
                             children: [
                               if (exporting)
                                 const LinearProgressIndicator(minHeight: 2),
+                              if (!sheetReady)
+                                if (failedPages.contains(currentPage))
+                                  MaterialBanner(
+                                    content: const Text(
+                                      'No se pudo cargar la hoja.',
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => setState(
+                                          () => failedPages.remove(currentPage),
+                                        ),
+                                        child: const Text('Reintentar'),
+                                      ),
+                                    ],
+                                  )
+                                else
+                                  const IgnorePointer(
+                                    child: Padding(
+                                      padding: EdgeInsets.all(6),
+                                      child: Text('Cargando hoja…'),
+                                    ),
+                                  ),
                               if (placingComment)
                                 MaterialBanner(
                                   content: const Text(
