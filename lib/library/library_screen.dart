@@ -15,6 +15,7 @@ import '../document/folders.dart';
 import 'folder_dialog.dart';
 import '../document/asset_store.dart';
 import '../workspace/document_workspace.dart';
+import '../workspace/workspace_opening_screen.dart';
 import '../search/notebook_search_dialog.dart';
 import '../search/search_service.dart';
 import '../editor/paper_canvas.dart';
@@ -30,7 +31,7 @@ import '../account/cloud_panel.dart';
 
 const _notebookTileMaxWidth = 360.0;
 const _notebookPreviewSidePadding = 40.0;
-final _workspaceSlide = Tween(begin: const Offset(.04, 0), end: Offset.zero);
+const _workspaceTransitionDuration = Duration(milliseconds: 120);
 
 AnimationStyle? _libraryMenuAnimation(BuildContext context) =>
     Theme.of(context).platform == TargetPlatform.android
@@ -64,6 +65,24 @@ class _LibraryScreenState extends State<LibraryScreen> {
     _openingNotebook = true;
     final services = widget.services;
     try {
+      if (Theme.of(context).platform == TargetPlatform.android) {
+        final cloud = widget.cloud;
+        await _pushWorkspace(
+          (_) => WorkspaceOpeningScreen(
+            services: services,
+            cloud: cloud,
+            title: entry.title,
+            initialPageIndex: initialPageIndex,
+            loadEntry: () async {
+              final document = await services.library.loadEntry(entry);
+              return mounted && identical(services, widget.services)
+                  ? document
+                  : null;
+            },
+          ),
+        );
+        return;
+      }
       final document = await services.library.loadEntry(entry);
       if (!mounted || !identical(services, widget.services)) return;
       if (document == null) {
@@ -78,38 +97,39 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
-  Future<void> _open(DocumentEntry entry, {int initialPageIndex = 0}) async {
+  Future<void> _open(DocumentEntry entry, {int initialPageIndex = 0}) {
     final services = widget.services;
-    Widget workspace(BuildContext _) => WorkspaceScreen(
-      services: services,
-      initialEntry: entry,
-      initialPageIndex: initialPageIndex,
-      cloud: widget.cloud,
+    final cloud = widget.cloud;
+    return _pushWorkspace(
+      (_) => WorkspaceScreen(
+        services: services,
+        initialEntry: entry,
+        initialPageIndex: initialPageIndex,
+        cloud: cloud,
+      ),
     );
+  }
 
+  Future<void> _pushWorkspace(WidgetBuilder workspace) async {
+    final services = widget.services;
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final duration = reduceMotion
+        ? Duration.zero
+        : _workspaceTransitionDuration;
     CurvedAnimation? workspaceMotion;
     final route = Theme.of(context).platform == TargetPlatform.android
         ? PageRouteBuilder<void>(
             pageBuilder: (context, _, _) => workspace(context),
-            transitionDuration: reduceMotion
-                ? Duration.zero
-                : const Duration(milliseconds: 220),
-            reverseTransitionDuration: reduceMotion
-                ? Duration.zero
-                : const Duration(milliseconds: 185),
-            transitionsBuilder: (context, animation, _, child) {
+            transitionDuration: duration,
+            reverseTransitionDuration: duration,
+            transitionsBuilder: (_, animation, _, child) {
               if (reduceMotion) return child;
               final motion = workspaceMotion ??= CurvedAnimation(
                 parent: animation,
                 curve: Curves.easeOutCubic,
                 reverseCurve: Curves.easeOutCubic.flipped,
               );
-              return SlideTransition(
-                position: motion.drive(_workspaceSlide),
-                textDirection: Directionality.of(context),
-                child: child,
-              );
+              return FadeTransition(opacity: motion, child: child);
             },
           )
         : MaterialPageRoute<void>(builder: workspace);

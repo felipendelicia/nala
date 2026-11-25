@@ -7,12 +7,69 @@ import 'package:apuntes/editor/editor_toolbar.dart';
 import 'package:apuntes/editor/paper_canvas.dart';
 import 'package:apuntes/editor/draft_ink.dart';
 import 'package:apuntes/editor/stroke_geometry.dart';
+import 'package:apuntes/editor/zoom_controls.dart';
 import 'package:apuntes/document/notebook.dart';
 import 'package:apuntes/document/notebook_codec.dart';
 import '../support/fixtures.dart';
 import '../support/memory_repository.dart';
 
 void main() {
+  testWidgets('el primer ajuste actualiza el zoom sin reconstruir el lienzo', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = EditorController(
+      notebook: fixtureNotebook(),
+      repository: MemoryRepository(),
+      deviceId: 'tablet',
+      newId: () => 'stroke-revision',
+      now: () => DateTime.utc(2026),
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(home: EditorScreen(controller: controller)),
+    );
+    final canvas = find.byType(PaperCanvas),
+        toolbar = find.byType(EditorToolbar);
+    final originalCanvas = tester.widget<PaperCanvas>(canvas);
+    final originalToolbar = tester.widget<EditorToolbar>(toolbar);
+    final pageBox = tester.renderObject<RenderBox>(canvas);
+    final expectedScale =
+        (pageBox.localToGlobal(const Offset(100, 0)).dx -
+            pageBox.localToGlobal(Offset.zero).dx) /
+        100;
+    expect(expectedScale, lessThan(1));
+
+    const position = Offset(120, 140);
+    final pen = await tester.startGesture(
+      pageBox.localToGlobal(position),
+      kind: PointerDeviceKind.stylus,
+    );
+    await tester.pump();
+    double zoomScale() =>
+        tester.widget<ZoomControls>(find.byType(ZoomControls)).scale;
+    expect(zoomScale(), closeTo(expectedScale, .001));
+    expect(tester.widget<PaperCanvas>(canvas), same(originalCanvas));
+    expect(tester.widget<EditorToolbar>(toolbar), same(originalToolbar));
+
+    await pen.moveBy(const Offset(15, 12));
+    await pen.up();
+    await tester.pumpAndSettle();
+    final strokes = controller.notebook.pages.single.strokes;
+    expect(strokes, hasLength(2));
+    expect(strokes.last.points.first.x, closeTo(position.dx, .001));
+    expect(strokes.last.points.first.y, closeTo(position.dy, .001));
+
+    await tester.tap(find.byTooltip('Acercar'));
+    await tester.pumpAndSettle();
+    expect(zoomScale(), greaterThan(expectedScale));
+    await tester.tap(find.byTooltip('Ajustar hoja'));
+    await tester.pumpAndSettle();
+    expect(zoomScale(), closeTo(expectedScale, .001));
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets(
     'abrir paneles durante un trazo cancela el gesto antes de mover la hoja',
     (tester) async {
@@ -33,7 +90,6 @@ void main() {
       final pen = await tester.startGesture(
         tester.getCenter(find.byType(PaperCanvas)),
         kind: PointerDeviceKind.stylus,
-        pointer: 4,
       );
       await pen.moveBy(const Offset(10, 5));
       await tester.tap(find.byTooltip('Páginas'));

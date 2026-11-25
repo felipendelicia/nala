@@ -429,6 +429,7 @@ class _EditorScreenState extends State<EditorScreen>
 
   final editorFocus = FocusNode(debugLabel: 'Notebook editor');
   final view = paper.Viewport();
+  final zoomFitChanges = ValueNotifier(0);
   Size? viewSize, paneSize;
   String? fittedPage;
   final draft = DraftInk();
@@ -1699,6 +1700,7 @@ class _EditorScreenState extends State<EditorScreen>
 
   Widget buildDocument(BuildContext context, BoxConstraints constraints) {
     if (viewSize == null || fittedPage == null) {
+      final previousScale = view.scale;
       view.fit(
         constraints.maxWidth,
         constraints.maxHeight,
@@ -1709,9 +1711,12 @@ class _EditorScreenState extends State<EditorScreen>
       view.tx -= bounds.left * view.scale;
       view.ty -= bounds.top * view.scale;
       fittedPage = page.id;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && !disposing) setState(() {});
-      });
+      if (view.scale != previousScale) {
+        // The canvas already uses the fitted viewport in this layout pass.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && !disposing) zoomFitChanges.value++;
+        });
+      }
     }
     final currentPaneSize = MediaQuery.sizeOf(context);
     if (viewSize != null && paneSize != null && paneSize != currentPaneSize) {
@@ -2340,6 +2345,7 @@ class _EditorScreenState extends State<EditorScreen>
     router.reset();
     draft.dispose();
     shapePreview.dispose();
+    zoomFitChanges.dispose();
     favorites?.dispose();
     toolbarPreferences?.removeListener(toolbarChanged);
     if (ownsToolbarPreferences) toolbarPreferences?.dispose();
@@ -3060,60 +3066,63 @@ class _EditorScreenState extends State<EditorScreen>
                                   context,
                                 ).colorScheme.outlineVariant,
                               ),
-                              ZoomControls(
-                                onOpenMenu: router.reset,
-                                scale: view.scale,
-                                locked: view.zoomLocked,
-                                horizontalLocked: view.horizontalLocked,
-                                onHorizontalLock: () {
-                                  router.reset();
-                                  setState(
-                                    () => view.horizontalLocked =
-                                        !view.horizontalLocked,
-                                  );
-                                },
-                                onZoom: zoom,
-                                onScale: (value) {
-                                  if (viewSize != null && !router.isWriting) {
+                              ListenableBuilder(
+                                listenable: zoomFitChanges,
+                                builder: (context, _) => ZoomControls(
+                                  onOpenMenu: router.reset,
+                                  scale: view.scale,
+                                  locked: view.zoomLocked,
+                                  horizontalLocked: view.horizontalLocked,
+                                  onHorizontalLock: () {
+                                    router.reset();
                                     setState(
-                                      () => view.setScale(
-                                        value,
-                                        math.Point(
-                                          viewSize!.width / 2,
-                                          viewSize!.height / 2,
-                                        ),
-                                      ),
+                                      () => view.horizontalLocked =
+                                          !view.horizontalLocked,
                                     );
-                                  }
-                                },
-                                onFit: () {
-                                  router.reset();
-                                  setState(() => fittedPage = null);
-                                },
-                                onFitWidth: () {
-                                  if (viewSize != null && !router.isWriting) {
-                                    setState(() {
-                                      view.fitWidth(
-                                        viewSize!.width,
-                                        viewSize!.height,
-                                        page.width,
-                                        page.height,
+                                  },
+                                  onZoom: zoom,
+                                  onScale: (value) {
+                                    if (viewSize != null && !router.isWriting) {
+                                      setState(
+                                        () => view.setScale(
+                                          value,
+                                          math.Point(
+                                            viewSize!.width / 2,
+                                            viewSize!.height / 2,
+                                          ),
+                                        ),
                                       );
-                                      view.tx -=
-                                          layout.rect(pageIndex).left *
-                                          view.scale;
-                                      view.ty -=
-                                          layout.rect(pageIndex).top *
-                                          view.scale;
-                                    });
-                                  }
-                                },
-                                onLock: () {
-                                  router.reset();
-                                  setState(
-                                    () => view.zoomLocked = !view.zoomLocked,
-                                  );
-                                },
+                                    }
+                                  },
+                                  onFit: () {
+                                    router.reset();
+                                    setState(() => fittedPage = null);
+                                  },
+                                  onFitWidth: () {
+                                    if (viewSize != null && !router.isWriting) {
+                                      setState(() {
+                                        view.fitWidth(
+                                          viewSize!.width,
+                                          viewSize!.height,
+                                          page.width,
+                                          page.height,
+                                        );
+                                        view.tx -=
+                                            layout.rect(pageIndex).left *
+                                            view.scale;
+                                        view.ty -=
+                                            layout.rect(pageIndex).top *
+                                            view.scale;
+                                      });
+                                    }
+                                  },
+                                  onLock: () {
+                                    router.reset();
+                                    setState(
+                                      () => view.zoomLocked = !view.zoomLocked,
+                                    );
+                                  },
+                                ),
                               ),
                             ],
                           ),
