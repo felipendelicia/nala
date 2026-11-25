@@ -103,8 +103,31 @@ class StrokeGeometry {
 
   static final Expando<StrokeOutline> _cache = Expando();
   static final Expando<Path> _canvasPaths = Expando();
+  static Path? cachedCanvasPath(InkStroke stroke) => _canvasPaths[stroke];
   static Path canvasPath(InkStroke stroke) =>
-      _canvasPaths[stroke] ??= outline(stroke).path;
+      _canvasPaths[stroke] ??= _cache[stroke]?.path ?? _buildCanvasPath(stroke);
+
+  static Path _buildCanvasPath(InkStroke stroke) {
+    final path = Path();
+    Path? segments;
+    InkPoint? previous;
+    var previousRadius = 0.0;
+    for (final point in stroke.points) {
+      final radius = strokeWidth(stroke, point.pressure) / 2;
+      path.addOval(
+        Rect.fromCircle(center: Offset(point.x, point.y), radius: radius),
+      );
+      if (previous != null) {
+        final corners = segmentCorners(previous, point, previousRadius, radius);
+        if (corners != null) (segments ??= Path()).addPolygon(corners, true);
+      }
+      previous = point;
+      previousRadius = radius;
+    }
+    // Preserve the outline's contour order without allocating its SVG geometry.
+    if (segments != null) path.addPath(segments, Offset.zero);
+    return path;
+  }
 
   /// Transfer completed live geometry; it is never mutated after pointer-up.
   static void rememberCanvasPath(InkStroke stroke, Path path) =>

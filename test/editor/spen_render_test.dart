@@ -33,6 +33,61 @@ class _TileCounter implements Canvas {
 }
 
 void main() {
+  test(
+    'el trazado cargado en frío coincide con el contorno de exportación',
+    () async {
+      Future<List<int>> pixels(Path path) async {
+        final recorder = ui.PictureRecorder();
+        Canvas(
+          recorder,
+        ).drawPath(path, Paint()..color = const Color(0x55202020));
+        final picture = recorder.endRecording();
+        final image = await picture.toImage(100, 100);
+        try {
+          final bytes = (await image.toByteData())!;
+          return bytes.buffer.asUint8List(
+            bytes.offsetInBytes,
+            bytes.lengthInBytes,
+          );
+        } finally {
+          image.dispose();
+          picture.dispose();
+        }
+      }
+
+      for (final curve in PressureCurve.values) {
+        final stroke = InkStroke(
+          id: curve.name,
+          tool: curve == PressureCurve.uniform
+              ? InkTool.highlighter
+              : InkTool.pen,
+          argb: 0xff202020,
+          width: 7.2,
+          pressureCurve: curve,
+          sensitivity: .8,
+          points: const [
+            InkPoint(x: 12.2, y: 12.8, pressure: .1),
+            InkPoint(x: 80.5, y: 82.4, pressure: .9),
+            InkPoint(x: 80.5, y: 82.4, pressure: .4),
+            InkPoint(x: 14.1, y: 81.9, pressure: 1),
+            InkPoint(x: 81.9, y: 13.1, pressure: 0),
+          ],
+        );
+        expect(StrokeGeometry.cachedCanvasPath(stroke), isNull);
+        final canvas = StrokeGeometry.canvasPath(stroke);
+        final reference = StrokeGeometry.outline(stroke).path;
+        expect(canvas.getBounds(), reference.getBounds());
+        expect(
+          await pixels(canvas),
+          await pixels(reference),
+          reason: curve.name,
+        );
+        expect(StrokeGeometry.cachedCanvasPath(stroke), same(canvas));
+        expect(StrokeGeometry.canvasPath(stroke), same(canvas));
+      }
+    },
+  );
+
   test('la tinta activa no rasteriza los huecos de un trazo diagonal', () {
     final ink = DraftInk();
     addTearDown(ink.dispose);

@@ -134,6 +134,10 @@ class LibraryController extends ChangeNotifier {
   final NotebookRepository repository;
   final String deviceId;
   List<CatalogEntry> entries = [];
+  final _visiblePreviews = <(String, String), WeakReference<NotebookPage>>{};
+
+  NotebookPage? visiblePreview(CatalogEntry entry) =>
+      _visiblePreviews[(entry.documentId, entry.headId)]?.target;
 
   Future<DocumentEntry?> loadEntry(CatalogEntry entry) async {
     final notebook = await repository.load(
@@ -144,10 +148,24 @@ class LibraryController extends ChangeNotifier {
   }
 
   Future<NotebookPage?> loadPreview(CatalogEntry entry) async {
+    final NotebookPage? page;
     if (repository case final NotebookCatalogRepository catalog) {
-      return catalog.loadPreview(entry.documentId, headId: entry.headId);
+      page = await catalog.loadPreview(entry.documentId, headId: entry.headId);
+    } else {
+      page = (await loadEntry(entry))?.notebook.pages.first;
     }
-    return (await loadEntry(entry))?.notebook.pages.first;
+    if (page != null &&
+        page.background.pattern != null &&
+        !page.objects.any((object) => object.assetId != null)) {
+      // The visible tile holds the page. Leave it collectible with the tile.
+      final key = (entry.documentId, entry.headId);
+      _visiblePreviews.remove(key);
+      _visiblePreviews[key] = WeakReference(page);
+      if (_visiblePreviews.length > 12) {
+        _visiblePreviews.remove(_visiblePreviews.keys.first);
+      }
+    }
+    return page;
   }
 
   Future<void> refresh() async {

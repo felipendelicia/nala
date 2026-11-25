@@ -5,10 +5,13 @@ import 'package:apuntes/document/notebook.dart';
 import 'package:apuntes/document/notebook_repository.dart';
 import 'package:apuntes/document/revision.dart';
 import 'package:apuntes/editor/editor_screen.dart';
+import 'package:apuntes/editor/paper_canvas.dart';
+import 'package:apuntes/editor/stroke_geometry.dart';
 import 'package:apuntes/library/library_controller.dart';
 import 'package:apuntes/library/library_screen.dart';
 import 'package:apuntes/ui/app_theme.dart';
 import 'package:apuntes/workspace/document_workspace.dart';
+import 'package:apuntes/workspace/workspace_opening_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -188,15 +191,28 @@ void main() {
     final openingRoute = ModalRoute.of(tester.element(_openingHeader));
     expect(find.byTooltip('Volver a mis apuntes'), findsOneWidget);
     expect(find.byType(EditorScreen), findsNothing);
+    final loadingCanvas = find.descendant(
+      of: find.byType(WorkspaceOpeningScreen),
+      matching: find.byType(PaperCanvas),
+    );
+    expect(loadingCanvas, findsOneWidget);
+    expect(loadingCanvas.hitTestable(), findsNothing);
+    final displayed = tester.widget<PaperCanvas>(loadingCanvas).page;
+    final previewPath = StrokeGeometry.canvasPath(displayed.strokes.single);
     expect(find.text('Cargando apunte…'), findsNothing);
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('Cargando apunte…'), findsNothing);
     await tester.pump(const Duration(milliseconds: 60));
     expect(find.text('Cargando apunte…'), findsOneWidget);
 
-    load.complete(fixtureNotebook());
+    final reread = fixtureNotebook();
+    load.complete(reread);
     await tester.pump();
     expect(find.byType(EditorScreen), findsOneWidget);
+    expect(
+      StrokeGeometry.canvasPath(reread.pages.first.strokes.single),
+      same(previewPath),
+    );
     expect(
       ModalRoute.of(tester.element(find.byType(WorkspaceScreen))),
       same(openingRoute),

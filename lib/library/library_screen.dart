@@ -73,6 +73,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
             cloud: cloud,
             title: entry.title,
             initialPageIndex: initialPageIndex,
+            preview: initialPageIndex == 0
+                ? services.library.visiblePreview(entry)
+                : null,
             loadEntry: () async {
               final document = await services.library.loadEntry(entry);
               return mounted && identical(services, widget.services)

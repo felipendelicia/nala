@@ -4,7 +4,10 @@ import 'package:flutter/material.dart';
 
 import '../account/cloud_controller.dart';
 import '../bootstrap.dart';
+import '../document/notebook.dart';
 import '../document/revision.dart';
+import '../editor/paper_canvas.dart';
+import '../editor/stroke_geometry.dart';
 import 'document_workspace.dart';
 
 /// Respond to navigation while the exact revision is loaded for the editor.
@@ -15,6 +18,7 @@ class WorkspaceOpeningScreen extends StatefulWidget {
     required this.title,
     required this.loadEntry,
     required this.initialPageIndex,
+    this.preview,
     this.cloud,
   });
 
@@ -22,6 +26,7 @@ class WorkspaceOpeningScreen extends StatefulWidget {
   final String title;
   final Future<DocumentEntry?> Function() loadEntry;
   final int initialPageIndex;
+  final NotebookPage? preview;
   final CloudController? cloud;
 
   @override
@@ -53,6 +58,10 @@ class _WorkspaceOpeningScreenState extends State<WorkspaceOpeningScreen> {
     }
     _hint.cancel();
     if (!mounted || _popped) return;
+    final preview = widget.preview;
+    if (entry != null && preview != null) {
+      _reusePreviewInk(preview, entry.notebook.pages.first);
+    }
     setState(() {
       _entry = entry;
       _loaded = true;
@@ -68,6 +77,7 @@ class _WorkspaceOpeningScreenState extends State<WorkspaceOpeningScreen> {
   @override
   Widget build(BuildContext context) {
     final entry = _entry;
+    final preview = _loaded ? null : widget.preview;
     final message = _loaded
         ? 'El apunte ya no está disponible.'
         : _showHint
@@ -107,19 +117,78 @@ class _WorkspaceOpeningScreenState extends State<WorkspaceOpeningScreen> {
                 color: Theme.of(context).brightness == Brightness.dark
                     ? Colors.black
                     : const Color(0xffeeeeee),
-                child: Center(
-                  child: message == null
-                      ? null
-                      : Padding(
-                          padding: const EdgeInsets.all(24),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (preview != null)
+                      ExcludeSemantics(
+                        child: IgnorePointer(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: FittedBox(
+                              child: PaperCanvas(
+                                page: preview,
+                                tool: EditorTool.pen,
+                                externalInput: true,
+                                onStroke: (_) {},
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (message != null)
+                      Align(
+                        alignment: preview == null
+                            ? Alignment.center
+                            : Alignment.bottomCenter,
+                        child: Padding(
+                          padding: EdgeInsets.all(preview == null ? 24 : 6),
                           child: Semantics(
                             liveRegion: true,
                             child: Text(message, textAlign: TextAlign.center),
                           ),
                         ),
+                      ),
+                  ],
                 ),
               ),
             ),
     );
   }
+}
+
+void _reusePreviewInk(NotebookPage preview, NotebookPage loaded) {
+  if (preview.id != loaded.id ||
+      preview.strokes.length != loaded.strokes.length) {
+    return;
+  }
+  for (var index = 0; index < preview.strokes.length; index++) {
+    final previous = preview.strokes[index];
+    final path = StrokeGeometry.cachedCanvasPath(previous);
+    final current = loaded.strokes[index];
+    if (path != null && _sameInkGeometry(previous, current)) {
+      StrokeGeometry.rememberCanvasPath(current, path);
+    }
+  }
+}
+
+bool _sameInkGeometry(InkStroke a, InkStroke b) {
+  if (a.id != b.id ||
+      a.tool != b.tool ||
+      a.width != b.width ||
+      a.pressureCurve != b.pressureCurve ||
+      a.sensitivity != b.sensitivity ||
+      a.points.length != b.points.length) {
+    return false;
+  }
+  for (var index = 0; index < a.points.length; index++) {
+    final first = a.points[index];
+    final second = b.points[index];
+    if (first.x != second.x ||
+        first.y != second.y ||
+        first.pressure != second.pressure) {
+      return false;
+    }
+  }
+  return true;
 }
