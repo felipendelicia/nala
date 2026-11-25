@@ -1863,6 +1863,15 @@ class _EditorScreenState extends State<EditorScreen>
         bounds = layout.rect(index);
     final active = index == pageIndex;
     final ready = pageReady(source);
+    final lasso =
+        ready &&
+            active &&
+            gestureTool == EditorTool.selection &&
+            !movingSelection &&
+            start != null &&
+            latest != null
+        ? Rect.fromPoints(start!, latest!)
+        : null;
     var display = source;
     if (ready && active && erased.isNotEmpty) {
       display = display.copyWith(
@@ -1939,17 +1948,12 @@ class _EditorScreenState extends State<EditorScreen>
                     CustomPaint(
                       painter: CommentPinsPainter(source.comments, view.scale),
                     ),
-                  if (ready && active)
+                  if (ready && active && (selected.isNotEmpty || lasso != null))
                     CustomPaint(
                       painter: _SelectionPainter(
                         display,
                         selected,
-                        gestureTool == EditorTool.selection &&
-                                !movingSelection &&
-                                start != null &&
-                                latest != null
-                            ? Rect.fromPoints(start!, latest!)
-                            : null,
+                        lasso,
                         view.scale,
                       ),
                     ),

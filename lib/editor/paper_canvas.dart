@@ -214,7 +214,14 @@ class _PaperCanvasState extends State<PaperCanvas> {
               ),
             ),
           RepaintBoundary(
-            child: CustomPaint(painter: InkPainter(widget.page.strokes)),
+            child: CustomPaint(
+              painter: InkPainter(
+                widget.page.strokes,
+                thumbnail:
+                    widget.previewRasterScale != null &&
+                    hasDenseInk(widget.page.strokes),
+              ),
+            ),
           ),
           if (!widget.externalInput)
             RepaintBoundary(child: CustomPaint(painter: DraftInkPainter(ink))),
@@ -224,23 +231,89 @@ class _PaperCanvasState extends State<PaperCanvas> {
   );
 }
 
+bool hasDenseInk(List<InkStroke> strokes) {
+  if (strokes.length > 64) return true;
+  var points = 0;
+  for (final stroke in strokes) {
+    points += stroke.points.length;
+    if (points > 2500) return true;
+  }
+  return false;
+}
+
 class InkPainter extends CustomPainter {
-  InkPainter(this.strokes);
+  InkPainter(this.strokes, {this.thumbnail = false});
   final List<InkStroke> strokes;
+  final bool thumbnail;
+  static final _thumbnailGeometry = Expando<({Path? path, double width})>();
+
+  static ({Path? path, double width}) _buildThumbnailGeometry(
+    InkStroke stroke,
+  ) {
+    final points = stroke.points;
+    final first = points.first;
+    var previous = first;
+    Path? path;
+    // A centerline with fewer samples is enough at library card sizes. Keep
+    // the full pressure outline for the editor and exports.
+    for (var index = 1; index < points.length; index++) {
+      final next = points[index];
+      final dx = next.x - previous.x;
+      final dy = next.y - previous.y;
+      final distanceSquared = dx * dx + dy * dy;
+      if (distanceSquared < 4 &&
+          (distanceSquared == 0 || index != points.length - 1)) {
+        continue;
+      }
+      (path ??= Path()..moveTo(first.x, first.y)).lineTo(next.x, next.y);
+      previous = next;
+    }
+    return (
+      path: path,
+      width: StrokeGeometry.strokeWidth(
+        stroke,
+        points[points.length ~/ 2].pressure,
+      ),
+    );
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
+    if (strokes.isEmpty) return;
+    final paint = Paint();
     for (final stroke in strokes) {
       final alpha = stroke.tool == InkTool.highlighter
           ? 0x55
           : ((stroke.argb >> 24) & 0xff);
-      canvas.drawPath(
-        StrokeGeometry.canvasPath(stroke),
-        Paint()..color = Color(stroke.argb).withAlpha(alpha),
-      );
+      paint.color = Color(stroke.argb).withAlpha(alpha);
+      if (!thumbnail) {
+        canvas.drawPath(StrokeGeometry.canvasPath(stroke), paint);
+      } else if (stroke.points.isNotEmpty) {
+        final geometry = _thumbnailGeometry[stroke] ??= _buildThumbnailGeometry(
+          stroke,
+        );
+        if (geometry.path case final path?) {
+          paint
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = geometry.width
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round;
+          canvas.drawPath(path, paint);
+        } else {
+          final point = stroke.points.first;
+          paint.style = PaintingStyle.fill;
+          canvas.drawCircle(
+            Offset(point.x, point.y),
+            geometry.width / 2,
+            paint,
+          );
+        }
+      }
     }
   }
 
   @override
   bool shouldRepaint(InkPainter oldDelegate) =>
+      thumbnail != oldDelegate.thumbnail ||
       !identical(strokes, oldDelegate.strokes);
 }

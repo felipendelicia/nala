@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
@@ -356,6 +357,113 @@ void main() {
         throwsStateError,
       );
       expect((await repo.pending()).single.id, 'edit');
+    },
+  );
+  test(
+    'conserva el contenido y orden del JSON de una revisión anterior',
+    () async {
+      final updatedAt = DateTime.utc(2025, 7, 9, 1, 2, 3, 4, 5);
+      final book = fixtureNotebook().copyWith(
+        title: 'Límites “manuales” 🧮',
+        folderId: 'archivo',
+        updatedAt: updatedAt,
+        pages: [
+          for (var index = 0; index < 12; index++)
+            NotebookPage(
+              id: 'hoja-$index',
+              width: 595.25 + index,
+              height: 842,
+              background: const PageBackground.paper(PaperPattern.grid),
+              recognizedText: 'Hoja $index: «límites» y /\\',
+            ),
+        ],
+      );
+      final original = Revision(
+        id: 'original',
+        deviceId: 'pc',
+        parentId: null,
+        createdAt: updatedAt,
+        notebook: book,
+      );
+      final sql = sqlite3.open(getPath());
+      try {
+        sql.execute(
+          'INSERT INTO revisions (id, document_id, parent_id, payload, frozen) VALUES (?, ?, ?, ?, 1)',
+          [
+            original.id,
+            book.id,
+            null,
+            const JsonEncoder.withIndent(
+              '  ',
+            ).convert(jsonDecode(NotebookCodec.encodeRevision(original))),
+          ],
+        );
+      } finally {
+        sql.close();
+      }
+
+      final preview =
+          (await repo.loadPreview(book.id, headId: original.id))!
+              as DeferredNotebookPage;
+      final opened = (await repo.loadForEditing(
+        book.id,
+        headId: original.id,
+        initialPageIndex: 10,
+      ))!;
+      expect(opened.title, book.title);
+      expect(opened.folderId, 'archivo');
+      expect(opened.updatedAt, updatedAt);
+      final pages = opened.pages.cast<DeferredNotebookPage>();
+      expect(
+        pages.map((page) => page.id),
+        List.generate(12, (index) => 'hoja-$index'),
+      );
+      expect(pages.where((page) => page.isReady).single.id, 'hoja-10');
+      expect(pages.first.encoded, preview.encoded);
+      expect(NotebookCodec.encode(opened), NotebookCodec.encode(book));
+
+      await repo.acceptRemote(revision('newer', original.id));
+      expect(await repo.loadPreview(book.id, headId: original.id), isNull);
+      expect(
+        (await repo.loadForEditing(
+          book.id,
+          headId: original.id,
+          initialPageIndex: 0,
+        ))!.title,
+        book.title,
+      );
+      await repo.acceptRemote(revision(Revision.deletionId('legacy'), 'newer'));
+      expect(
+        await repo.loadForEditing(
+          book.id,
+          headId: original.id,
+          initialPageIndex: 0,
+        ),
+        isNull,
+      );
+    },
+  );
+  test(
+    'rechaza una hoja serializada como texto en el catálogo editable',
+    () async {
+      await repo.acceptRemote(revision('head', null));
+      final sql = sqlite3.open(getPath());
+      try {
+        sql.execute(
+          'UPDATE revisions SET payload=json_set(payload, ?, ?) WHERE id=?',
+          [
+            r'$.notebook.pages[0]',
+            jsonEncode(fixtureNotebook().pages.single.toJson()),
+            'head',
+          ],
+        );
+      } finally {
+        sql.close();
+      }
+      await expectLater(
+        repo.loadForEditing('doc-1', headId: 'head', initialPageIndex: 0),
+        throwsStateError,
+      );
     },
   );
   test('cien guardados locales se agrupan sin perder el último', () async {

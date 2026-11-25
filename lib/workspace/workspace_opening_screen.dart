@@ -39,6 +39,7 @@ class _WorkspaceOpeningScreenState extends State<WorkspaceOpeningScreen> {
   bool _showHint = false;
   bool _popped = false;
   late final Timer _hint;
+  late final NotebookPage? _openingPreview = _lightPreview(widget.preview);
 
   @override
   void initState() {
@@ -77,7 +78,7 @@ class _WorkspaceOpeningScreenState extends State<WorkspaceOpeningScreen> {
   @override
   Widget build(BuildContext context) {
     final entry = _entry;
-    final preview = _loaded ? null : widget.preview;
+    final preview = _loaded ? null : _openingPreview;
     final message = _loaded
         ? 'El apunte ya no está disponible.'
         : _showHint
@@ -157,8 +158,17 @@ class _WorkspaceOpeningScreenState extends State<WorkspaceOpeningScreen> {
   }
 }
 
+NotebookPage? _lightPreview(NotebookPage? page) {
+  // Keep vector work on the incoming route small while it fades in.
+  if (page == null || page.objects.length > 16 || hasDenseInk(page.strokes)) {
+    return null;
+  }
+  return page;
+}
+
 void _reusePreviewInk(NotebookPage preview, NotebookPage loaded) {
   if (preview.id != loaded.id ||
+      identical(preview.strokes, loaded.strokes) ||
       preview.strokes.length != loaded.strokes.length) {
     return;
   }

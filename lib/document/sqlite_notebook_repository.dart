@@ -810,36 +810,50 @@ void _databaseWorker((SendPort, String) config) {
   });
 }
 
+// Older native SQLite builds offer the same JSON projection with text values.
+final _supportsJsonbEach = sqlite3.version.versionNumber >= 3051000;
+
 Notebook? _loadForEditing(
   Database db,
   String documentId,
   String headId,
   int initialPageIndex,
   String? preparedPagePayload,
-) => _transaction(db, write: false, () {
-  final revision = db.select(
-    r"SELECT json_remove(r.payload, '$.notebook.pages') AS header, "
-    r"json_type(r.payload, '$.notebook.pages') AS pages_type "
-    'FROM revisions r WHERE r.id=? AND r.document_id=? AND $_notDeleted',
+) {
+  const pagesPath = r'$.notebook.pages';
+  final materialized = _supportsJsonbEach ? 'MATERIALIZED ' : '';
+  final body = _supportsJsonbEach ? 'jsonb(r.payload)' : 'r.payload';
+  final iterator = _supportsJsonbEach ? 'jsonb_each' : 'json_each';
+  final pageText = _supportsJsonbEach ? 'json(p.value)' : 'p.value';
+  final rows = db.select(
+    '''WITH revision AS $materialized(
+      SELECT $body AS body FROM revisions r
+      WHERE r.id=? AND r.document_id=? AND $_notDeleted
+    )
+    SELECT -1 AS position, json_remove(body, '$pagesPath') AS encoded,
+      json_type(body, '$pagesPath') AS metadata FROM revision
+    UNION ALL
+    SELECT p.key, CASE WHEN p.type='object' THEN $pageText END,
+      CASE WHEN p.type='object' THEN
+        json_extract(p.value, '\$.id', '\$.width', '\$.height', '\$.background') END
+    FROM revision, $iterator(revision.body, '$pagesPath') p
+    WHERE json_type(revision.body, '$pagesPath')='array' ''',
     [headId, documentId],
   );
-  if (revision.isEmpty) return null;
-  if (revision.single['pages_type'] != 'array') {
+  if (rows.isEmpty) return null;
+  final header = rows.firstWhere((row) => row['position'] == -1);
+  if (header['metadata'] != 'array') {
     throw const FormatException('Colección de páginas inválida');
   }
-  final rows = db.select(
-    r'''SELECT p.key AS position, p.value AS encoded,
-      json_extract(p.value, '$.id', '$.width', '$.height', '$.background') AS metadata
-    FROM revisions r, json_each(r.payload, '$.notebook.pages') p
-    WHERE r.id=? AND r.document_id=?''',
-    [headId, documentId],
-  );
-  if (rows.isEmpty) throw const FormatException('Cuaderno sin páginas');
-  final selected = initialPageIndex.clamp(0, rows.length - 1);
-  final pages = List<DeferredNotebookPage?>.filled(rows.length, null);
+  final pageCount = rows.length - 1;
+  if (pageCount == 0) throw const FormatException('Cuaderno sin páginas');
+  final selected = initialPageIndex.clamp(0, pageCount - 1);
+  final pages = List<DeferredNotebookPage?>.filled(pageCount, null);
   for (final row in rows) {
     final index = row['position'] as int;
-    final encoded = row['encoded'] as String;
+    if (index == -1) continue;
+    final encoded = row['encoded'];
+    if (encoded is! String) throw const FormatException('Hoja inválida');
     final metadata = jsonDecode(row['metadata'] as String) as List;
     pages[index] = DeferredNotebookPage(
       id: nonEmpty(metadata[0]),
@@ -853,14 +867,14 @@ Notebook? _loadForEditing(
     );
   }
   final decoded = NotebookCodec.decodeRevisionForEditing(
-    revision.single['header'] as String,
+    header['encoded'] as String,
     [for (final page in pages) page!],
   );
   if (decoded.id != headId || decoded.notebook.id != documentId) {
     throw const FormatException('Identificadores de revisión inválidos');
   }
   return decoded.notebook;
-});
+}
 
 (int, List<String>, List<Row>) _readCatalogRows(
   Database db,

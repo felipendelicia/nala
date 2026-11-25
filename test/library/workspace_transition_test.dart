@@ -282,6 +282,56 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('la apertura omite la tinta densa mientras espera el editor', (
+    tester,
+  ) async {
+    final notebook = fixtureNotebook();
+    final dense = notebook.pages.single.copyWith(
+      strokes: List.generate(
+        200,
+        (stroke) => fixtureStroke(id: 'dense-$stroke').copyWith(
+          points: List.generate(
+            64,
+            (point) => InkPoint(
+              x: 30.0 + point * 6,
+              y: 40.0 + stroke * 3 + point % 7,
+              pressure: .6,
+            ),
+          ),
+        ),
+      ),
+    );
+    final book = notebook.copyWith(pages: [dense]);
+    final repository = await _mountLibrary(tester, notebook: book);
+    expect(
+      tester.widget<PaperCanvas>(find.byType(PaperCanvas)).page,
+      same(dense),
+    );
+    final load = repository.pendingLoad = Completer<Notebook?>();
+
+    await _tapNotebook(tester);
+    expect(_openingHeader, findsOneWidget);
+    expect(find.byTooltip('Volver a mis apuntes'), findsOneWidget);
+    expect(find.byType(EditorScreen), findsNothing);
+    final openingCanvases = find
+        .descendant(
+          of: find.byType(WorkspaceOpeningScreen),
+          matching: find.byType(PaperCanvas),
+        )
+        .evaluate()
+        .length;
+
+    load.complete(book);
+    await tester.pumpAndSettle();
+    expect(find.byType(EditorScreen), findsOneWidget);
+    expect(
+      tester.widget<PaperCanvas>(find.byType(PaperCanvas)).page,
+      same(dense),
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(openingCanvases, 0);
+  });
+
   testWidgets(
     'abrir un resultado permite escribir sin hidratar hojas lejanas',
     (tester) async {

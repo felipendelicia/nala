@@ -77,6 +77,38 @@ class _ControlledPage extends DeferredNotebookPage {
 }
 
 void main() {
+  testWidgets('el contorno de selección aparece solo al seleccionar', (
+    tester,
+  ) async {
+    final controller = await mount(tester, count: 1);
+    final overlay = find.byWidgetPredicate(
+      (widget) =>
+          widget is CustomPaint &&
+          widget.painter.runtimeType.toString() == '_SelectionPainter',
+    );
+    expect(overlay, findsNothing);
+
+    await tester.tap(find.byTooltip('Selección'));
+    await tester.pumpAndSettle();
+    expect(overlay, findsNothing);
+
+    final page = controller.notebook.pages.single;
+    final box = tester.renderObject<RenderBox>(canvas(page.id));
+    final pen = await tester.createGesture(kind: PointerDeviceKind.stylus);
+    await pen.down(box.localToGlobal(const Offset(5, 10)));
+    await pen.moveTo(box.localToGlobal(const Offset(45, 55)));
+    await tester.pump();
+    expect(overlay, findsOneWidget);
+    await pen.up();
+    await tester.pump();
+    expect(overlay, findsOneWidget);
+
+    await tester.tap(find.byTooltip('Lápiz'));
+    await tester.pumpAndSettle();
+    expect(overlay, findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('escribe en la primera hoja antes de cargar la vecina visible', (
     tester,
   ) async {

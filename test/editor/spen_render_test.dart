@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:apuntes/document/notebook.dart';
 import 'package:apuntes/editor/draft_ink.dart';
+import 'package:apuntes/editor/paper_canvas.dart';
 import 'package:apuntes/editor/stroke_geometry.dart';
 
 Future<ui.Image> render(DraftInk ink) async {
@@ -20,6 +21,20 @@ Future<int> alpha(ui.Image image, int x, int y) async {
   return bytes.getUint8((y * image.width + x) * 4 + 3);
 }
 
+Future<List<int>> _pixels(int size, void Function(Canvas) draw) async {
+  final recorder = ui.PictureRecorder();
+  draw(Canvas(recorder));
+  final picture = recorder.endRecording();
+  final image = await picture.toImage(size, size);
+  try {
+    final bytes = (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+    return bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes);
+  } finally {
+    image.dispose();
+    picture.dispose();
+  }
+}
+
 class _TileCounter implements Canvas {
   final destinations = <Rect>[];
 
@@ -34,26 +49,120 @@ class _TileCounter implements Canvas {
 
 void main() {
   test(
+    'la miniatura dibuja líneas redondas y puntos con el color de la tinta',
+    () async {
+      const size = 64;
+      final strokes = [
+        InkStroke(
+          id: 'line',
+          tool: InkTool.pen,
+          argb: 0xff204060,
+          width: 8,
+          pressureCurve: PressureCurve.uniform,
+          points: const [
+            InkPoint(x: 10, y: 16, pressure: .2),
+            InkPoint(x: 34, y: 16, pressure: .9),
+          ],
+        ),
+        InkStroke(
+          id: 'dot',
+          tool: InkTool.pen,
+          argb: 0xff803020,
+          width: 8,
+          pressureCurve: PressureCurve.uniform,
+          points: const [InkPoint(x: 15, y: 46, pressure: .5)],
+        ),
+        InkStroke(
+          id: 'repeated-point',
+          tool: InkTool.highlighter,
+          argb: 0xff00ff00,
+          width: 10,
+          pressureCurve: PressureCurve.uniform,
+          points: const [
+            InkPoint(x: 48, y: 46, pressure: .2),
+            InkPoint(x: 48, y: 46, pressure: .8),
+          ],
+        ),
+      ];
+      final pixels = await _pixels(
+        size,
+        (canvas) => InkPainter(
+          strokes,
+          thumbnail: true,
+        ).paint(canvas, const Size(64, 64)),
+      );
+
+      List<int> pixel(int x, int y) {
+        final start = (y * size + x) * 4;
+        return pixels.sublist(start, start + 4);
+      }
+
+      expect(pixel(22, 16), [0x20, 0x40, 0x60, 0xff]);
+      expect(pixel(7, 16), [0x20, 0x40, 0x60, 0xff]);
+      expect(pixel(6, 12), [0, 0, 0, 0]);
+      expect(pixel(15, 46), [0x80, 0x30, 0x20, 0xff]);
+      expect(pixel(11, 42), [0, 0, 0, 0]);
+      expect(pixel(48, 46), [0, 0x55, 0, 0x55]);
+      expect(
+        strokes.map(StrokeGeometry.cachedCanvasPath),
+        everyElement(isNull),
+      );
+    },
+  );
+
+  test(
+    'la tinta guardada conserva el color y el orden de trazos cruzados',
+    () async {
+      final strokes = [
+        InkStroke(
+          id: 'pen',
+          tool: InkTool.pen,
+          argb: 0xa8203868,
+          width: 8,
+          points: const [
+            InkPoint(x: 8, y: 30, pressure: .2),
+            InkPoint(x: 54, y: 30, pressure: 1),
+          ],
+        ),
+        InkStroke(
+          id: 'marker',
+          tool: InkTool.highlighter,
+          argb: 0xffe1bd2a,
+          width: 14,
+          pressureCurve: PressureCurve.uniform,
+          points: const [
+            InkPoint(x: 11, y: 10, pressure: 1),
+            InkPoint(x: 52, y: 53, pressure: 1),
+          ],
+        ),
+      ];
+
+      final actual = await _pixels(
+        64,
+        (canvas) => InkPainter(strokes).paint(canvas, const Size(64, 64)),
+      );
+      final expected = await _pixels(64, (canvas) {
+        canvas.drawPath(
+          StrokeGeometry.outline(strokes.first).path,
+          Paint()..color = const Color(0xa8203868),
+        );
+        canvas.drawPath(
+          StrokeGeometry.outline(strokes.last).path,
+          Paint()..color = const Color(0x55e1bd2a),
+        );
+      });
+      expect(actual, expected);
+    },
+  );
+
+  test(
     'el trazado cargado en frío coincide con el contorno de exportación',
     () async {
-      Future<List<int>> pixels(Path path) async {
-        final recorder = ui.PictureRecorder();
-        Canvas(
-          recorder,
-        ).drawPath(path, Paint()..color = const Color(0x55202020));
-        final picture = recorder.endRecording();
-        final image = await picture.toImage(100, 100);
-        try {
-          final bytes = (await image.toByteData())!;
-          return bytes.buffer.asUint8List(
-            bytes.offsetInBytes,
-            bytes.lengthInBytes,
-          );
-        } finally {
-          image.dispose();
-          picture.dispose();
-        }
-      }
+      Future<List<int>> pixels(Path path) => _pixels(
+        100,
+        (canvas) =>
+            canvas.drawPath(path, Paint()..color = const Color(0x55202020)),
+      );
 
       for (final curve in PressureCurve.values) {
         final stroke = InkStroke(

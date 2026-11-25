@@ -136,6 +136,8 @@ class LibraryController extends ChangeNotifier {
   final String deviceId;
   List<CatalogEntry> entries = [];
   final _visiblePreviews = <(String, String), WeakReference<NotebookPage>>{};
+  final _pendingPreviews = <(String, String), Future<NotebookPage?>>{};
+  bool _disposed = false;
 
   NotebookPage? _loadedPreview(CatalogEntry entry) =>
       _visiblePreviews[(entry.documentId, entry.headId)]?.target;
@@ -162,8 +164,21 @@ class LibraryController extends ChangeNotifier {
     CatalogEntry entry, {
     required int initialPageIndex,
   }) async {
+    if (_disposed) return null;
     if (repository case final EditableNotebookRepository editable) {
-      final preview = initialPageIndex == 0 ? _loadedPreview(entry) : null;
+      NotebookPage? preview;
+      if (initialPageIndex == 0) {
+        preview = _loadedPreview(entry);
+        final pending = _pendingPreviews[(entry.documentId, entry.headId)];
+        if (preview == null && pending != null) {
+          try {
+            preview = await pending;
+          } catch (_) {
+            // A failed thumbnail should not prevent the authoritative read.
+          }
+          if (_disposed) return null;
+        }
+      }
       final decodedPreview = preview is DeferredNotebookPage && preview.isReady
           ? preview
           : null;
@@ -187,14 +202,25 @@ class LibraryController extends ChangeNotifier {
     return loadEntry(entry);
   }
 
-  Future<NotebookPage?> loadPreview(CatalogEntry entry) async {
+  Future<NotebookPage?> loadPreview(CatalogEntry entry) {
+    if (_disposed) return Future.value();
+    final key = (entry.documentId, entry.headId);
+    return _pendingPreviews.putIfAbsent(
+      key,
+      () => _loadPreview(entry).whenComplete(() {
+        _pendingPreviews.remove(key);
+      }),
+    );
+  }
+
+  Future<NotebookPage?> _loadPreview(CatalogEntry entry) async {
     final NotebookPage? page;
     if (repository case final NotebookCatalogRepository catalog) {
       page = await catalog.loadPreview(entry.documentId, headId: entry.headId);
     } else {
       page = (await loadEntry(entry))?.notebook.pages.first;
     }
-    if (page != null) {
+    if (page != null && !_disposed) {
       // The visible tile holds the page. Leave it collectible with the tile.
       final key = (entry.documentId, entry.headId);
       _visiblePreviews.remove(key);
@@ -204,6 +230,14 @@ class LibraryController extends ChangeNotifier {
       }
     }
     return page;
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _pendingPreviews.clear();
+    _visiblePreviews.clear();
+    super.dispose();
   }
 
   Future<void> refresh() async {
