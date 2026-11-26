@@ -24,6 +24,8 @@ class EditorToolbar extends StatelessWidget {
     this.onOpenMenu,
     this.onMoreTools,
     this.chatAction,
+    this.dragHandle,
+    this.floating = false,
     this.moreToolsActive = false,
     this.layout,
     this.onShortcut = const {},
@@ -43,24 +45,28 @@ class EditorToolbar extends StatelessWidget {
   final VoidCallback? onPenSettings;
   final VoidCallback? onOpenMenu, onMoreTools;
   final Widget? chatAction;
+  final Widget? dragHandle;
+  final bool floating;
   final bool moreToolsActive;
   final ToolbarLayout? layout;
   final Map<ToolbarAction, VoidCallback?> onShortcut;
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) =>
+        _buildToolbar(context, availableWidth: constraints.maxWidth),
+  );
+
+  Widget _buildToolbar(BuildContext context, {required double availableWidth}) {
     final scheme = Theme.of(context).colorScheme;
     final config = layout ?? ToolbarLayout.defaults();
-    final vertical = config.dock != ToolbarDock.top;
-    final wide = !vertical && MediaQuery.sizeOf(context).width >= 1100;
-    const colors = [
-      0xff202020,
-      0xff24584b,
-      0xff284cad,
-      0xffc14747,
-      0xffe9ba3b,
-      0xff8553aa,
-    ];
-    const names = ['Grafito', 'Verde', 'Azul', 'Rojo', 'Amarillo', 'Violeta'];
+    final vertical = !floating && config.dock != ToolbarDock.top;
+    final axis = vertical ? Axis.vertical : Axis.horizontal;
+    final quickColorWidth = config.visible.contains(ToolbarAction.color)
+        ? config.quickColors.length * 48.0
+        : 0.0;
+    final toolWidth =
+        availableWidth - quickColorWidth - (dragHandle == null ? 0 : 44);
+    final wide = !floating && !vertical && toolWidth >= 1100;
     Widget button(
       ToolbarAction action,
       IconData icon,
@@ -109,26 +115,78 @@ class EditorToolbar extends StatelessWidget {
         ),
       );
     }
-    controls[ToolbarAction.color] = PopupMenuButton<int>(
-      tooltip: 'Color de tinta',
-      onOpened: onOpenMenu,
-      onCanceled: onOpenMenu,
-      initialValue: argb,
-      onSelected: onColor,
-      icon: Icon(Icons.circle, color: Color(argb)),
-      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-      itemBuilder: (_) => [
-        for (var i = 0; i < colors.length; i++)
-          PopupMenuItem(
-            value: colors[i],
-            child: Row(
-              children: [
-                Icon(Icons.circle, color: Color(colors[i])),
-                const SizedBox(width: 12),
-                Text(names[i]),
-              ],
+    controls[ToolbarAction.color] = Flex(
+      mainAxisSize: MainAxisSize.min,
+      direction: axis,
+      children: [
+        for (final color in config.quickColors)
+          IconButton(
+            tooltip: 'Color rápido: ${toolbarInkPalette[color]}',
+            isSelected: color == argb,
+            onPressed: () => onColor(color),
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            icon: Container(
+              width: 28,
+              height: 28,
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: color == argb
+                    ? Border.all(color: scheme.primary, width: 2)
+                    : null,
+              ),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Color(color),
+                  border: Border.all(
+                    color: scheme.onSurface.withValues(alpha: .45),
+                  ),
+                ),
+              ),
             ),
           ),
+        PopupMenuButton<int>(
+          tooltip: 'Color de tinta',
+          onOpened: onOpenMenu,
+          onCanceled: onOpenMenu,
+          initialValue: argb,
+          onSelected: onColor,
+          icon: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              const Icon(Icons.palette_outlined, size: 21),
+              if (!config.quickColors.contains(argb))
+                Positioned(
+                  right: -3,
+                  bottom: -3,
+                  child: Container(
+                    width: 11,
+                    height: 11,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Color(argb),
+                      border: Border.all(color: scheme.onSurfaceVariant),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+          itemBuilder: (_) => [
+            for (final color in toolbarInkPalette.entries)
+              PopupMenuItem(
+                value: color.key,
+                child: Row(
+                  children: [
+                    Icon(Icons.circle, color: Color(color.key)),
+                    const SizedBox(width: 12),
+                    Text(color.value),
+                  ],
+                ),
+              ),
+          ],
+        ),
       ],
     );
     controls[ToolbarAction.width] = PopupMenuButton<double>(
@@ -251,27 +309,38 @@ class EditorToolbar extends StatelessWidget {
           );
     return Material(
       color: scheme.surface,
+      elevation: floating ? 6 : 0,
+      shape: floating
+          ? RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: scheme.outlineVariant),
+            )
+          : null,
+      clipBehavior: floating ? Clip.antiAlias : Clip.none,
       child: Container(
         height: vertical ? null : 56,
         width: vertical ? 56 : null,
         padding: vertical
             ? const EdgeInsets.symmetric(vertical: 4)
             : const EdgeInsets.symmetric(horizontal: 4),
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: scheme.outlineVariant.withValues(alpha: .4),
-            ),
-          ),
-        ),
+        decoration: floating
+            ? null
+            : BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: scheme.outlineVariant.withValues(alpha: .4),
+                  ),
+                ),
+              ),
         child: Flex(
-          direction: vertical ? Axis.vertical : Axis.horizontal,
+          direction: axis,
           children: [
+            ?dragHandle,
             Expanded(
               child: SingleChildScrollView(
-                scrollDirection: vertical ? Axis.vertical : Axis.horizontal,
+                scrollDirection: axis,
                 child: Flex(
-                  direction: vertical ? Axis.vertical : Axis.horizontal,
+                  direction: axis,
                   mainAxisSize: MainAxisSize.min,
                   children: children,
                 ),

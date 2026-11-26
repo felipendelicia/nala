@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:apuntes/editor/toolbar_preferences.dart';
@@ -15,6 +16,7 @@ void main() {
         order: order,
         visible: {ToolbarAction.latex, ToolbarAction.pen, ToolbarAction.undo},
         dock: ToolbarDock.right,
+        quickColors: [0xff24584b, 0xffe9ba3b],
       ),
     );
     final reopened = await ToolbarPreferencesController.open(root.path);
@@ -25,9 +27,50 @@ void main() {
       ToolbarAction.pen,
       ToolbarAction.undo,
     });
+    expect(reopened.layout.quickColors, [0xff24584b, 0xffe9ba3b]);
     prefs.dispose();
     reopened.dispose();
   });
+
+  test(
+    'a saved toolbar without quick colors keeps its customization',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'nala-toolbar-legacy-',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final saved =
+          ToolbarLayout.defaults()
+              .copyWith(dock: ToolbarDock.left, visible: {ToolbarAction.color})
+              .toJson()
+            ..remove('quickColors');
+      await File('${root.path}/toolbar.json').writeAsString(jsonEncode(saved));
+      final prefs = await ToolbarPreferencesController.open(root.path);
+      addTearDown(prefs.dispose);
+      expect(prefs.layout.dock, ToolbarDock.left);
+      expect(prefs.layout.visible, {ToolbarAction.color});
+      expect(prefs.layout.quickColors, [0xff202020, 0xff284cad, 0xffc14747]);
+    },
+  );
+
+  test(
+    'quick colors retain their order and cap at three distinct palette colors',
+    () {
+      final layout = ToolbarLayout.defaults().copyWith(
+        quickColors: [
+          0xff24584b,
+          0xff24584b,
+          0xffff0000,
+          0xffe9ba3b,
+          0xff8553aa,
+          0xff284cad,
+        ],
+      );
+      expect(layout.quickColors, [0xff24584b, 0xffe9ba3b, 0xff8553aa]);
+      final empty = layout.copyWith(quickColors: []);
+      expect(ToolbarLayout.fromJson(empty.toJson()).quickColors, isEmpty);
+    },
+  );
 
   test(
     'invalid preferences recover defaults without breaking editor',

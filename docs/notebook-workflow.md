@@ -28,6 +28,10 @@ Para cambiar una fórmula, seleccionála y abrí Editar fórmula. Se conserva su
 
 Más herramientas → Personalizar barra permite elegir los accesos visibles, arrastrarlos para ordenar y ubicar la barra arriba, a la izquierda o a la derecha. Guardar aplica los cambios a los paneles abiertos y conserva el ajuste para la próxima sesión. Restablecer recupera la distribución inicial.
 
+En **Personalizar barra → Colores rápidos**, elegí hasta tres colores para usarlos con un toque junto al selector de tinta.
+
+Mantené pulsada el asa **Mover barra de herramientas** y arrastrala sin levantar el S Pen. En PC podés hacer el mismo gesto con el mouse. Tocá **Acoplar barra** para devolverla a la posición configurada.
+
 Más herramientas queda siempre accesible y contiene los controles que hayas ocultado. En modo lectura, la barra de edición se oculta para dejar más espacio a la hoja.
 
 ## Backup completo y restauración

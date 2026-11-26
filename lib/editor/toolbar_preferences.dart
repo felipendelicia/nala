@@ -53,13 +53,31 @@ const toolbarLabels = <ToolbarAction, String>{
   ToolbarAction.deleteSelection: 'Eliminar selección',
 };
 
+const toolbarInkPalette = <int, String>{
+  0xff202020: 'Grafito',
+  0xff24584b: 'Verde',
+  0xff284cad: 'Azul',
+  0xffc14747: 'Rojo',
+  0xffe9ba3b: 'Amarillo',
+  0xff8553aa: 'Violeta',
+};
+const toolbarQuickColorLimit = 3;
+const defaultToolbarQuickColors = [0xff202020, 0xff284cad, 0xffc14747];
+
 class ToolbarLayout {
   ToolbarLayout({
     required List<ToolbarAction> order,
     required Set<ToolbarAction> visible,
     this.dock = ToolbarDock.top,
+    Iterable<int> quickColors = defaultToolbarQuickColors,
   }) : order = List.unmodifiable(order),
-       visible = Set.unmodifiable(visible) {
+       visible = Set.unmodifiable(visible),
+       quickColors = List.unmodifiable(
+         quickColors
+             .where(toolbarInkPalette.containsKey)
+             .toSet()
+             .take(toolbarQuickColorLimit),
+       ) {
     if (order.length != ToolbarAction.values.length ||
         order.toSet().length != order.length) {
       throw const FormatException('Orden de barra inválido');
@@ -72,25 +90,30 @@ class ToolbarLayout {
   final List<ToolbarAction> order;
   final Set<ToolbarAction> visible;
   final ToolbarDock dock;
+  final List<int> quickColors;
   ToolbarLayout copyWith({
     List<ToolbarAction>? order,
     Set<ToolbarAction>? visible,
     ToolbarDock? dock,
+    Iterable<int>? quickColors,
   }) => ToolbarLayout(
     order: order ?? this.order,
     visible: visible ?? this.visible,
     dock: dock ?? this.dock,
+    quickColors: quickColors ?? this.quickColors,
   );
   Map<String, Object> toJson() => {
     'version': 1,
     'dock': dock.name,
     'order': order.map((v) => v.name).toList(),
     'visible': visible.map((v) => v.name).toList(),
+    'quickColors': quickColors,
   };
   factory ToolbarLayout.fromJson(Map<String, dynamic> json) {
     if (json['version'] != 1) {
       throw const FormatException('Versión de barra inválida');
     }
+    final storedColors = json['quickColors'];
     return ToolbarLayout(
       dock: ToolbarDock.values.byName(json['dock'] as String),
       order: (json['order'] as List)
@@ -99,6 +122,9 @@ class ToolbarLayout {
       visible: (json['visible'] as List)
           .map((v) => ToolbarAction.values.byName(v as String))
           .toSet(),
+      quickColors: storedColors is List
+          ? storedColors.whereType<int>()
+          : defaultToolbarQuickColors,
     );
   }
 }

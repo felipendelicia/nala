@@ -134,4 +134,54 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     controller.dispose();
   });
+
+  testWidgets('la barra flotante cambia el color de un trazo con el lápiz', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = EditorController(
+      notebook: fixtureNotebook(),
+      repository: MemoryRepository(),
+      deviceId: 'tablet',
+      newId: () => 'r1',
+      now: () => DateTime.utc(2026),
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(home: EditorScreen(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+
+    final pen = await tester.createGesture(kind: PointerDeviceKind.stylus);
+    final grip = find.byTooltip('Mover barra de herramientas');
+    expect(grip, findsOneWidget);
+    final start = tester.getCenter(grip);
+    await pen.down(start);
+    await tester.pump(const Duration(milliseconds: 550));
+    await pen.moveTo(start + const Offset(80, 120));
+    await tester.pump();
+    await pen.up();
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Acoplar barra'), findsOneWidget);
+    expect(controller.notebook.pages.single.strokes, hasLength(1));
+
+    final blue = find.byTooltip('Color rápido: Azul');
+    await tester.ensureVisible(blue);
+    await pen.down(tester.getCenter(blue));
+    await pen.up();
+    await tester.pumpAndSettle();
+
+    final page = tester.renderObject<RenderBox>(find.byType(PaperCanvas));
+    final inkStart = page.localToGlobal(const Offset(180, 350));
+    await pen.down(inkStart);
+    await pen.moveTo(inkStart + const Offset(30, 20));
+    await pen.up();
+    await tester.pumpAndSettle();
+    final strokes = controller.notebook.pages.single.strokes;
+    expect(strokes, hasLength(2));
+    expect(strokes.last.argb, 0xff284cad);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }

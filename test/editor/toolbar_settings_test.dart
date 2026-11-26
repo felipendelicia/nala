@@ -4,6 +4,49 @@ import 'package:apuntes/editor/toolbar_preferences.dart';
 import 'package:apuntes/editor/toolbar_settings_dialog.dart';
 
 void main() {
+  testWidgets('settings can replace, remove and cap quick colors', (
+    tester,
+  ) async {
+    ToolbarLayout? saved;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () async {
+                saved = await showToolbarSettings(
+                  context,
+                  ToolbarLayout.defaults().copyWith(visible: {}),
+                );
+              },
+              child: const Text('Abrir'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Abrir'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Colores rápidos'));
+    await tester.pumpAndSettle();
+
+    final graphite = find.widgetWithText(FilterChip, 'Grafito');
+    final yellow = find.widgetWithText(FilterChip, 'Amarillo');
+    expect(tester.widget<FilterChip>(yellow).onSelected, isNull);
+    await tester.tap(graphite);
+    await tester.pumpAndSettle();
+    await tester.tap(yellow);
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilterChip>(yellow).selected, isTrue);
+    expect(tester.widget<FilterChip>(graphite).onSelected, isNull);
+    await tester.tap(find.text('Listo'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Guardar'));
+    await tester.pumpAndSettle();
+    expect(saved!.quickColors, [0xff284cad, 0xffc14747, 0xffe9ba3b]);
+    expect(saved!.visible, {ToolbarAction.color});
+  });
+
   testWidgets('dragging first toolbar access down changes saved order', (
     tester,
   ) async {

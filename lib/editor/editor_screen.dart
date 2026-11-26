@@ -241,6 +241,12 @@ class _EditorScreenState extends State<EditorScreen>
   AssetStore? get assets => widget.assets ?? widget.pdf?.assets;
   ToolbarPreferencesController? toolbarPreferences;
   bool ownsToolbarPreferences = false;
+  final _toolbarPaneKey = GlobalKey();
+  final _toolbarGripKey = GlobalKey();
+  final _floatingToolbarPosition = ValueNotifier(Offset.zero);
+  bool _toolbarFloating = false;
+  Offset _toolbarGrabOffset = Offset.zero;
+
   ToolbarLayout get toolbarLayout =>
       toolbarPreferences?.layout ?? ToolbarLayout.defaults();
   void toolbarChanged() {
@@ -272,6 +278,101 @@ class _EditorScreenState extends State<EditorScreen>
       message('La barra cambió, pero no se pudo guardar el ajuste.');
     }
   }
+
+  void _grabToolbar(LongPressStartDetails details) {
+    if (!widget.active) return;
+    router.reset();
+    // The floating bar has four pixels of padding around the grip's hit area.
+    _toolbarGrabOffset = details.localPosition + const Offset(4, 4);
+    _moveToolbar(details.globalPosition);
+    if (!_toolbarFloating) setState(() => _toolbarFloating = true);
+  }
+
+  void _moveToolbar(Offset globalPosition) {
+    if (!widget.active) return;
+    final pane = _toolbarPaneKey.currentContext?.findRenderObject();
+    if (pane is! RenderBox || !pane.hasSize) return;
+    _floatingToolbarPosition.value =
+        pane.globalToLocal(globalPosition) - _toolbarGrabOffset;
+  }
+
+  void _dockToolbar() {
+    router.reset();
+    setState(() => _toolbarFloating = false);
+  }
+
+  Widget _toolbarGrip({required bool floating}) => Flex(
+    direction: floating || toolbarLayout.dock == ToolbarDock.top
+        ? Axis.horizontal
+        : Axis.vertical,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Tooltip(
+        message: 'Mover barra de herramientas',
+        triggerMode: TooltipTriggerMode.manual,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.grab,
+          child: GestureDetector(
+            key: _toolbarGripKey,
+            behavior: HitTestBehavior.opaque,
+            onLongPressStart: _grabToolbar,
+            onLongPressMoveUpdate: (details) =>
+                _moveToolbar(details.globalPosition),
+            child: const SizedBox(
+              width: 44,
+              height: 48,
+              child: Icon(Icons.drag_indicator, size: 20),
+            ),
+          ),
+        ),
+      ),
+      if (floating)
+        IconButton(
+          tooltip: 'Acoplar barra',
+          onPressed: _dockToolbar,
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+          icon: const Icon(Icons.push_pin_outlined, size: 20),
+        ),
+    ],
+  );
+
+  Widget _floatingToolbar({required bool sheetReady}) => Positioned.fill(
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        const height = 56.0;
+        final availableWidth =
+            constraints.maxWidth -
+            (showChatGpt && dockChatGpt ? chatPanelWidth : 0);
+        // Keep the grip, dock button and trailing shortcuts in view even
+        // when the rest of the toolbar needs to scroll.
+        final minimumWidth =
+            44.0 +
+            48.0 +
+            8.0 +
+            (sheetReady ? 48.0 : 0.0) +
+            (hasChatGpt ? 48.0 : 0.0);
+        if (constraints.maxHeight < height || availableWidth < minimumWidth) {
+          return const SizedBox.shrink();
+        }
+        final width = (availableWidth * .85).clamp(minimumWidth, 640.0);
+        return ValueListenableBuilder<Offset>(
+          valueListenable: _floatingToolbarPosition,
+          builder: (context, position, bar) => Stack(
+            children: [
+              Positioned(
+                left: position.dx.clamp(0.0, availableWidth - width),
+                top: position.dy.clamp(0.0, constraints.maxHeight - height),
+                width: width,
+                height: height,
+                child: bar!,
+              ),
+            ],
+          ),
+          child: buildToolbar(sheetReady: sheetReady, floating: true),
+        );
+      },
+    ),
+  );
 
   PenFavoritesController? favorites;
   List<PenFavorite> get favoriteValues =>
@@ -2554,6 +2655,7 @@ class _EditorScreenState extends State<EditorScreen>
     shapePreview.dispose();
     zoomFitChanges.dispose();
     favorites?.dispose();
+    _floatingToolbarPosition.dispose();
     toolbarPreferences?.removeListener(toolbarChanged);
     if (ownsToolbarPreferences) toolbarPreferences?.dispose();
     chatFocus.removeListener(chatFocusChanged);
@@ -2566,10 +2668,14 @@ class _EditorScreenState extends State<EditorScreen>
 
   Widget buildToolbar({
     bool fallback = false,
+    bool floating = false,
     required bool sheetReady,
   }) => EditorToolbar(
+    floating: floating,
+    dragHandle: fallback ? null : _toolbarGrip(floating: floating),
     layout: fallback
         ? ToolbarLayout.defaults().copyWith(
+            quickColors: toolbarLayout.quickColors,
             visible: {
               ToolbarAction.color,
               ToolbarAction.width,
@@ -2906,6 +3012,7 @@ class _EditorScreenState extends State<EditorScreen>
       final currentPage = page;
       final sheetReady = pageReady(currentPage);
       final fullscreen = FullscreenScope.of(context);
+      final toolbarDocked = !reading && !_toolbarFloating;
       return CallbackShortcuts(
         bindings: widget.active && !chatFocus.hasFocus
             ? {
@@ -3035,6 +3142,8 @@ class _EditorScreenState extends State<EditorScreen>
                           widget.onOpenNotebook?.call();
                         case 'split':
                           widget.onSplitView?.call();
+                        case 'dockToolbar':
+                          _dockToolbar();
                         case 'fullscreen':
                           if (fullscreen != null) {
                             toggleFullscreen(context, fullscreen);
@@ -3080,6 +3189,11 @@ class _EditorScreenState extends State<EditorScreen>
                                 : 'Vista dividida',
                           ),
                         ),
+                      if (!reading && _toolbarFloating)
+                        const PopupMenuItem(
+                          value: 'dockToolbar',
+                          child: Text('Acoplar barra de herramientas'),
+                        ),
                       if (fullscreen case final mode? when mode.available)
                         PopupMenuItem(
                           value: 'fullscreen',
@@ -3114,10 +3228,11 @@ class _EditorScreenState extends State<EditorScreen>
               ),
               body: Column(
                 children: [
-                  if (!reading && toolbarLayout.dock == ToolbarDock.top)
+                  if (toolbarDocked && toolbarLayout.dock == ToolbarDock.top)
                     buildToolbar(sheetReady: sheetReady),
                   Expanded(
                     child: Stack(
+                      key: _toolbarPaneKey,
                       children: [
                         Padding(
                           padding: EdgeInsets.only(
@@ -3127,7 +3242,7 @@ class _EditorScreenState extends State<EditorScreen>
                           ),
                           child: Row(
                             children: [
-                              if (!reading &&
+                              if (toolbarDocked &&
                                   toolbarLayout.dock == ToolbarDock.left)
                                 buildToolbar(sheetReady: sheetReady),
                               if (showPages)
@@ -3144,7 +3259,7 @@ class _EditorScreenState extends State<EditorScreen>
                               Expanded(
                                 child: LayoutBuilder(builder: buildDocument),
                               ),
-                              if (!reading &&
+                              if (toolbarDocked &&
                                   toolbarLayout.dock == ToolbarDock.right)
                                 buildToolbar(sheetReady: sheetReady),
                               if (showComments && sheetReady)
@@ -3260,6 +3375,8 @@ class _EditorScreenState extends State<EditorScreen>
                             ],
                           ),
                         ),
+                        if (!reading && _toolbarFloating)
+                          _floatingToolbar(sheetReady: sheetReady),
                         if (openedChatGpt && hasChatGpt)
                           Positioned.fill(
                             left: dockChatGpt

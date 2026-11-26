@@ -6,12 +6,12 @@ Cuadernos digitales para tomar apuntes a mano, anotar archivos PDF y estudiar en
 
 ## Descargar e instalar
 
-La versión de prueba actual es la **0.7.13**. [Notas de la versión](https://github.com/felipendelicia/nala/releases/tag/v0.7.13) · [Todas las versiones](https://github.com/felipendelicia/nala/releases)
+La versión de prueba actual es la **0.7.14**. [Notas de la versión](https://github.com/felipendelicia/nala/releases/tag/v0.7.14) · [Todas las versiones](https://github.com/felipendelicia/nala/releases)
 
 | Plataforma | Descarga | Instalación |
 | --- | --- | --- |
-| Android ARM64 · Tab S10 | [Nala.apk](https://github.com/felipendelicia/nala/releases/download/v0.7.13/Nala.apk) | Abrí el APK y seguí los pasos del instalador de Android. Si el sistema lo pide, habilitá la instalación desde la app con la que abriste el archivo. |
-| Linux x64 | [Nala-Linux-x64.tar.gz](https://github.com/felipendelicia/nala/releases/download/v0.7.13/Nala-Linux-x64.tar.gz) | Descomprimí el paquete y ejecutá `Abrir-Nala.sh`. Dejá el lanzador junto a la carpeta `Nala-Linux/`. |
+| Android ARM64 · Tab S10 | [Nala.apk](https://github.com/felipendelicia/nala/releases/download/v0.7.14/Nala.apk) | Abrí el APK y seguí los pasos del instalador de Android. Si el sistema lo pide, habilitá la instalación desde la app con la que abriste el archivo. |
+| Linux x64 | [Nala-Linux-x64.tar.gz](https://github.com/felipendelicia/nala/releases/download/v0.7.14/Nala-Linux-x64.tar.gz) | Descomprimí el paquete y ejecutá `Abrir-Nala.sh`. Dejá el lanzador junto a la carpeta `Nala-Linux/`. |
 
 ### Actualizar desde Nala
 
@@ -20,6 +20,7 @@ Si ya tenés el actualizador, abrí **Ajustes → Buscar actualizaciones** y toc
 ## Qué podés hacer
 
 - **Escribir y organizar apuntes.** Usá el S Pen con presión, resaltador y borrador, o editá con el ratón en la PC. Organizá tus cuadernos en carpetas desplegables y retomá los últimos que abriste desde **Recientes**.
+- **Personalizar la barra.** Elegí hasta tres colores rápidos y mantené pulsada el asa para desprender la barra y moverla dentro del editor.
 - **Ganar espacio para escribir.** Activá **Pantalla completa** desde Ajustes o desde el menú del cuaderno para ocultar las barras del sistema. En Linux, usá **F11** para entrar y salir.
 - **Anotar y compartir PDF.** Importá un PDF, escribí sobre él e intercalá hojas de apuntes. La exportación convierte cada hoja en una imagen y mantiene su tamaño y orientación. El PDF original y las anotaciones editables se conservan en Nala.
 - **Preparar material de estudio.** Combiná plantillas, texto, imágenes, fórmulas LaTeX y hojas Markdown. Agregá comentarios, grabá clases con audio vinculado a la tinta y repasá con tarjetas de repetición espaciada.
