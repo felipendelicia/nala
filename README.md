@@ -1,60 +1,46 @@
+<img src="android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" alt="" width="64" height="64">
+
 # Nala
 
-Cuadernos y anotaciones sobre PDF para Samsung Tab S10 y Linux.
+Cuadernos digitales para tomar apuntes a mano, anotar archivos PDF y estudiar en la Samsung Galaxy Tab S10 y en Linux. Nala guarda los cambios en el dispositivo mientras escribís. Si usás ambos equipos, podés sincronizar la biblioteca con tu propio servidor.
 
-Versión de prueba en desarrollo. Permite crear cuadernos, guardarlos automáticamente en el dispositivo y organizarlos en carpetas y subcarpetas. Incluye hojas blancas, rayadas, cuadriculadas y punteadas, resaltador, borrador, selección, deshacer y agregar páginas. La tinta activa se pinta en una capa independiente y los nuevos trazos tienen presión expresiva y suavizado ajustables.
+## Descargar e instalar
 
-El código actual incorpora importación de PDF, anotaciones sobre sus páginas, hojas de apuntes intercaladas y exportación a PDF. Se conservan los PDF originales y los trazos editables. Los PDF protegidos piden su contraseña, que se mantiene únicamente durante la sesión. El flujo de importación, anotación, hojas intercaladas y exportación se verificó en la aplicación Linux. El selector Android aún requiere una comprobación física; ver [verificación](docs/verification.md).
+La versión de prueba actual es la **0.7.12**. [Notas de la versión](https://github.com/felipendelicia/nala/releases/tag/v0.7.12) · [Todas las versiones](https://github.com/felipendelicia/nala/releases)
 
-El editor muestra las páginas una debajo de otra: podés seguir bajando sin abrir el índice. Incluye modo lectura, ajuste a hoja y ancho, porcentajes de zoom y bloqueos independientes del zoom y del movimiento horizontal. El resaltador empieza más ancho que el lápiz y cada herramienta conserva su grosor y color durante la sesión. Compartir PDF prepara una instantánea del apunte y abre directamente el selector de Android; Linux permite copiar el archivo o adjuntarlo a un correo, sin guardarlo antes manualmente.
+| Plataforma | Descarga | Instalación |
+| --- | --- | --- |
+| Android ARM64 · Tab S10 | [Nala.apk](https://github.com/felipendelicia/nala/releases/download/v0.7.12/Nala.apk) | Abrí el APK y seguí los pasos del instalador de Android. Si el sistema lo pide, habilitá la instalación desde la app con la que abriste el archivo. |
+| Linux x64 | [Nala-Linux-x64.tar.gz](https://github.com/felipendelicia/nala/releases/download/v0.7.12/Nala-Linux-x64.tar.gz) | Descomprimí el paquete y ejecutá `Abrir-Nala.sh`. Dejá el lanzador junto a la carpeta `Nala-Linux/`. |
 
-La biblioteca y el editor usan un diseño nuevo con Manrope y el logo minimalista elegido por Felipe. La interfaz usa blanco, negro y grises. En la biblioteca, abrí **Ajustes → Apariencia** para elegir Claro, Oscuro o Seguir sistema. La preferencia se conserva al reiniciar. El papel y los PDF mantienen sus colores originales. Los apuntes se pueden mover entre carpetas desde su menú de opciones.
+### Actualizar desde Nala
 
-Se pueden anclar comentarios de texto y notas de voz a la hoja. El audio comienza únicamente al pulsar Grabar, se puede escuchar o descartar y se detiene al pasar la app al fondo. Android usa su micrófono y Linux necesita PipeWire (pw-record/pw-play) o ALSA (arecord/aplay); los recursos se guardan como WAV mono de 16 kHz. Los comentarios permanecen editables en Nala. El PDF exportado incluye marcadores numerados y un anexo con el texto; las notas de voz se identifican con su duración y se escuchan desde Nala.
+Si ya tenés el actualizador, abrí **Ajustes → Buscar actualizaciones** y tocá **Instalar** cuando aparezca una versión nueva. En la tablet, confirmá en el instalador de Android. En Linux, cerrá Nala y volvé a abrirla con el lanzador. La versión instalada figura debajo de **Buscar actualizaciones**.
 
-El encabezado muestra dos filas al editar y una en lectura. **Más herramientas** abre los controles adicionales; las pestañas aparecen sólo al abrir varios apuntes.
+## Qué podés hacer
 
-El código 0.5 incorpora formas y regla, copiar/cortar/pegar entre cuadernos, texto e imágenes editables, lápices favoritos, pestañas y vista dividida, plantillas Cornell/semanales o propias y portadas. La búsqueda incluye texto del PDF, textos insertados y manuscritos reconocidos; Android ofrece un modelo español local de descarga explícita y Linux indica la disponibilidad de Tesseract. El audio de clase se vincula a los trazos y se puede escuchar desde ese momento; las tarjetas guardan preguntas, respuestas y próximas fechas de repaso. Instrucciones en [herramientas y estudio](docs/study-tools.md).
+- **Escribir y organizar apuntes.** Usá el S Pen con presión, resaltador y borrador, o editá con el ratón en la PC. Organizá tus cuadernos en carpetas desplegables y retomá los últimos que abriste desde **Recientes**.
+- **Anotar y compartir PDF.** Importá un PDF, escribí sobre él e intercalá hojas de apuntes. La exportación convierte cada hoja en una imagen y mantiene su tamaño y orientación. El PDF original y las anotaciones editables se conservan en Nala.
+- **Preparar material de estudio.** Combiná plantillas, texto, imágenes, fórmulas LaTeX y hojas Markdown. Agregá comentarios, grabá clases con audio vinculado a la tinta y repasá con tarjetas de repetición espaciada.
+- **Usar la biblioteca en dos equipos.** El guardado local funciona sin conexión. Podés configurar la sincronización en **Ajustes → Servidor privado** y crear o restaurar una copia desde **Backup de la biblioteca**.
 
-La Tab S10 y Linux pueden compartir una biblioteca privada mediante el servidor de Nala. Cada equipo guarda primero en el dispositivo y sincroniza cuando hay conexión. Para instalar el servicio y conectar los clientes, seguí la [guía del servidor](docs/server-setup.md).
+## Guías
 
-El [conector MCP para Codex](docs/mcp.md) consulta los cuadernos de la biblioteca activa de Linux en modo de solo lectura. Permite buscar texto, citar páginas y ver apuntes manuscritos.
+- [Edición, herramientas de estudio y ChatGPT](docs/study-tools.md)
+- [Elementos reutilizables, enlaces entre hojas y copias de seguridad](docs/notebook-workflow.md)
+- [Configurar el S Pen](docs/spen.md)
+- [Conectar la tablet y la PC a un servidor privado](docs/server-setup.md)
+- [Consultar apuntes en Codex con el conector MCP local](docs/mcp.md)
 
-La versión 0.6 agrega elementos reutilizables, enlaces entre páginas de apuntes, recorte y opacidad de imágenes con original recuperable, bloqueo de objetos, barra configurable, backup completo restaurable y fórmulas LaTeX con vista previa local. La restauración crea copias y conserva la biblioteca actual. Ver [la guía de estas herramientas](docs/notebook-workflow.md).
+## Compilar y probar
 
-La versión **0.7.0** incorpora el servidor privado. La [versión de prueba pública 0.6.0](https://github.com/felipendelicia/nala/releases/tag/v0.6.0) incluye las herramientas de estudio y el encabezado compacto. La [primera versión](https://github.com/felipendelicia/nala/releases/tag/v0.1.0) fue probada en la tablet antes de incorporar el flujo de PDF.
-
-El [parche 0.7.2](docs/releases/v0.7.2.md) reduce el tiempo de recarga de la biblioteca y el trabajo de renderizado al navegar por PDF.
-
-En Linux, descomprimí el paquete y ejecutá `Abrir-Nala.sh` manteniéndolo junto a `Nala-Linux/`. En Android, copiá `Nala.apk`, abrilo y permití la instalación desde la aplicación que lo abre. Es un APK de prueba firmado con una clave de desarrollo.
-
-En **Ajustes → Buscar actualizaciones**, Nala consulta las versiones publicadas en GitHub y ofrece instalar una compatible. En Linux se aplica cuando volvés a abrir Nala con `Abrir-Nala.sh`. [Preparación de las publicaciones](docs/releases/updates.md).
-
-Herramientas usadas: Flutter 3.47.6, Dart 3.13.5.
-
-Desde la raíz del repositorio, con Flutter instalado y disponible en PATH:
+El proyecto usa Flutter y Dart. Se verificó con Flutter 3.47.6 y Dart 3.13.5. Desde Linux, con Flutter en el `PATH` y una sesión systemd de usuario, ejecutá estos comandos desde la raíz del repositorio.
 
 ```sh
 tool/flutter-safe pub get
 tool/flutter-safe build linux --release
 tool/flutter-safe test --no-pub --concurrency=1
-tool/flutter-safe test --no-pub integration_test/local_notebook_test.dart -d linux
-tool/flutter-safe test --no-pub integration_test/pdf_round_trip_test.dart -d linux
-tool/flutter-safe test --no-pub integration_test/appearance_share_test.dart -d linux
-tool/flutter-safe test --no-pub integration_test/spen_fluency_test.dart -d linux
-tool/flutter-safe test --no-pub integration_test/study_tools_test.dart -d linux
-tool/flutter-safe test --no-pub integration_test/notebook_workflow_test.dart -d linux
 tool/flutter-safe build apk --release --target-platform android-arm64
 ```
 
-Las pruebas del servicio y la sincronización local de punta a punta requieren Python 3. Consultá la [guía del servidor](docs/server-setup.md#pruebas-de-desarrollo).
-
-`tool/flutter-safe` ejecuta las tareas de a una dentro de un servicio con un límite total de 2300 MiB de RAM, 256 MiB de swap y dos CPU. Requiere Linux con una sesión systemd de usuario. Gradle además tiene un límite de heap de 512 MiB, un solo worker y no deja un daemon persistente. La compilación de Linux usa Ninja con un solo trabajo. Estos límites se añadieron para una PC de 7.5 GiB de RAM. No ejecutar tareas de Flutter por fuera del script al mismo tiempo que se genera el APK.
-
-La compilación Linux debe preceder a las pruebas de PDF: les proporciona la biblioteca nativa PDFium real. Requisitos de las plataformas y detalles del entorno en [compilación](docs/build-notes.md).
-
-Los ajustes de **Lápiz y S Pen** permiten configurar el botón (goma, resaltador, lápiz, selección o desactivado), mantenerlo apretado o alternar, y guardar presión y suavizado. Por defecto: presión 100%, suavizado 0%, mantener para borrar. Detalles y límites de la verificación en [S Pen](docs/spen.md).
-
-El icono está basado en la perrita de Felipe; ver [branding](docs/branding.md).
-
-El [diseño inicial](docs/superpowers/specs/2026-10-06-apuntes-design.md) y el [plan inicial](docs/superpowers/plans/2026-10-06-apuntes-implementation.md) se conservan como documentos históricos. El estado actual se detalla en [estado](docs/status.md) y las decisiones de esta entrega en [decisiones](docs/decisions.md).
+La compilación de Linux aporta la biblioteca nativa PDFium que usan las pruebas de PDF. [Requisitos de compilación](docs/build-notes.md) · [Pruebas del servidor](docs/server-setup.md#pruebas-de-desarrollo) · [Cómo preparar una release](docs/releases/updates.md)
