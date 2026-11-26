@@ -1,19 +1,113 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pdfrx_engine/pdfrx_engine.dart';
 import 'package:apuntes/document/asset_store.dart';
+import 'package:apuntes/document/deferred_notebook_page.dart';
 import 'package:apuntes/document/notebook.dart';
 import 'package:apuntes/document/notebook_codec.dart';
 import 'package:apuntes/document/page_comment.dart';
+import 'package:apuntes/editor/markdown_sheet.dart';
 import 'package:apuntes/pdf/pdf_service.dart';
 import 'package:apuntes/pdf/pdf_export_service.dart';
 import '../support/pdf_engine.dart';
 import '../support/pdf_fixtures.dart';
 
+class _TrackedDeferredPage extends DeferredNotebookPage {
+  _TrackedDeferredPage(NotebookPage page)
+    : super(
+        id: page.id,
+        width: page.width,
+        height: page.height,
+        background: page.background,
+        encoded: jsonEncode(page.toJson()),
+      );
+
+  @override
+  NotebookPage materialize() {
+    if (!isReady) NotebookCodec.reportWork('decode-deferred-page');
+    return super.materialize();
+  }
+}
+
 void main() {
   test(
-    'exportar tinta ejecuta su composición fuera del hilo de escritura',
+    'exportar Markdown guardado conserva las hojas originales y el texto completo',
+    () async {
+      final dir = await Directory.systemTemp.createTemp(
+        'nala-export-markdown-',
+      );
+      final pdf = PdfService(
+        assets: FileAssetStore('${dir.path}/assets'),
+        initialize: () => initializePdfForTest(dir.path),
+      );
+      addTearDown(() async {
+        pdf.dispose();
+        await dir.delete(recursive: true);
+      });
+      var id = 0;
+      String newId() => 'hoja-${++id}';
+      final book = await pdf.importDocument(
+        bytes: await makeFixturePdf(),
+        documentId: 'study',
+        title: 'Álgebra',
+        newId: newId,
+        now: DateTime.utc(2026),
+      );
+      const paragraph =
+          'Conviene distinguir el **vector** de sus componentes. ';
+      final markdown =
+          '# Resumen de álgebra\n\n'
+          '${List.filled(24, paragraph * 5).join('\n\n')}\n\nÚltima conclusión.';
+      final saved = NotebookPage.fromJson({
+        'id': newId(),
+        'width': markdownSheetWidth,
+        'height': markdownSheetHeight,
+        'background': {'kind': 'paper', 'pattern': 'blank'},
+        'strokes': <Map<String, dynamic>>[],
+        'markdown': '# Resumen de álgebra',
+      });
+      final edited = updateMarkdownSheets(saved, markdown, newId: newId);
+      expect(edited.length, greaterThan(1));
+      final bytes = await PdfExportService(
+        pdf,
+      ).export(book.copyWith(pages: [...book.pages, ...edited]));
+      final document = await PdfDocument.openData(bytes);
+      try {
+        expect(document.pages, hasLength(2 + edited.length));
+        expect(document.pages[0].width, closeTo(595.28, .01));
+        expect(document.pages[0].height, closeTo(841.89, .01));
+        expect(document.pages[1].width, closeTo(841.89, .01));
+        expect(document.pages[1].height, closeTo(595.28, .01));
+        final text = <String>[];
+        for (final page in document.pages.skip(2)) {
+          expect(page.width, closeTo(595.28, .01));
+          expect(page.height, closeTo(841.89, .01));
+          final content = (await page.loadText())!;
+          expect(content.fullText, isNotEmpty);
+          final outside = content.charRects.where(
+            (rect) =>
+                rect.isNotEmpty &&
+                (rect.left < 0 ||
+                    rect.right > page.width ||
+                    rect.bottom < 0 ||
+                    rect.top > page.height),
+          );
+          expect(outside, isEmpty);
+          text.add(content.fullText);
+        }
+        expect(text.first, contains('Resumen de álgebra'));
+        expect(text.last, contains('Última conclusión.'));
+        expect('vector'.allMatches(text.join('\n')), hasLength(120));
+      } finally {
+        await document.dispose();
+      }
+    },
+  );
+
+  test(
+    'exportar tinta diferida la decodifica y compone fuera del hilo de escritura',
     () async {
       final dir = await Directory.systemTemp.createTemp('nala-export-worker-');
       final pdf = PdfService(
@@ -55,7 +149,7 @@ void main() {
         final bytes = await PdfExportService(
           pdf,
           codecEvents: receive.sendPort,
-        ).export(book.copyWith(pages: [page]));
+        ).export(book.copyWith(pages: [_TrackedDeferredPage(page)]));
         final document = await PdfDocument.openData(bytes);
         expect(document.pages, hasLength(1));
         await document.dispose();
@@ -112,7 +206,22 @@ void main() {
           ),
         ];
         final bytes = await PdfExportService(pdf).export(
-          book.copyWith(pages: [book.pages.first.copyWith(comments: comments)]),
+          book.copyWith(
+            pages: [
+              book.pages.first.copyWith(
+                comments: comments,
+                strokes: [
+                  InkStroke(
+                    id: 'marker-underlay',
+                    tool: InkTool.highlighter,
+                    argb: 0xff000000,
+                    width: 30,
+                    points: const [InkPoint(x: 100, y: 100, pressure: 1)],
+                  ),
+                ],
+              ),
+            ],
+          ),
         );
         final document = await PdfDocument.openData(bytes);
         try {
@@ -123,6 +232,15 @@ void main() {
             (await document.pages.first.loadText())!.fullText,
             contains('1'),
           );
+          final image = (await document.pages.first.render(
+            backgroundColor: 0xffffffff,
+          ))!;
+          try {
+            final offset = (104 * image.width + 94) * 4;
+            expect(image.pixels.sublist(offset, offset + 3), [75, 88, 36]);
+          } finally {
+            image.dispose();
+          }
           final text = (await document.pages.last.loadText())!.fullText;
           expect(text, contains('Revisar demostración y λ'));
           expect(text, contains('Nota de voz'));
@@ -238,7 +356,21 @@ void main() {
           note.pages[0].copyWith(
             strokes: [
               dot('red', 32, 32, 0xffff0000),
-              dot('highlight', 16, 16, 0xffffff00, tool: InkTool.highlighter),
+              InkStroke(
+                id: 'highlight',
+                tool: InkTool.highlighter,
+                argb: 0xffffff00,
+                width: 8,
+                points: [
+                  const InkPoint(x: 12, y: 16, pressure: .25),
+                  const InkPoint(x: 16, y: 16, pressure: .75),
+                  const InkPoint(x: 20, y: 16, pressure: 1),
+                  // The same compound fill spans more than one PDF stream.
+                  for (var i = 0; i < 1100; i++)
+                    const InkPoint(x: 16, y: 16, pressure: .5),
+                  const InkPoint(x: 26, y: 16, pressure: 1),
+                ],
+              ),
             ],
           ),
           NotebookPage(
@@ -246,7 +378,10 @@ void main() {
             width: 200,
             height: 300,
             background: const PageBackground.paper(PaperPattern.grid),
-            strokes: [dot('black', 32, 32, 0xff000000)],
+            strokes: [
+              dot('black', 32, 32, 0xff000000),
+              dot('translucent', 48, 48, 0x800000ff),
+            ],
           ),
           note.pages[1].copyWith(strokes: [dot('blue', 811, 565, 0xff0000ff)]),
         ],
@@ -282,7 +417,14 @@ void main() {
         expect(mixed[0], greaterThan(240));
         expect(mixed[1], inInclusiveRange(70, 110));
         expect(mixed[2], lessThan(30));
+        expect((await pixel(0, 13, 16))[1], inInclusiveRange(70, 110));
+        expect((await pixel(0, 25, 16))[2], inInclusiveRange(155, 180));
         expect(await pixel(1, 32, 32), [0, 0, 0]);
+        expect(await pixel(1, 48, 48), [
+          inInclusiveRange(127, 128),
+          inInclusiveRange(127, 128),
+          255,
+        ]);
         expect(await pixel(2, 811, 565), [0, 0, 255]);
         final qa = Directory('.dart_tool/pdf-qa');
         await qa.create(recursive: true);

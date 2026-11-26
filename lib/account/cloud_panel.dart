@@ -22,39 +22,35 @@ class CloudStatus extends StatelessWidget {
       Text(label, maxLines: 1, overflow: TextOverflow.ellipsis);
 }
 
-class CloudControls extends StatelessWidget {
-  const CloudControls({super.key, required this.cloud});
+class ServerSettingsTile extends StatelessWidget {
+  const ServerSettingsTile({super.key, required this.cloud});
 
   final CloudController cloud;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: cloud,
-    builder: (context, _) => Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (MediaQuery.sizeOf(context).width >= 850)
-          SizedBox(width: 270, child: CloudStatus(cloud: cloud)),
-        IconButton(
-          tooltip: 'Servidor de Nala',
-          icon: Icon(switch (cloud.status.phase) {
-            SyncPhase.synced => Icons.cloud_done_outlined,
-            SyncPhase.error ||
-            SyncPhase.needsSignIn => Icons.cloud_off_outlined,
-            _ => Icons.cloud_outlined,
-          }),
-          onPressed: () async {
-            await showDialog<void>(
-              context: context,
-              barrierDismissible: false,
-              builder: (context) => _CloudDialog(cloud: cloud),
-            );
-            await cloud.cancelConnection();
-          },
-        ),
-        const SizedBox(width: 8),
-      ],
-    ),
+    builder: (context, _) {
+      final status = cloud.status;
+      return ListTile(
+        leading: Icon(switch (status.phase) {
+          SyncPhase.synced => Icons.cloud_done_outlined,
+          SyncPhase.error || SyncPhase.needsSignIn => Icons.cloud_off_outlined,
+          _ => Icons.cloud_outlined,
+        }),
+        title: const Text('Servidor privado'),
+        subtitle: Text(status.label),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () async {
+          await showDialog<void>(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => _CloudDialog(cloud: cloud),
+          );
+          await cloud.cancelConnection();
+        },
+      );
+    },
   );
 }
 

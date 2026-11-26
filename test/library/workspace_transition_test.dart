@@ -234,7 +234,8 @@ void main() {
     save.complete();
     await tester.pumpAndSettle();
     expect(find.byType(WorkspaceScreen), findsNothing);
-    expect(find.text('Editado'), findsOneWidget);
+    expect(find.text('Recientes'), findsOneWidget);
+    expect(find.text('Editado'), findsNWidgets(2));
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -502,24 +503,16 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  for (final (tooltip, item) in [
-    ('Más opciones de la biblioteca', 'Backup de la biblioteca'),
-    ('Opciones de apunte', 'Eliminar apunte'),
-  ]) {
-    testWidgets('el menú $tooltip aparece completo con el primer toque', (
-      tester,
-    ) async {
-      await _mountLibrary(tester);
-      await tester.tap(find.byTooltip(tooltip));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
+  testWidgets('el menú de apunte aparece completo con el primer toque', (
+    tester,
+  ) async {
+    await _mountLibrary(tester);
+    await tester.tap(find.byTooltip('Opciones de apunte'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
 
-      final option = tester.element(find.text(item));
-      expect(
-        ModalRoute.of(option)!.animation!.status,
-        AnimationStatus.completed,
-      );
-      await tester.pumpWidget(const SizedBox.shrink());
-    });
-  }
+    final option = tester.element(find.text('Eliminar apunte'));
+    expect(ModalRoute.of(option)!.animation!.status, AnimationStatus.completed);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }

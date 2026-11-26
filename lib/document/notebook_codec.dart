@@ -4,6 +4,7 @@ import 'deferred_notebook_page.dart';
 import 'notebook.dart';
 import 'revision.dart';
 import 'notebook_recording.dart';
+import 'notebook_transcription.dart';
 import '../study/study_card.dart';
 
 class NotebookCodec {
@@ -21,6 +22,8 @@ class NotebookCodec {
     'pages': book.pages.map((p) => p.toJson()).toList(),
     if (book.recordings.isNotEmpty)
       'recordings': book.recordings.map((r) => r.toJson()).toList(),
+    if (book.transcriptions.isNotEmpty)
+      'transcriptions': book.transcriptions.map((t) => t.toJson()).toList(),
     if (book.studyCards.isNotEmpty)
       'studyCards': book.studyCards.map((c) => c.toJson()).toList(),
     'coverAssetId': ?book.coverAssetId,
@@ -107,14 +110,23 @@ class NotebookCodec {
     final recordings = (map['recordings'] as List? ?? [])
         .map((r) => NotebookRecording.fromJson(r as Map<String, dynamic>))
         .toList();
+    final transcriptions = (map['transcriptions'] as List? ?? [])
+        .map((t) => NotebookTranscription.fromJson(t as Map<String, dynamic>))
+        .toList();
     final studyCards = (map['studyCards'] as List? ?? [])
         .map((c) => StudyCard.fromJson(c as Map<String, dynamic>))
         .toList();
     final recordingIds = <String>{};
+    final transcriptionIds = <String>{};
     final cardIds = <String>{};
     for (final recording in recordings) {
       if (!recordingIds.add(recording.id)) {
         throw const FormatException('Grabación duplicada');
+      }
+    }
+    for (final transcription in transcriptions) {
+      if (!transcriptionIds.add(transcription.id)) {
+        throw const FormatException('Transcripción duplicada');
       }
     }
     for (final card in studyCards) {
@@ -137,6 +149,7 @@ class NotebookCodec {
       pages: pages,
       updatedAt: DateTime.parse(map['updatedAt'] as String).toUtc(),
       recordings: recordings,
+      transcriptions: transcriptions,
       studyCards: studyCards,
       coverAssetId: map['coverAssetId'] == null
           ? null

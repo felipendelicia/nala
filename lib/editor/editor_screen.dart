@@ -5,6 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 import 'package:pdfrx_engine/pdfrx_engine.dart' show PdfPasswordException;
+import '../ai/chat_gpt_client.dart';
+import '../ai/chat_gpt_logo.dart';
+import '../ai/notebook_chat_store.dart';
+import '../ai/notebook_study_panel.dart';
+import '../ai/notebook_study_service.dart';
 import '../document/deferred_notebook_page.dart';
 import '../document/notebook.dart';
 import '../document/page_object.dart';
@@ -45,6 +50,8 @@ import 'pen_preferences.dart';
 import 'stylus_button_bridge.dart';
 import 'zoom_controls.dart';
 import 'input_router.dart';
+import 'markdown_sheet.dart';
+import 'page_actions_dialog.dart';
 import 'page_panel.dart';
 import 'page_layout.dart';
 import 'paper_canvas.dart';
@@ -73,6 +80,9 @@ class EditorScreen extends StatefulWidget {
     this.cloud,
     this.penPreferences,
     this.toolbarPreferences,
+    this.chatGpt,
+    this.chatStore,
+    this.studyService,
     this.onOpenLink,
     this.requestedPageId,
     this.navigationRequest = 0,
@@ -85,6 +95,7 @@ class EditorScreen extends StatefulWidget {
     this.onSplitView,
     this.splitView = false,
     this.registerClose,
+    this.registerDismissChatGpt,
     this.initialPageIndex = 0,
     this.storageRoot,
   });
@@ -98,6 +109,9 @@ class EditorScreen extends StatefulWidget {
   final CloudController? cloud;
   final PenPreferencesController? penPreferences;
   final ToolbarPreferencesController? toolbarPreferences;
+  final ChatGptClient? chatGpt;
+  final NotebookChatStore? chatStore;
+  final NotebookStudyService? studyService;
   final ValueChanged<PageLink>? onOpenLink;
   final String? requestedPageId;
   final int navigationRequest;
@@ -105,6 +119,7 @@ class EditorScreen extends StatefulWidget {
   final VoidCallback? onClose, onFocus, onOpenNotebook, onSplitView;
   final VoidCallback? onCloseDeleted;
   final ValueChanged<Future<void> Function()>? registerClose;
+  final ValueChanged<bool Function()>? registerDismissChatGpt;
   final int initialPageIndex;
   final String? storageRoot;
   @override
@@ -119,6 +134,21 @@ class _EditorScreenState extends State<EditorScreen>
   Notebook? exportedSnapshot;
   Uint8List? exportedBytes;
   bool showComments = false, placingComment = false, commentOpen = false;
+  bool showChatGpt = false, openedChatGpt = false;
+  bool chatWasDocked = false;
+  Future<void>? studyRequest;
+  final chatFocus = FocusScopeNode(debugLabel: 'ChatGPT');
+  bool get hasChatGpt =>
+      widget.chatGpt != null &&
+      widget.chatStore != null &&
+      widget.studyService != null;
+  bool get dockChatGpt =>
+      MediaQuery.sizeOf(context).width >=
+      900 +
+          (showPages ? 170 : 0) +
+          (showComments ? 288 : 0) +
+          (showRecording ? 320 : 0);
+  static const chatPanelWidth = 380.0;
   bool remoteDirty = false, refreshingRemote = false;
   StreamSubscription<Set<String>>? remoteNotebookChanges;
   bool get canReceiveRemote =>
@@ -139,6 +169,7 @@ class _EditorScreenState extends State<EditorScreen>
       widget.controller.notebook.pages.length - 1,
     );
     widget.registerClose?.call(prepareClose);
+    widget.registerDismissChatGpt?.call(dismissChatGpt);
     unawaited(loadFavorites());
     unawaited(loadToolbarPreferences());
     settings = widget.penPreferences?.value ?? const PenSettings();
@@ -146,6 +177,7 @@ class _EditorScreenState extends State<EditorScreen>
     stabilization = settings.stabilization;
     router.preserveButtonOnReset = settings.buttonMode == PenButtonMode.toggle;
     WidgetsBinding.instance.addObserver(this);
+    chatFocus.addListener(chatFocusChanged);
     if (widget.active) startButtonBridge();
     listenForRemoteChanges();
     widget.controller.addListener(localSettled);
@@ -1639,6 +1671,7 @@ class _EditorScreenState extends State<EditorScreen>
       throw StateError('El audio está pendiente de guardar.');
     }
     await audioPlayer?.stop();
+    await studyRequest;
   }
 
   void deleteSelection() {
@@ -1666,6 +1699,104 @@ class _EditorScreenState extends State<EditorScreen>
       pdfError = null;
       rememberPageFocus();
     });
+  }
+
+  void toggleChatGpt() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    router.reset();
+    setState(() {
+      showChatGpt = !showChatGpt;
+      if (showChatGpt) openedChatGpt = true;
+    });
+  }
+
+  bool dismissChatGpt() {
+    if (!mounted || !showChatGpt) return false;
+    toggleChatGpt();
+    return true;
+  }
+
+  void chatFocusChanged() {
+    if (mounted && !disposing) setState(() {});
+  }
+
+  Widget chatGptButton() => IconButton(
+    tooltip: 'ChatGPT',
+    icon: const ChatGptLogo(),
+    padding: const EdgeInsets.all(4),
+    constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+    onPressed: toggleChatGpt,
+    isSelected: showChatGpt,
+  );
+
+  void openStudyPage(String id) {
+    if (!widget.active) return;
+    final index = controller.notebook.pages.indexWhere((page) => page.id == id);
+    if (index < 0) return;
+    if (showChatGpt && !dockChatGpt) toggleChatGpt();
+    changePage(index);
+  }
+
+  Future<void> editMarkdownPage() async {
+    final source = page;
+    final markdown = source.markdown;
+    if (markdown == null || reading) return;
+    final edited = await showDialog<String>(
+      context: context,
+      builder: (_) => _EditMarkdownDialog(markdown: markdown),
+    );
+    if (!mounted || edited == null || controller.deletedRemotely) return;
+    final pages = controller.notebook.pages;
+    final index = pages.indexWhere((sheet) => sheet.id == source.id);
+    if (index < 0) return;
+    final current = pages[index];
+    if (current.markdown != markdown) {
+      message('La hoja cambió. Volvé a abrir el editor Markdown.');
+      return;
+    }
+    final sheets = updateMarkdownSheets(
+      current,
+      edited,
+      newId: const Uuid().v4,
+    );
+    if (sheets.length == 1 &&
+        sheets.single.markdown == current.markdown &&
+        sheets.single.height == current.height) {
+      return;
+    }
+    await controller.apply(
+      (book) => book.copyWith(
+        pages: [...pages.take(index), ...sheets, ...pages.skip(index + 1)],
+      ),
+    );
+  }
+
+  Future<void> managePage(int index) async {
+    final original = controller.notebook.pages;
+    if (reading || original.length < 2 || index >= original.length) return;
+    final id = original[index].id;
+    router.reset();
+    final action = await showPageActions(
+      context,
+      index: index,
+      pageCount: original.length,
+    );
+    if (!mounted || reading || controller.deletedRemotely || action == null) {
+      return;
+    }
+    final pages = controller.notebook.pages.toList();
+    final from = pages.indexWhere((sheet) => sheet.id == id);
+    if (from < 0 || pages.length < 2) return;
+    switch (action) {
+      case MovePageAction(:final targetIndex):
+        final target = targetIndex.clamp(0, pages.length - 1);
+        if (from == target) return;
+        final sheet = pages.removeAt(from);
+        pages.insert(target, sheet);
+      case DeletePageAction():
+        pages.removeAt(from);
+    }
+    await controller.apply((book) => book.copyWith(pages: pages));
   }
 
   void addPage() {
@@ -1745,7 +1876,9 @@ class _EditorScreenState extends State<EditorScreen>
         constraints.maxWidth,
         constraints.maxHeight,
         page.width,
-        page.height,
+        pageReady(page) && page.markdown != null
+            ? math.min(page.height, markdownSheetHeight)
+            : page.height,
       );
       final bounds = layout.rect(pageIndex);
       view.tx -= bounds.left * view.scale;
@@ -1759,10 +1892,14 @@ class _EditorScreenState extends State<EditorScreen>
       }
     }
     final currentPaneSize = MediaQuery.sizeOf(context);
-    if (viewSize != null && paneSize != null && paneSize != currentPaneSize) {
+    final chatDocked = showChatGpt && dockChatGpt;
+    if (viewSize != null &&
+        paneSize != null &&
+        (paneSize != currentPaneSize || chatDocked != chatWasDocked)) {
       view.tx += (constraints.maxWidth - viewSize!.width) / 2;
       view.ty += (constraints.maxHeight - viewSize!.height) / 2;
     }
+    chatWasDocked = chatDocked;
     paneSize = currentPaneSize;
     viewSize = constraints.biggest;
     final viewport = Rect.fromLTWH(
@@ -2418,6 +2555,8 @@ class _EditorScreenState extends State<EditorScreen>
     favorites?.dispose();
     toolbarPreferences?.removeListener(toolbarChanged);
     if (ownsToolbarPreferences) toolbarPreferences?.dispose();
+    chatFocus.removeListener(chatFocusChanged);
+    chatFocus.dispose();
     editorFocus.dispose();
     notebookAudio?.dispose();
     audioPlayer?.dispose();
@@ -2467,6 +2606,7 @@ class _EditorScreenState extends State<EditorScreen>
     onPenSettings: penSettings,
     onOpenMenu: router.reset,
     onMoreTools: fallback || !sheetReady ? null : moreTools,
+    chatAction: !fallback && hasChatGpt ? chatGptButton() : null,
     moreToolsActive: shape != null || ruler || selected.isNotEmpty,
     argb: argb,
     onColor: changeInkColor,
@@ -2765,7 +2905,7 @@ class _EditorScreenState extends State<EditorScreen>
       final currentPage = page;
       final sheetReady = pageReady(currentPage);
       return CallbackShortcuts(
-        bindings: widget.active
+        bindings: widget.active && !chatFocus.hasFocus
             ? {
                 const SingleActivator(
                   LogicalKeyboardKey.keyZ,
@@ -2815,9 +2955,10 @@ class _EditorScreenState extends State<EditorScreen>
           canRequestFocus: widget.active,
           autofocus: widget.active,
           child: PopScope(
-            canPop: widget.workspaceManaged || allowPop,
+            canPop: widget.workspaceManaged || (!showChatGpt && allowPop),
             onPopInvokedWithResult: (didPop, result) {
-              if (!didPop && !widget.workspaceManaged) close();
+              if (didPop || widget.workspaceManaged) return;
+              if (!dismissChatGpt()) close();
             },
             child: Scaffold(
               appBar: AppBar(
@@ -2864,6 +3005,7 @@ class _EditorScreenState extends State<EditorScreen>
                       onPressed: moreTools,
                       icon: const Icon(Icons.apps_outlined),
                     ),
+                  if (reading && hasChatGpt) chatGptButton(),
                   if (widget.pdf != null &&
                       widget.share != null &&
                       MediaQuery.sizeOf(context).width >= 600)
@@ -2881,6 +3023,8 @@ class _EditorScreenState extends State<EditorScreen>
                       switch (value) {
                         case 'rename':
                           rename();
+                        case 'markdown':
+                          editMarkdownPage();
                         case 'share':
                           sharePdf();
                         case 'export':
@@ -2897,6 +3041,13 @@ class _EditorScreenState extends State<EditorScreen>
                         enabled: !reading,
                         child: const Text('Renombrar cuaderno'),
                       ),
+                      if (!reading &&
+                          sheetReady &&
+                          currentPage.markdown != null)
+                        const PopupMenuItem(
+                          value: 'markdown',
+                          child: Text('Editar Markdown'),
+                        ),
                       if (widget.pdf != null && widget.share != null)
                         PopupMenuItem(
                           value: 'share',
@@ -2952,47 +3103,55 @@ class _EditorScreenState extends State<EditorScreen>
                   Expanded(
                     child: Stack(
                       children: [
-                        Row(
-                          children: [
-                            if (!reading &&
-                                toolbarLayout.dock == ToolbarDock.left)
-                              buildToolbar(sheetReady: sheetReady),
-                            if (showPages)
-                              PagePanel(
-                                pages: controller.notebook.pages
-                                    .map(thumbnailPage)
-                                    .toList(),
-                                currentPage: pageIndex,
-                                onPage: changePage,
-                                onAdd: reading ? null : addPage,
-                                pdf: widget.pdf,
+                        Padding(
+                          padding: EdgeInsets.only(
+                            right: showChatGpt && dockChatGpt
+                                ? chatPanelWidth
+                                : 0,
+                          ),
+                          child: Row(
+                            children: [
+                              if (!reading &&
+                                  toolbarLayout.dock == ToolbarDock.left)
+                                buildToolbar(sheetReady: sheetReady),
+                              if (showPages)
+                                PagePanel(
+                                  pages: controller.notebook.pages
+                                      .map(thumbnailPage)
+                                      .toList(),
+                                  currentPage: pageIndex,
+                                  onPage: changePage,
+                                  onPageLongPress: reading ? null : managePage,
+                                  onAdd: reading ? null : addPage,
+                                  pdf: widget.pdf,
+                                ),
+                              Expanded(
+                                child: LayoutBuilder(builder: buildDocument),
                               ),
-                            Expanded(
-                              child: LayoutBuilder(builder: buildDocument),
-                            ),
-                            if (!reading &&
-                                toolbarLayout.dock == ToolbarDock.right)
-                              buildToolbar(sheetReady: sheetReady),
-                            if (showComments && sheetReady)
-                              CommentsPanel(
-                                comments: currentPage.comments,
-                                onOpen: openComment,
-                                onClose: () {
-                                  router.reset();
-                                  setState(() => showComments = false);
-                                },
-                                onAdd: reading ? null : placeComment,
-                                onDelete: reading ? null : deleteComment,
-                                player: audioPlayer,
-                              ),
-                            if (showRecording && notebookAudio != null)
-                              RecordingPanel(
-                                session: notebookAudio!,
-                                controller: controller,
-                                onClose: () =>
-                                    setState(() => showRecording = false),
-                              ),
-                          ],
+                              if (!reading &&
+                                  toolbarLayout.dock == ToolbarDock.right)
+                                buildToolbar(sheetReady: sheetReady),
+                              if (showComments && sheetReady)
+                                CommentsPanel(
+                                  comments: currentPage.comments,
+                                  onOpen: openComment,
+                                  onClose: () {
+                                    router.reset();
+                                    setState(() => showComments = false);
+                                  },
+                                  onAdd: reading ? null : placeComment,
+                                  onDelete: reading ? null : deleteComment,
+                                  player: audioPlayer,
+                                ),
+                              if (showRecording && notebookAudio != null)
+                                RecordingPanel(
+                                  session: notebookAudio!,
+                                  controller: controller,
+                                  onClose: () =>
+                                      setState(() => showRecording = false),
+                                ),
+                            ],
+                          ),
                         ),
                         Positioned(
                           top: 0,
@@ -3085,6 +3244,54 @@ class _EditorScreenState extends State<EditorScreen>
                             ],
                           ),
                         ),
+                        if (openedChatGpt && hasChatGpt)
+                          Positioned.fill(
+                            left: dockChatGpt
+                                ? MediaQuery.sizeOf(context).width -
+                                      chatPanelWidth
+                                : 0,
+                            child: Offstage(
+                              offstage: !showChatGpt,
+                              child: ExcludeFocus(
+                                excluding: !showChatGpt || !widget.active,
+                                child: FocusScope(
+                                  node: chatFocus,
+                                  child: Align(
+                                    alignment: Alignment.bottomCenter,
+                                    child: FractionallySizedBox(
+                                      widthFactor: 1,
+                                      heightFactor:
+                                          dockChatGpt ||
+                                              MediaQuery.viewInsetsOf(
+                                                    context,
+                                                  ).bottom >
+                                                  0
+                                          ? 1
+                                          : .88,
+                                      child: NotebookStudyPanel(
+                                        notebook: controller.notebook,
+                                        client: widget.chatGpt!,
+                                        service: widget.studyService!,
+                                        store: widget.chatStore!,
+                                        pdf: widget.pdf,
+                                        onOpenPage: openStudyPage,
+                                        onClose: toggleChatGpt,
+                                        onRequestChanged: (request) =>
+                                            studyRequest = request,
+                                        unlockPdf: (id) =>
+                                            mounted &&
+                                                widget.active &&
+                                                !closing &&
+                                                widget.pdf != null
+                                            ? unlockPdf(assetId: id)
+                                            : Future.value(false),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -3278,6 +3485,61 @@ class _SelectionPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_SelectionPainter old) => true;
+}
+
+class _EditMarkdownDialog extends StatefulWidget {
+  const _EditMarkdownDialog({required this.markdown});
+
+  final String markdown;
+
+  @override
+  State<_EditMarkdownDialog> createState() => _EditMarkdownDialogState();
+}
+
+class _EditMarkdownDialogState extends State<_EditMarkdownDialog> {
+  late final text = TextEditingController(text: widget.markdown);
+
+  @override
+  void dispose() {
+    text.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Editar Markdown'),
+    scrollable: true,
+    content: SizedBox(
+      width: 520,
+      height: 240,
+      child: TextField(
+        controller: text,
+        expands: true,
+        maxLines: null,
+        minLines: null,
+        textAlignVertical: TextAlignVertical.top,
+        decoration: const InputDecoration(
+          labelText: 'Markdown',
+          border: OutlineInputBorder(),
+        ),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancelar'),
+      ),
+      ValueListenableBuilder(
+        valueListenable: text,
+        builder: (context, value, _) => FilledButton(
+          onPressed: value.text.trim().isEmpty
+              ? null
+              : () => Navigator.pop(context, value.text),
+          child: const Text('Guardar'),
+        ),
+      ),
+    ],
+  );
 }
 
 class _RenameDialog extends StatefulWidget {

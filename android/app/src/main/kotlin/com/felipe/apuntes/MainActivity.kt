@@ -4,6 +4,7 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterShellArgs
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugin.common.StandardMethodCodec
 import android.view.MotionEvent
 import android.app.Activity
 import android.content.Intent
@@ -81,6 +82,9 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        val messenger = flutterEngine.dartExecutor.binaryMessenger
+        MethodChannel(messenger, "nala/update", StandardMethodCodec.INSTANCE, messenger.makeBackgroundTaskQueue())
+            .setMethodCallHandler(UpdateBridge(this))
         stylusChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nala/stylus").also { channel ->
             channel.setMethodCallHandler { call, result ->
                 if (call.method == "listen") {

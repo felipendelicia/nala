@@ -1,6 +1,8 @@
-# Nala 0.5.1: herramientas para editar y estudiar
+# Herramientas para editar y estudiar en Nala
 
 Abrí un apunte desde la biblioteca. Para editar, activá **Modo editor**; **Modo lectura** permite recorrer las hojas y escuchar audio vinculado. El encabezado ocupa dos filas al editar y una al leer. **Más herramientas** abre un panel con formas, regla, texto, imágenes, favoritos, plantillas, selección, búsqueda, audio y tarjetas; elegir una acción devuelve el espacio a la hoja. El botón indica si hay una forma, regla o selección activa. La fila de lápiz, color y deshacer se desplaza horizontalmente cuando falta espacio. Podés escribir y seleccionar con lápiz o ratón; los dedos sirven para navegar y ampliar la hoja.
+
+En **Páginas**, mantené pulsada una miniatura en **Modo editor** para mover la hoja a otra posición o eliminarla. **Deshacer** revierte cualquiera de los dos cambios.
 
 ## 1. Formas y regla
 
@@ -73,6 +75,16 @@ En Linux se necesitan herramientas de audio de PipeWire o ALSA: `pw-record`/`pw-
 Abrí **Tarjetas de estudio → Nueva tarjeta**, completá **Pregunta** y **Respuesta**, y pulsá **Guardar tarjeta**. Si antes seleccionaste cuadros de texto, su contenido se propone como pregunta. Podés editar o eliminar tarjetas desde la lista.
 
 En **Repasar pendientes**, intentá responder antes de pulsar **Mostrar respuesta**. Valorá lo que recordaste con **Otra vez**, **Difícil**, **Bien** o **Fácil**. Nala guarda la próxima revisión según esa valoración; **Otra vez** vuelve a programar la tarjeta para dentro de diez minutos. **Ver tarjetas** regresa a la lista.
+
+## Conectar ChatGPT
+
+Para vincular una cuenta compatible, abrí **Ajustes → ChatGPT → Continuar con ChatGPT** y autorizá la conexión en el navegador. En Android, tocá **Volver a Nala** al terminar. [Uso del plan de ChatGPT en otras apps](https://help.openai.com/en/articles/20001542-using-your-chatgpt-plan-in-other-apps-and-sites)
+
+Dentro de un apunte, tocá el logo de ChatGPT en la barra para abrir el chat. Podés hacer preguntas, iniciar un **Nuevo chat** y volver al **Historial de chats**. Nala selecciona todas las hojas por defecto. Usá **Cambiar páginas** para elegir cuáles enviar con tu pregunta. Tocá una referencia como **Hoja 7** para abrirla. Los chats se guardan por apunte en el dispositivo.
+
+Si un apunte ya tiene una hoja Markdown, podés corregirla desde **Modo editor → Opciones del cuaderno → Editar Markdown**.
+
+El símbolo Blossom pertenece a OpenAI. [Guía de marca](https://openai.com/brand/)
 
 ## Guardado y alcance
 

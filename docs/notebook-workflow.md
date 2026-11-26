@@ -32,7 +32,7 @@ Más herramientas queda siempre accesible y contiene los controles que hayas ocu
 
 ## Backup completo y restauración
 
-En la biblioteca, abrí su menú y elegí Backup de la biblioteca. Guardar backup crea un archivo `.nala.zip` con cuadernos e historial retenido, versiones en conflicto, carpetas, imágenes originales y recortadas, grabaciones, fórmulas, plantillas, elementos, favoritos y ajustes locales. Guardalo fuera de la carpeta de Nala para conservar una copia independiente.
+En la biblioteca, abrí **Ajustes → Backup de la biblioteca**. Guardar backup crea un archivo `.nala.zip` con cuadernos e historial retenido, versiones en conflicto, carpetas, imágenes originales y recortadas, grabaciones, fórmulas, plantillas, elementos, favoritos y ajustes locales. Guardalo fuera de la carpeta de Nala para conservar una copia independiente.
 
 Abrir backup comprueba el archivo y muestra su contenido. Recuperar copias crea los apuntes dentro de una carpeta de recuperación y conserva los actuales. Los enlaces entre cuadernos del backup apuntarán a las copias recuperadas. Podés elegir Recuperar ajustes y favoritos; los ajustes anteriores quedan respaldados y la apariencia recuperada se aplica al volver a abrir la aplicación.
 

@@ -259,8 +259,8 @@ class LibraryController extends ChangeNotifier {
 
   Future<DocumentEntry> createNotebook({
     required String title,
-    required String subject,
     required PaperPattern pattern,
+    String subject = '',
   }) async {
     final book = Notebook.blank(
       id: const Uuid().v4(),

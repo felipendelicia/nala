@@ -1,6 +1,7 @@
 import 'page_comment.dart';
 import 'page_object.dart';
 import 'notebook_recording.dart';
+import 'notebook_transcription.dart';
 import '../study/study_card.dart';
 
 enum PaperPattern { blank, ruled, grid, dots, cornell, weekly }
@@ -15,11 +16,28 @@ class InkPoint {
   const InkPoint({required this.x, required this.y, required this.pressure});
   final double x, y, pressure;
   Map<String, Object> toJson() => {'x': x, 'y': y, 'pressure': pressure};
-  factory InkPoint.fromJson(Map<String, dynamic> json) => InkPoint(
-    x: finiteNumber(json['x']),
-    y: finiteNumber(json['y']),
-    pressure: finiteNumber(json['pressure'], min: 0, max: 1),
-  );
+  factory InkPoint.fromJson(Map<String, dynamic> json) {
+    var x = json['x'];
+    var y = json['y'];
+    // Some stored points used '-' in place of one coordinate key.
+    if ((x == null || y == null) &&
+        json.length == 3 &&
+        json.containsKey('-') &&
+        json.containsKey('pressure')) {
+      final hasX = json.containsKey('x');
+      final hasY = json.containsKey('y');
+      if (!hasX && hasY) {
+        x = json['-'];
+      } else if (hasX && !hasY) {
+        y = json['-'];
+      }
+    }
+    return InkPoint(
+      x: finiteNumber(x),
+      y: finiteNumber(y),
+      pressure: finiteNumber(json['pressure'], min: 0, max: 1),
+    );
+  }
 }
 
 class InkStroke {
@@ -166,6 +184,7 @@ class NotebookPage {
     List<InkStroke> strokes = const [],
     List<PageComment> comments = const [],
     List<PageObject> objects = const [],
+    this.markdown,
     this.recognizedText = '',
     String? recognitionFingerprint,
   }) : strokes = List.unmodifiable(strokes),
@@ -180,6 +199,7 @@ class NotebookPage {
   final List<InkStroke> strokes;
   final List<PageComment> comments;
   final List<PageObject> objects;
+  final String? markdown;
   final String recognizedText;
   final String? recognitionFingerprint;
   NotebookPage copyWith({
@@ -189,6 +209,7 @@ class NotebookPage {
     List<PageObject>? objects,
     double? width,
     double? height,
+    String? markdown,
     String? recognizedText,
     Object? recognitionFingerprint = _keepRecognition,
   }) => NotebookPage(
@@ -199,6 +220,7 @@ class NotebookPage {
     strokes: strokes ?? this.strokes,
     comments: comments ?? this.comments,
     objects: objects ?? this.objects,
+    markdown: markdown ?? this.markdown,
     recognizedText: recognizedText ?? this.recognizedText,
     recognitionFingerprint: identical(recognitionFingerprint, _keepRecognition)
         ? this.recognitionFingerprint
@@ -213,10 +235,12 @@ class NotebookPage {
     if (comments.isNotEmpty)
       'comments': comments.map((c) => c.toJson()).toList(),
     if (objects.isNotEmpty) 'objects': objects.map((o) => o.toJson()).toList(),
+    'markdown': ?markdown,
     if (recognizedText.isNotEmpty) 'recognizedText': recognizedText,
     'recognitionFingerprint': ?recognitionFingerprint,
   };
   factory NotebookPage.fromJson(Map<String, dynamic> json) => NotebookPage(
+    markdown: json['markdown'] as String?,
     recognizedText: json['recognizedText'] as String? ?? '',
     recognitionFingerprint: json['recognitionFingerprint'] == null
         ? null
@@ -252,10 +276,12 @@ class Notebook {
     required List<NotebookPage> pages,
     required this.updatedAt,
     List<NotebookRecording> recordings = const [],
+    List<NotebookTranscription> transcriptions = const [],
     List<StudyCard> studyCards = const [],
     this.coverAssetId,
   }) : pages = List.unmodifiable(pages),
        recordings = List.unmodifiable(recordings),
+       transcriptions = List.unmodifiable(transcriptions),
        studyCards = List.unmodifiable(studyCards) {
     if (coverAssetId != null) validAssetId(coverAssetId);
   }
@@ -264,6 +290,8 @@ class Notebook {
   final List<NotebookPage> pages;
   final DateTime updatedAt;
   final List<NotebookRecording> recordings;
+  // Retained to round-trip transcription data saved by earlier versions.
+  final List<NotebookTranscription> transcriptions;
   final List<StudyCard> studyCards;
   final String? coverAssetId;
   factory Notebook.blank({
@@ -308,6 +336,7 @@ class Notebook {
     pages: pages ?? this.pages,
     updatedAt: updatedAt ?? this.updatedAt,
     recordings: recordings ?? this.recordings,
+    transcriptions: transcriptions,
     studyCards: studyCards ?? this.studyCards,
     coverAssetId: identical(coverAssetId, _keepCover)
         ? this.coverAssetId

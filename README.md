@@ -8,7 +8,7 @@ El código actual incorpora importación de PDF, anotaciones sobre sus páginas,
 
 El editor muestra las páginas una debajo de otra: podés seguir bajando sin abrir el índice. Incluye modo lectura, ajuste a hoja y ancho, porcentajes de zoom y bloqueos independientes del zoom y del movimiento horizontal. El resaltador empieza más ancho que el lápiz y cada herramienta conserva su grosor y color durante la sesión. Compartir PDF prepara una instantánea del apunte y abre directamente el selector de Android; Linux permite copiar el archivo o adjuntarlo a un correo, sin guardarlo antes manualmente.
 
-La biblioteca y el editor usan un diseño nuevo con Manrope y el logo minimalista elegido por Felipe. La interfaz usa blanco, negro y grises. Desde Apariencia podés elegir Claro, Oscuro o Seguir sistema; la preferencia se conserva al reiniciar. El papel y los PDF mantienen sus colores originales. Los apuntes se pueden mover entre carpetas desde su menú de opciones.
+La biblioteca y el editor usan un diseño nuevo con Manrope y el logo minimalista elegido por Felipe. La interfaz usa blanco, negro y grises. En la biblioteca, abrí **Ajustes → Apariencia** para elegir Claro, Oscuro o Seguir sistema. La preferencia se conserva al reiniciar. El papel y los PDF mantienen sus colores originales. Los apuntes se pueden mover entre carpetas desde su menú de opciones.
 
 Se pueden anclar comentarios de texto y notas de voz a la hoja. El audio comienza únicamente al pulsar Grabar, se puede escuchar o descartar y se detiene al pasar la app al fondo. Android usa su micrófono y Linux necesita PipeWire (pw-record/pw-play) o ALSA (arecord/aplay); los recursos se guardan como WAV mono de 16 kHz. Los comentarios permanecen editables en Nala. El PDF exportado incluye marcadores numerados y un anexo con el texto; las notas de voz se identifican con su duración y se escuchan desde Nala.
 
@@ -27,6 +27,8 @@ La versión **0.7.0** incorpora el servidor privado. La [versión de prueba púb
 El [parche 0.7.2](docs/releases/v0.7.2.md) reduce el tiempo de recarga de la biblioteca y el trabajo de renderizado al navegar por PDF.
 
 En Linux, descomprimí el paquete y ejecutá `Abrir-Nala.sh` manteniéndolo junto a `Nala-Linux/`. En Android, copiá `Nala.apk`, abrilo y permití la instalación desde la aplicación que lo abre. Es un APK de prueba firmado con una clave de desarrollo.
+
+En **Ajustes → Buscar actualizaciones**, Nala consulta las versiones publicadas en GitHub y ofrece instalar una compatible. En Linux se aplica cuando volvés a abrir Nala con `Abrir-Nala.sh`. [Preparación de las publicaciones](docs/releases/updates.md).
 
 Herramientas usadas: Flutter 3.47.6, Dart 3.13.5.
 

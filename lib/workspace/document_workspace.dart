@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../account/cloud_controller.dart';
@@ -16,6 +18,7 @@ class WorkspaceTab {
   int navigationRequest = 0;
   String get id => controller.notebook.id;
   Future<void> Function()? prepareClose;
+  bool Function()? dismissChatGpt;
 }
 
 /// Owns document controllers for the lifetime of the workspace, independent of
@@ -26,11 +29,13 @@ class DocumentWorkspace extends ChangeNotifier {
     required this.deviceId,
     required this.newId,
     required this.now,
+    this.onOpened,
   });
   final NotebookRepository repository;
   final String deviceId;
   final String Function() newId;
   final DateTime Function() now;
+  final void Function(DocumentEntry)? onOpened;
   final List<WorkspaceTab> _tabs = [];
   List<WorkspaceTab> get tabs => List.unmodifiable(_tabs);
   String? _left, _right, _active;
@@ -57,6 +62,7 @@ class DocumentWorkspace extends ChangeNotifier {
     );
     _tabs.add(tab);
     select(tab.id);
+    onOpened?.call(entry);
     return tab;
   }
 
@@ -181,6 +187,11 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     deviceId: widget.services.deviceId,
     newId: const Uuid().v4,
     now: DateTime.now,
+    onOpened: (entry) => scheduleMicrotask(() {
+      if (mounted) {
+        widget.services.recentNotes.remember(entry.notebook.id, entry.headId);
+      }
+    }),
   )..open(widget.initialEntry, initialPageIndex: widget.initialPageIndex);
   bool closing = false, allowPop = false;
   String? closingId;
@@ -312,7 +323,11 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     builder: (context, _) => PopScope(
       canPop: allowPop,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _leave();
+        if (didPop || closing || closingId != null) return;
+        final active = workspace.tabs
+            .where((tab) => workspace.isActive(tab.id))
+            .firstOrNull;
+        if (active?.dismissChatGpt?.call() != true) _leave();
       },
       child: Scaffold(
         body: SafeArea(
@@ -463,6 +478,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                                               workspace.focus(tab.id),
                                           registerClose: (callback) =>
                                               tab.prepareClose = callback,
+                                          registerDismissChatGpt: (callback) =>
+                                              tab.dismissChatGpt = callback,
                                           initialPageIndex:
                                               tab.initialPageIndex,
                                           storageRoot: widget.services.root,
@@ -483,6 +500,10 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                                           audioDirectory:
                                               '${widget.services.root}/audio-temp',
                                           cloud: widget.cloud,
+                                          chatGpt: widget.services.chatGpt,
+                                          chatStore: widget.services.chatStore,
+                                          studyService:
+                                              widget.services.studyService,
                                         ),
                                       ),
                                     ),

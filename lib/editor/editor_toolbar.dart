@@ -23,6 +23,7 @@ class EditorToolbar extends StatelessWidget {
     this.onPenSettings,
     this.onOpenMenu,
     this.onMoreTools,
+    this.chatAction,
     this.moreToolsActive = false,
     this.layout,
     this.onShortcut = const {},
@@ -41,6 +42,7 @@ class EditorToolbar extends StatelessWidget {
   final VoidCallback? onApplyPattern;
   final VoidCallback? onPenSettings;
   final VoidCallback? onOpenMenu, onMoreTools;
+  final Widget? chatAction;
   final bool moreToolsActive;
   final ToolbarLayout? layout;
   final Map<ToolbarAction, VoidCallback?> onShortcut;
@@ -275,6 +277,7 @@ class EditorToolbar extends StatelessWidget {
                 ),
               ),
             ),
+            ?chatAction,
             ?more,
           ],
         ),

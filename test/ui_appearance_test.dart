@@ -131,14 +131,14 @@ void main() {
       );
     }
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Apariencia'));
+    await tester.tap(find.byTooltip('Ajustes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Apariencia'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Oscuro'));
     await tester.pumpAndSettle();
-    expect(
-      Theme.of(tester.element(find.byType(LibraryScreen))).brightness,
-      Brightness.dark,
-    );
+    final library = find.byType(LibraryScreen, skipOffstage: false);
+    expect(Theme.of(tester.element(library)).brightness, Brightness.dark);
     var persisted = false;
     final writeDeadline = DateTime.now().add(const Duration(seconds: 10));
     while (!persisted && DateTime.now().isBefore(writeDeadline)) {
@@ -156,14 +156,11 @@ void main() {
       expect(saved.mode, ThemeMode.dark);
       saved.dispose();
     });
-    await tester.tap(find.byTooltip('Apariencia'));
+    await tester.tap(find.text('Apariencia'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Claro'));
     await tester.pumpAndSettle();
-    expect(
-      Theme.of(tester.element(find.byType(LibraryScreen))).brightness,
-      Brightness.light,
-    );
+    expect(Theme.of(tester.element(library)).brightness, Brightness.light);
     await tester.pumpWidget(const SizedBox());
     await tester.runAsync(() => root.delete(recursive: true));
     await services.close();

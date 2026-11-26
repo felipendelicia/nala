@@ -23,10 +23,10 @@ void main() {
     });
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: CloudControls(cloud: cloud)),
+        home: Scaffold(body: ServerSettingsTile(cloud: cloud)),
       ),
     );
-    await tester.tap(find.byType(IconButton));
+    await tester.tap(find.widgetWithText(ListTile, 'Servidor privado'));
     await tester.pumpAndSettle();
     expect(find.text('Servidor de Nala'), findsOneWidget);
     expect(find.text('URL del servidor'), findsOneWidget);
@@ -71,10 +71,10 @@ void main() {
     expect(cloud.status.phase, SyncPhase.needsSignIn);
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: CloudControls(cloud: cloud)),
+        home: Scaffold(body: ServerSettingsTile(cloud: cloud)),
       ),
     );
-    await tester.tap(find.byType(IconButton));
+    await tester.tap(find.widgetWithText(ListTile, 'Servidor privado'));
     await tester.pumpAndSettle();
     expect(find.text(cloud.status.message!), findsOneWidget);
     expect(find.text('Conectado por esta sesión.'), findsNothing);

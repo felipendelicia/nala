@@ -3,12 +3,17 @@ import 'dart:ui' show Size;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:image/image.dart' as img;
-import 'package:pdf/pdf.dart' show PdfPageFormat, PdfColor;
+import 'package:pdf/pdf.dart'
+    show PdfColor, PdfGraphicState, PdfPage, PdfPageFormat, PdfStream;
 import 'package:pdf/widgets.dart' as pw;
-import 'package:pdfrx_engine/pdfrx_engine.dart';
+import 'package:pdfrx_engine/pdfrx_engine.dart'
+    show PdfDocument, PdfPasswordException, createSimplePasswordProvider;
+import '../document/deferred_notebook_page.dart';
+import '../document/markdown_content.dart';
 import '../document/notebook.dart';
 import '../document/notebook_codec.dart';
 import '../document/page_object.dart';
+import '../editor/markdown_sheet.dart';
 import '../editor/paper_background.dart';
 import '../editor/stroke_geometry.dart';
 import 'pdf_service.dart';
@@ -89,6 +94,9 @@ class PdfExportService {
             raster.dispose();
           }
         }
+        if (page is DeferredNotebookPage && !page.isReady) {
+          await page.prepare();
+        }
         for (final object in page.objects) {
           if (object.kind != PageObjectKind.text &&
               !images.containsKey(object.assetId)) {
@@ -149,7 +157,7 @@ Future<Uint8List> _composePdf(
   );
   for (final page in notebook.pages) {
     final background = request.backgrounds[page.id];
-    final svg = _inkSvg(page);
+    final markdown = page.markdown;
     final image = background == null ? null : pw.MemoryImage(background);
     output.addPage(
       pw.Page(
@@ -168,6 +176,8 @@ Future<Uint8List> _composePdf(
               ),
             if (image != null)
               pw.Positioned.fill(child: pw.Image(image, fit: pw.BoxFit.fill)),
+            if (markdown != null)
+              pw.Positioned.fill(child: _markdownPage(markdown, page.width)),
             for (final object in page.objects)
               pw.Positioned(
                 left: object.x,
@@ -204,32 +214,11 @@ Future<Uint8List> _composePdf(
                   ),
                 ),
               ),
-            pw.Positioned.fill(
-              child: pw.SvgImage(svg: svg, fit: pw.BoxFit.fill),
-            ),
-            for (var i = 0; i < page.comments.length; i++)
-              pw.Positioned(
-                left: (page.comments[i].x - 9)
-                    .clamp(0, page.width - 18)
-                    .toDouble(),
-                top: (page.comments[i].y - 9)
-                    .clamp(0, page.height - 18)
-                    .toDouble(),
-                child: pw.Container(
-                  width: 18,
-                  height: 18,
-                  decoration: const pw.BoxDecoration(
-                    color: PdfColor.fromInt(0xff24584b),
-                    shape: pw.BoxShape.circle,
-                  ),
-                  alignment: pw.Alignment.center,
-                  child: pw.Text(
-                    '${i + 1}',
-                    style: const pw.TextStyle(
-                      color: PdfColor.fromInt(0xffffffff),
-                      fontSize: 10,
-                    ),
-                  ),
+            if (page.strokes.isNotEmpty || page.comments.isNotEmpty)
+              pw.Positioned.fill(
+                child: _PageAnnotations(
+                  page,
+                  child: page.comments.isEmpty ? null : _commentMarkers(page),
                 ),
               ),
           ],
@@ -269,23 +258,157 @@ Future<Uint8List> _composePdf(
       ),
     );
   }
-  return output.save();
+  // Composition already runs in a worker isolate. Writing here avoids
+  // transferring the populated document and its page streams to another one.
+  final bytes = PdfStream();
+  await output.write(bytes);
+  return bytes.output();
 }
 
-String _inkSvg(NotebookPage page) {
-  final out = StringBuffer(
-    '<svg xmlns="http://www.w3.org/2000/svg" width="${page.width}" height="${page.height}" viewBox="0 0 ${page.width} ${page.height}">',
-  );
-  for (final stroke in page.strokes) {
-    final color = (stroke.argb & 0xffffff).toRadixString(16).padLeft(6, '0');
-    final alpha = stroke.tool == InkTool.highlighter
-        ? 1 / 3
-        : ((stroke.argb >> 24) & 0xff) / 255;
-    out.write(
-      '<path d="${StrokeGeometry.outline(stroke).svgPath}" fill="#$color" fill-opacity="$alpha"/>',
-    );
+pw.Widget _markdownPage(String markdown, double width) => pw.Padding(
+  padding: const pw.EdgeInsets.all(markdownSheetMargin),
+  child: pw.Column(
+    crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+    children: [
+      for (final block in parseMarkdown(markdown))
+        pw.Padding(
+          padding: pw.EdgeInsets.only(
+            left: block.indent.clamp(0, (width - 2 * markdownSheetMargin) / 4),
+            bottom: block.gap,
+          ),
+          child: block.divider
+              ? pw.Container(height: 1, color: const PdfColor(.8, .8, .8))
+              : pw.RichText(
+                  text: pw.TextSpan(
+                    style: pw.TextStyle(
+                      color: const PdfColor(.125, .125, .125),
+                      fontSize: block.sizeFor(markdownSheetFontSize),
+                      fontWeight: block.heading > 0 ? pw.FontWeight.bold : null,
+                      lineSpacing: markdownSheetFontSize * .12,
+                    ),
+                    children: [
+                      for (final run in block.runs)
+                        pw.TextSpan(
+                          text: run.text,
+                          style: _markdownRunStyle(run),
+                        ),
+                    ],
+                  ),
+                ),
+        ),
+    ],
+  ),
+);
+
+pw.TextStyle _markdownRunStyle(MarkdownRun run) => pw.TextStyle(
+  fontWeight: run.emphasis.contains(MarkdownEmphasis.bold)
+      ? pw.FontWeight.bold
+      : null,
+  fontStyle: run.emphasis.contains(MarkdownEmphasis.italic)
+      ? pw.FontStyle.italic
+      : null,
+  decoration: pw.TextDecoration.combine([
+    if (run.emphasis.contains(MarkdownEmphasis.strike))
+      pw.TextDecoration.lineThrough,
+    if (run.link != null) pw.TextDecoration.underline,
+  ]),
+);
+
+pw.Widget _commentMarkers(NotebookPage page) => pw.Stack(
+  children: [
+    for (var i = 0; i < page.comments.length; i++)
+      pw.Positioned(
+        left: (page.comments[i].x - 9).clamp(0, page.width - 18).toDouble(),
+        top: (page.comments[i].y - 9).clamp(0, page.height - 18).toDouble(),
+        child: pw.Container(
+          width: 18,
+          height: 18,
+          decoration: const pw.BoxDecoration(
+            color: PdfColor.fromInt(0xff24584b),
+            shape: pw.BoxShape.circle,
+          ),
+          alignment: pw.Alignment.center,
+          child: pw.Text(
+            '${i + 1}',
+            style: const pw.TextStyle(
+              color: PdfColor.fromInt(0xffffffff),
+              fontSize: 10,
+            ),
+          ),
+        ),
+      ),
+  ],
+);
+
+/// Appends ink and comments above the full, zero-margin page background.
+class _PageAnnotations extends pw.SingleChildWidget {
+  _PageAnnotations(this.page, {super.child});
+
+  final NotebookPage page;
+
+  @override
+  void paint(pw.Context context) {
+    super.paint(context);
+    if (page.strokes.isEmpty) {
+      child?.paint(context);
+      return;
+    }
+    _paintInk(context.page, page.height, page.strokes);
+    if (child != null) {
+      final canvas = context.page.getGraphics()
+        ..setGraphicState(const PdfGraphicState(opacity: 1));
+      child!.paint(context.copyWith(canvas: canvas));
+    }
   }
-  return '$out</svg>';
+}
+
+void _paintInk(PdfPage page, double height, List<InkStroke> strokes) {
+  var canvas = page.getGraphics();
+  var contours = 0;
+
+  void beginContour() {
+    // The PDF library grows streams by a fixed increment, copying the entire
+    // contents. Keep each stream small. A PDF page reads its contents streams
+    // in sequence, so a stroke can still be filled once across boundaries.
+    const contoursPerStream = 1024;
+    if (contours == contoursPerStream) {
+      canvas = page.getGraphics();
+      contours = 0;
+    }
+    contours++;
+  }
+
+  for (final stroke in strokes) {
+    final color = PdfColor.fromInt(stroke.argb);
+    final opacity = stroke.tool == InkTool.highlighter ? 1 / 3 : color.alpha;
+    final outline = StrokeGeometry.outline(stroke);
+    canvas
+      ..setFillColor(color)
+      ..setGraphicState(PdfGraphicState(opacity: opacity));
+    for (final circle in outline.circles) {
+      beginContour();
+      final center = circle.center;
+      final radius = circle.width / 2;
+      // Match the polygon winding after flipping from page to PDF coordinates.
+      canvas.drawEllipse(
+        center.dx,
+        height - center.dy,
+        radius,
+        radius,
+        clockwise: false,
+      );
+    }
+    for (final corners in outline.polygons) {
+      beginContour();
+      canvas.moveTo(corners.first.dx, height - corners.first.dy);
+      for (final corner in corners.skip(1)) {
+        canvas.lineTo(corner.dx, height - corner.dy);
+      }
+      canvas.closePath();
+    }
+    // One fill applies the stroke opacity once even where its contours overlap.
+    canvas.fillPath();
+  }
 }
 
 String _duration(int ms) =>

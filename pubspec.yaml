@@ -1,7 +1,7 @@
 name: apuntes
 description: Cuadernos y PDFs para estudiar con S Pen.
 publish_to: none
-version: 0.7.10+18
+version: 0.7.11+19
 environment:
   sdk: '>=3.12.0 <4.0.0'
 dependencies:
@@ -17,10 +17,13 @@ dependencies:
   flutter_secure_storage: 11.2.0
   file_selector: 1.1.0
   http: ^1.6.0
+  jose: 0.3.5+2
+  markdown: 7.3.1
   crypto: ^3.0.7
   uuid: ^4.5.2
   path: ^1.9.1
   path_provider: ^2.1.5
+  url_launcher: 6.3.3
   vector_math: ^2.2.0
 dev_dependencies:
   flutter_test:
@@ -36,8 +39,13 @@ flutter:
     - family: Manrope
       fonts:
         - asset: assets/fonts/Manrope.ttf
+    - family: NalaSans
+      fonts:
+        - asset: assets/fonts/NalaSans.ttf
   assets:
     - assets/nala-icon.png
+    - assets/chatgpt-blossom.png
+    - assets/chatgpt-blossom-dark.png
     - assets/fonts/NalaSans.ttf
     - assets/fonts/LICENSE-Manrope.txt
     - assets/fonts/FONTLOG-Manrope.txt

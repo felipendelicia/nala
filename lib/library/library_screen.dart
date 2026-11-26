@@ -6,9 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import 'package:pdfrx_engine/pdfrx_engine.dart' show PdfPasswordException;
 import '../bootstrap.dart';
-import '../backup/backup_dialog.dart';
 import '../backup/backup_files.dart';
-import '../backup/backup_service.dart';
 import '../document/notebook.dart';
 import '../document/revision.dart';
 import '../document/folders.dart';
@@ -19,15 +17,14 @@ import '../workspace/workspace_opening_screen.dart';
 import '../search/notebook_search_dialog.dart';
 import '../search/search_service.dart';
 import '../editor/paper_canvas.dart';
-import '../ui/app_theme.dart';
-import '../ui/appearance.dart';
 import 'library_controller.dart';
+import 'library_folder_tree.dart';
+import 'library_settings_screen.dart';
 import 'notebook_dialog.dart';
 import '../pdf/password_dialog.dart';
 import '../pdf/pdf_page_background.dart';
 import '../pdf/pdf_service.dart';
 import '../account/cloud_controller.dart';
-import '../account/cloud_panel.dart';
 
 const _notebookTileMaxWidth = 360.0;
 const _notebookPreviewSidePadding = 40.0;
@@ -224,27 +221,26 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
-  Future<void> _backup() async {
+  Future<void> _showSettings() async {
+    final cloud = widget.cloud;
     final services = widget.services;
-    final result = await showBackupDialog(
-      context,
-      service: BackupService(
-        root: services.root,
-        repository: services.repository,
-        assets: services.assets,
-        deviceId: services.deviceId,
-        appearanceFile: AppearanceScope.of(context)?.file,
+    final backupFiles = widget.backupFiles;
+    final recoveryFolder = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => LibrarySettingsScreen(
+          services: services,
+          cloud: cloud,
+          backupFiles: backupFiles,
+        ),
       ),
-      files: widget.backupFiles ?? NativeBackupFiles(),
-      onRestored: (result) async {
-        await services.library.refresh();
-        if (result.preferencesRestored) {
-          await services.toolbarPreferences?.reload();
-          await services.penPreferences?.reload();
-        }
-      },
     );
-    if (result != null && mounted) _navigate(result.recoveryFolderId);
+    if (recoveryFolder == null) return;
+    if (mounted) {
+      _navigate(recoveryFolder);
+    } else {
+      // Selecting a catalog in Settings replaces the previous library screen.
+      cloud?.services.library.openFolder(recoveryFolder);
+    }
   }
 
   Future<void> _create() async {
@@ -256,7 +252,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     try {
       final entry = await widget.services.library.createNotebook(
         title: result.title,
-        subject: result.subject,
         pattern: result.pattern,
       );
       if (mounted) await _open(entry);
@@ -431,10 +426,28 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: widget.services.library,
+    animation: Listenable.merge([
+      widget.services.library,
+      widget.services.recentNotes,
+    ]),
     builder: (context, _) {
       final library = widget.services.library;
+      final breadcrumbs = library.breadcrumbs;
       final entries = library.filtered(query: query, subject: subject);
+      final recent = <CatalogEntry>[];
+      if (library.currentFolderId == null && query.isEmpty && subject.isEmpty) {
+        for (final opened in widget.services.recentNotes.entries) {
+          final matches = library.entries.where(
+            (entry) => entry.documentId == opened.documentId,
+          );
+          final entry =
+              matches
+                  .where((entry) => entry.headId == opened.headId)
+                  .firstOrNull ??
+              matches.singleOrNull;
+          if (entry != null) recent.add(entry);
+        }
+      }
       final tileIndices = {
         for (var index = 0; index < entries.length; index++)
           _tileKey(entries[index]): index,
@@ -469,48 +482,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
               onPressed: _search,
               icon: const Icon(Icons.manage_search_outlined),
             ),
-            PopupMenuButton<String>(
-              tooltip: 'Más opciones de la biblioteca',
-              popUpAnimationStyle: _libraryMenuAnimation(context),
-              onSelected: (action) {
-                if (action == 'backup') _backup();
-              },
-              itemBuilder: (_) => const [
-                PopupMenuItem(
-                  value: 'backup',
-                  child: Row(
-                    children: [
-                      Icon(Icons.backup_outlined, size: 20),
-                      SizedBox(width: 12),
-                      Flexible(child: Text('Backup de la biblioteca')),
-                    ],
-                  ),
-                ),
-              ],
+            IconButton(
+              tooltip: 'Ajustes',
+              onPressed: _showSettings,
+              icon: const Icon(Icons.settings_outlined),
             ),
-            const AppearanceButton(),
-            if (widget.cloud != null)
-              CloudControls(cloud: widget.cloud!)
-            else if (MediaQuery.sizeOf(context).width >= 850)
-              const SizedBox(
-                width: 270,
-                child: Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text(
-                    'Guardado en este dispositivo',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              )
-            else
-              const Tooltip(
-                message: 'Guardado en este dispositivo',
-                child: Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Icon(Icons.offline_pin_outlined),
-                ),
-              ),
           ],
         ),
         body: LayoutBuilder(
@@ -519,60 +495,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
               if (constraints.maxWidth >= 1100)
                 SizedBox(
                   width: 224,
-                  child: Material(
-                    color: nalaSidebar,
-                    child: ListTileTheme(
-                      textColor: const Color(0xffdddddd),
-                      iconColor: const Color(0xffcccccc),
-                      selectedColor: Colors.white,
-                      selectedTileColor: Colors.white12,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: ListView(
-                        padding: const EdgeInsets.all(12),
-                        children: [
-                          const Padding(
-                            padding: EdgeInsets.fromLTRB(16, 24, 12, 20),
-                            child: Text(
-                              'Tu biblioteca',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                          ListTile(
-                            leading: const Icon(Icons.home_outlined),
-                            title: const Text('Mis apuntes'),
-                            selected: library.currentFolderId == null,
-                            onTap: () => _navigate(null),
-                          ),
-                          for (final folder in library.folders)
-                            Padding(
-                              padding: EdgeInsets.only(
-                                left:
-                                    (library.pathFor(folder.id).length - 1) *
-                                    12.0,
-                              ),
-                              child: ListTile(
-                                leading: const Icon(
-                                  Icons.folder_outlined,
-                                  size: 20,
-                                ),
-                                title: Text(
-                                  folder.name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                selected: library.currentFolderId == folder.id,
-                                onTap: () => _navigate(folder.id),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
+                  child: LibraryFolderTree(
+                    key: ObjectKey(library),
+                    folders: library.folders,
+                    selectedPath: breadcrumbs,
+                    onNavigate: _navigate,
                   ),
                 ),
               Expanded(
@@ -591,7 +518,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                             icon: const Icon(Icons.home_outlined),
                             label: const Text('Mis apuntes'),
                           ),
-                          for (final f in library.breadcrumbs)
+                          for (final f in breadcrumbs)
                             Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -621,9 +548,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        library.breadcrumbs.isEmpty
+                        breadcrumbs.isEmpty
                             ? 'Tus apuntes'
-                            : library.breadcrumbs.last.name,
+                            : breadcrumbs.last.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.headlineLarge,
@@ -772,7 +699,30 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         ),
                       const SizedBox(height: 20),
                       Expanded(
-                        child: entries.isEmpty
+                        child: recent.isNotEmpty
+                            ? CustomScrollView(
+                                slivers: [
+                                  SliverToBoxAdapter(
+                                    child: _RecentNotebooks(
+                                      entries: recent,
+                                      onOpen: _openCatalogEntry,
+                                    ),
+                                  ),
+                                  SliverGrid(
+                                    gridDelegate: _notebookGrid(
+                                      constraints.maxHeight,
+                                    ),
+                                    delegate: SliverChildBuilderDelegate(
+                                      (_, index) =>
+                                          _notebookTile(entries[index]),
+                                      childCount: entries.length,
+                                      findChildIndexCallback: (key) =>
+                                          tileIndices[key],
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : entries.isEmpty
                             ? Center(
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
@@ -799,30 +749,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 ),
                               )
                             : GridView.builder(
-                                gridDelegate:
-                                    SliverGridDelegateWithMaxCrossAxisExtent(
-                                      maxCrossAxisExtent: _notebookTileMaxWidth,
-                                      mainAxisExtent:
-                                          constraints.maxHeight < 800
-                                          ? 280
-                                          : 320,
-                                      crossAxisSpacing: 20,
-                                      mainAxisSpacing: 20,
-                                    ),
+                                gridDelegate: _notebookGrid(
+                                  constraints.maxHeight,
+                                ),
                                 itemCount: entries.length,
                                 findChildIndexCallback: (key) =>
                                     tileIndices[key],
-                                itemBuilder: (_, index) => _NotebookTile(
-                                  key: _tileKey(entries[index]),
-                                  entry: entries[index],
-                                  library: library,
-                                  pdf: widget.services.pdf,
-                                  assets: widget.services.assets,
-                                  onTap: () =>
-                                      _openCatalogEntry(entries[index]),
-                                  onAction: (a) =>
-                                      _noteAction(entries[index], a),
-                                ),
+                                itemBuilder: (_, index) =>
+                                    _notebookTile(entries[index]),
                               ),
                       ),
                     ],
@@ -834,6 +768,69 @@ class _LibraryScreenState extends State<LibraryScreen> {
         ),
       );
     },
+  );
+
+  SliverGridDelegate _notebookGrid(double height) =>
+      SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: _notebookTileMaxWidth,
+        mainAxisExtent: height < 800 ? 280 : 320,
+        crossAxisSpacing: 20,
+        mainAxisSpacing: 20,
+      );
+
+  Widget _notebookTile(CatalogEntry entry) => _NotebookTile(
+    key: _tileKey(entry),
+    entry: entry,
+    library: widget.services.library,
+    pdf: widget.services.pdf,
+    assets: widget.services.assets,
+    onTap: () => _openCatalogEntry(entry),
+    onAction: (action) => _noteAction(entry, action),
+  );
+}
+
+class _RecentNotebooks extends StatelessWidget {
+  const _RecentNotebooks({required this.entries, required this.onOpen});
+
+  final List<CatalogEntry> entries;
+  final ValueChanged<CatalogEntry> onOpen;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 20),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Recientes', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 48,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: entries.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            itemBuilder: (_, index) {
+              final entry = entries[index];
+              return SizedBox(
+                width: 180,
+                child: Tooltip(
+                  message: entry.title,
+                  child: OutlinedButton.icon(
+                    onPressed: () => onOpen(entry),
+                    icon: const Icon(Icons.description_outlined, size: 18),
+                    label: Text(
+                      entry.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    ),
   );
 }
 

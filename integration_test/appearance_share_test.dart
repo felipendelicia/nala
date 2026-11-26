@@ -52,6 +52,17 @@ Future<void> until(WidgetTester tester, bool Function() ready) async {
   await tester.pumpAndSettle();
 }
 
+Future<void> chooseLibraryTheme(WidgetTester tester, String label) async {
+  await tester.tap(find.byTooltip('Ajustes'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.widgetWithText(ListTile, 'Apariencia'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(label));
+  await tester.pumpAndSettle();
+  await tester.pageBack();
+  await tester.pumpAndSettle();
+}
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   testWidgets(
@@ -115,19 +126,13 @@ void main() {
         tester,
         () => find.byType(LibraryScreen).evaluate().isNotEmpty,
       );
-      await tester.tap(find.byTooltip('Apariencia'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Claro'));
-      await tester.pumpAndSettle();
+      await chooseLibraryTheme(tester, 'Claro');
       expect(
         Theme.of(tester.element(find.byType(LibraryScreen))).brightness,
         Brightness.light,
       );
       await captureUi(tester, find.byKey(preview), 'library-light-v03');
-      await tester.tap(find.byTooltip('Apariencia'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Oscuro'));
-      await tester.pumpAndSettle();
+      await chooseLibraryTheme(tester, 'Oscuro');
       expect(
         Theme.of(tester.element(find.byType(LibraryScreen))).brightness,
         Brightness.dark,

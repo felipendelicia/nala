@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../document/notebook.dart';
 import '../ui/app_theme.dart';
 
-typedef NotebookDraft = ({String title, String subject, PaperPattern pattern});
+typedef NotebookDraft = ({String title, PaperPattern pattern});
 
 class NotebookDialog extends StatefulWidget {
   const NotebookDialog({super.key});
@@ -11,12 +11,11 @@ class NotebookDialog extends StatefulWidget {
 }
 
 class _NotebookDialogState extends State<NotebookDialog> {
-  final title = TextEditingController(), subject = TextEditingController();
+  final title = TextEditingController();
   var pattern = PaperPattern.grid;
   @override
   void dispose() {
     title.dispose();
-    subject.dispose();
     super.dispose();
   }
 
@@ -35,11 +34,6 @@ class _NotebookDialogState extends State<NotebookDialog> {
               decoration: const InputDecoration(
                 labelText: 'Nombre del cuaderno',
               ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: subject,
-              decoration: const InputDecoration(labelText: 'Materia'),
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<PaperPattern>(
@@ -67,11 +61,8 @@ class _NotebookDialogState extends State<NotebookDialog> {
         child: const Text('Cancelar'),
       ),
       FilledButton(
-        onPressed: () => Navigator.pop(context, (
-          title: title.text,
-          subject: subject.text,
-          pattern: pattern,
-        )),
+        onPressed: () =>
+            Navigator.pop(context, (title: title.text, pattern: pattern)),
         child: const Text('Crear'),
       ),
     ],

@@ -7,10 +7,15 @@ import 'document/asset_store.dart';
 import 'document/notebook_repository.dart';
 import 'document/sqlite_notebook_repository.dart';
 import 'library/library_controller.dart';
+import 'library/recent_notes.dart';
 import 'pdf/pdf_service.dart';
 import 'pdf/document_files.dart';
 import 'pdf/pdf_share.dart';
 import 'audio/audio_service.dart';
+import 'ai/chat_gpt_client.dart';
+import 'ai/notebook_chat_store.dart';
+import 'ai/notebook_study_service.dart';
+import 'pdf/pdf_export_service.dart';
 import 'sync/remote_store.dart';
 import 'sync/sync_engine.dart';
 import 'sync/sync_coordinator.dart';
@@ -26,12 +31,16 @@ class AppServices {
     DocumentFiles? files,
     PdfShare? share,
     AudioDevice? audio,
+    ChatGptClient? chatGpt,
+    RecentNotes? recentNotes,
     this.penPreferences,
     this.toolbarPreferences,
   }) : pdf = pdf ?? PdfService(assets: assets),
        files = files ?? NativeDocumentFiles(),
        share = share ?? NativePdfShare(),
-       audio = audio ?? nativeAudioDevice();
+       audio = audio ?? nativeAudioDevice(),
+       recentNotes = recentNotes ?? RecentNotes(),
+       chatGpt = chatGpt ?? _nativeChatGpt;
   final String root, deviceId;
   final NotebookRepository repository;
   final AssetStore assets;
@@ -40,6 +49,14 @@ class AppServices {
   final DocumentFiles files;
   final PdfShare share;
   final AudioDevice audio;
+  final RecentNotes recentNotes;
+  static final _nativeChatGpt = ChatGptClient();
+  final ChatGptClient chatGpt;
+  late final chatStore = NotebookChatStore(root);
+  late final studyService = NotebookStudyService(
+    client: chatGpt,
+    exporter: PdfExportService(pdf),
+  );
   final PenPreferencesController? penPreferences;
   final ToolbarPreferencesController? toolbarPreferences;
   SyncEngine? sync;
@@ -95,6 +112,7 @@ class AppServices {
       repository: repository,
       assets: FileAssetStore(p.join(root, 'local', 'assets')),
       library: library,
+      recentNotes: await RecentNotes.open(root),
       files: files,
       share: share,
     );
@@ -107,6 +125,7 @@ class AppServices {
     await audio.dispose();
     pdf.dispose();
     library.dispose();
+    await recentNotes.close();
     toolbarPreferences?.dispose();
     await repository.close();
   }

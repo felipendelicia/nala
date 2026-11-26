@@ -55,21 +55,35 @@ class AppearanceScope extends InheritedNotifier<AppearanceController> {
 }
 
 class AppearanceButton extends StatelessWidget {
-  const AppearanceButton({super.key, this.beforeChange});
+  const AppearanceButton({super.key, this.beforeChange, this.asTile = false});
   final VoidCallback? beforeChange;
+  final bool asTile;
   @override
   Widget build(BuildContext context) {
     final appearance = AppearanceScope.of(context);
+    final icon = Icon(
+      Theme.of(context).brightness == Brightness.dark
+          ? Icons.dark_mode_outlined
+          : Icons.light_mode_outlined,
+    );
     return PopupMenuButton<ThemeMode>(
-      tooltip: 'Apariencia',
+      tooltip: asTile ? '' : 'Apariencia',
       onOpened: beforeChange,
       onCanceled: beforeChange,
       enabled: appearance != null,
-      icon: Icon(
-        Theme.of(context).brightness == Brightness.dark
-            ? Icons.dark_mode_outlined
-            : Icons.light_mode_outlined,
-      ),
+      icon: asTile ? null : icon,
+      position: asTile ? PopupMenuPosition.under : null,
+      child: asTile
+          ? ListTile(
+              enabled: appearance != null,
+              leading: icon,
+              title: const Text('Apariencia'),
+              subtitle: Text(
+                _themeModeLabel(appearance?.mode ?? ThemeMode.system),
+              ),
+              trailing: const Icon(Icons.expand_more),
+            )
+          : null,
       initialValue: appearance?.mode,
       onSelected: (mode) async {
         beforeChange?.call();
@@ -87,11 +101,16 @@ class AppearanceButton extends StatelessWidget {
           }
         }
       },
-      itemBuilder: (_) => const [
-        PopupMenuItem(value: ThemeMode.system, child: Text('Seguir sistema')),
-        PopupMenuItem(value: ThemeMode.light, child: Text('Claro')),
-        PopupMenuItem(value: ThemeMode.dark, child: Text('Oscuro')),
+      itemBuilder: (_) => [
+        for (final mode in ThemeMode.values)
+          PopupMenuItem(value: mode, child: Text(_themeModeLabel(mode))),
       ],
     );
   }
 }
+
+String _themeModeLabel(ThemeMode mode) => switch (mode) {
+  ThemeMode.system => 'Seguir sistema',
+  ThemeMode.light => 'Claro',
+  ThemeMode.dark => 'Oscuro',
+};

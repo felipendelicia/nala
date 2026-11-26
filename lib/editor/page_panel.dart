@@ -11,12 +11,14 @@ class PagePanel extends StatelessWidget {
     required this.currentPage,
     required this.onPage,
     required this.onAdd,
+    this.onPageLongPress,
     this.pdf,
   });
   final List<NotebookPage> pages;
   final int currentPage;
   final ValueChanged<int> onPage;
   final VoidCallback? onAdd;
+  final ValueChanged<int>? onPageLongPress;
   final PdfService? pdf;
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -39,6 +41,9 @@ class PagePanel extends StatelessWidget {
                 selected: index == currentPage,
                 child: InkWell(
                   onTap: () => onPage(index),
+                  onLongPress: onPageLongPress == null
+                      ? null
+                      : () => onPageLongPress!(index),
                   child: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
@@ -55,25 +60,9 @@ class PagePanel extends StatelessWidget {
                       children: [
                         SizedBox(
                           height: 140,
-                          child: FittedBox(
-                            child: IgnorePointer(
-                              child: PaperCanvas(
-                                page: pages[index],
-                                assets: pdf?.assets,
-                                tool: EditorTool.pen,
-                                onStroke: (_) {},
-                                background:
-                                    pdf == null ||
-                                        !pages[index].background.isPdf
-                                    ? null
-                                    : PdfPageBackground(
-                                        pdf: pdf!,
-                                        page: pages[index],
-                                        scale: .25,
-                                        render: false,
-                                      ),
-                              ),
-                            ),
+                          child: NotebookPagePreview(
+                            page: pages[index],
+                            pdf: pdf,
                           ),
                         ),
                         const SizedBox(height: 6),
@@ -95,4 +84,43 @@ class PagePanel extends StatelessWidget {
       ],
     ),
   );
+}
+
+class NotebookPagePreview extends StatelessWidget {
+  const NotebookPagePreview({
+    super.key,
+    required this.page,
+    this.pdf,
+    this.renderPdf = false,
+    this.rasterScale,
+  });
+
+  final NotebookPage page;
+  final PdfService? pdf;
+  final bool renderPdf;
+  final double? rasterScale;
+
+  @override
+  Widget build(BuildContext context) {
+    final pdf = this.pdf;
+    return FittedBox(
+      child: IgnorePointer(
+        child: PaperCanvas(
+          page: page,
+          assets: pdf?.assets,
+          tool: EditorTool.pen,
+          onStroke: (_) {},
+          previewRasterScale: rasterScale,
+          background: pdf != null && page.background.isPdf
+              ? PdfPageBackground(
+                  pdf: pdf,
+                  page: page,
+                  scale: .25,
+                  render: renderPdf,
+                )
+              : null,
+        ),
+      ),
+    );
+  }
 }

@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import '../document/asset_store.dart';
 import '../document/notebook.dart';
 import '../document/page_object.dart';
+import 'markdown_sheet.dart';
 import 'paper_background.dart';
 import 'stroke_geometry.dart';
 import 'draft_ink.dart';
@@ -205,6 +206,8 @@ class _PaperCanvasState extends State<PaperCanvas> {
         fit: StackFit.expand,
         children: [
           RepaintBoundary(child: widget.background ?? pageBackground()),
+          if (widget.page.markdown != null)
+            IgnorePointer(child: MarkdownSheet(page: widget.page)),
           if (widget.page.objects.isNotEmpty)
             RepaintBoundary(
               child: IgnorePointer(

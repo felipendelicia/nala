@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:apuntes/document/notebook_codec.dart';
 import 'package:apuntes/editor/editor_controller.dart';
 import 'package:apuntes/editor/editor_screen.dart';
 import 'package:apuntes/editor/paper_canvas.dart';
@@ -8,6 +10,39 @@ import '../support/fixtures.dart';
 import '../support/memory_repository.dart';
 
 void main() {
+  test('editar y deshacer conserva las transcripciones ya guardadas', () async {
+    final repository = MemoryRepository();
+    final payload =
+        jsonDecode(NotebookCodec.encode(fixtureNotebook()))
+            as Map<String, dynamic>;
+    final legacy = {
+      'id': 'clase-1',
+      'createdAt': '2026-11-25T14:00:00.000Z',
+      'text': 'Álgebra lineal.',
+    };
+    payload['transcriptions'] = [legacy];
+    var id = 0;
+    final controller = EditorController(
+      notebook: NotebookCodec.decode(jsonEncode(payload)),
+      repository: repository,
+      deviceId: 'pc',
+      newId: () => 'r${++id}',
+      now: () => DateTime.utc(2026),
+    );
+    addTearDown(controller.dispose);
+    await controller.apply(
+      (book) => book.copyWith(pages: [book.pages.single.copyWith(strokes: [])]),
+    );
+    await controller.undo();
+    final undone = (await repository.load('doc-1'))!;
+    expect(undone.pages.single.strokes.single.id, 'stroke-1');
+    expect(undone.transcriptions.single.toJson(), legacy);
+    await controller.redo();
+    final redone = (await repository.load('doc-1'))!;
+    expect(redone.pages.single.strokes, isEmpty);
+    expect(redone.transcriptions.single.toJson(), legacy);
+  });
+
   testWidgets('mover una selección conserva presión e ids', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));

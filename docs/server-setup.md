@@ -22,7 +22,7 @@ docker compose exec nala nala-server token-create tablet
 docker compose exec nala nala-server token-create pc
 ```
 
-1. Abrí **Servidor de Nala** en la biblioteca. Escribí la URL `https://` y la credencial del equipo y tocá **Verificar conexión**.
+1. En la biblioteca, abrí **Ajustes → Servidor privado**. Escribí la URL `https://` y la credencial del equipo y tocá **Verificar conexión**.
 2. Revisá el destino. Si el equipo ya tiene apuntes, elegí **Migrar y conectar** para incorporarlos. En una instalación nueva, elegí **Conectar** para descargar la biblioteca existente.
 3. Repetí en el otro equipo con su propia credencial. Dejá Nala abierta durante la primera sincronización. El estado muestra los cambios pendientes y avisa al completar el envío.
 4. Creá un cuaderno de prueba en un equipo y esperá a que aparezca editable en el otro. Probá una edición sin internet y volvé a abrir Nala con conexión para enviarla.

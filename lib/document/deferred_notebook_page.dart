@@ -69,6 +69,9 @@ class DeferredNotebookPage extends NotebookPage {
   List<PageObject> get objects => materialize().objects;
 
   @override
+  String? get markdown => materialize().markdown;
+
+  @override
   String get recognizedText => materialize().recognizedText;
 
   @override

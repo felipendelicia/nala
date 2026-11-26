@@ -305,12 +305,14 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(find.text('Crear cuaderno'), findsOneWidget);
+      expect(find.text('Transcribir clase'), findsNothing);
       await tester.tap(find.text('Crear cuaderno'));
       await tester.pumpAndSettle();
       expect(
         find.widgetWithText(TextField, 'Nombre del cuaderno'),
         findsOneWidget,
       );
+      expect(find.widgetWithText(TextField, 'Materia'), findsNothing);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       await services.close();

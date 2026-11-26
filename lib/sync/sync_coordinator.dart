@@ -14,6 +14,8 @@ class SyncCoordinator with WidgetsBindingObserver {
   Timer? _debounce, _poll, _retry;
   DateTime? _retryAt;
   bool _active = false, _closed = false;
+  bool _waitingForSync = false;
+
   void start() {
     if (_closed || _active) return;
     _active = true;
@@ -33,7 +35,22 @@ class SyncCoordinator with WidgetsBindingObserver {
     engine.notifyPending();
     if (!_active) return;
     _debounce?.cancel();
-    _debounce = Timer(const Duration(seconds: 2), _trigger);
+    _debounce = Timer(const Duration(seconds: 2), _syncLocalChanges);
+  }
+
+  void _syncLocalChanges() {
+    if (engine.status.phase != SyncPhase.syncing) {
+      _trigger();
+      return;
+    }
+    if (_waitingForSync) return;
+    _waitingForSync = true;
+    unawaited(
+      engine.idle.then((_) {
+        _waitingForSync = false;
+        if (engine.status.phase == SyncPhase.pending) _trigger();
+      }),
+    );
   }
 
   void _stateChanged() {
@@ -69,10 +86,19 @@ class SyncCoordinator with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      start();
-    } else {
-      stop();
+    switch (state) {
+      case AppLifecycleState.resumed:
+        if (_active) {
+          _trigger();
+        } else {
+          start();
+        }
+      case AppLifecycleState.inactive:
+        start();
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.detached:
+        stop();
     }
   }
 
