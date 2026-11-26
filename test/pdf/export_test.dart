@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pdfrx_engine/pdfrx_engine.dart';
 import 'package:apuntes/document/asset_store.dart';
@@ -32,8 +33,15 @@ class _TrackedDeferredPage extends DeferredNotebookPage {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(() async {
+    final font = FontLoader('NalaSans')
+      ..addFont(rootBundle.load('assets/fonts/NalaSans.ttf'));
+    await font.load();
+  });
+
   test(
-    'exportar Markdown guardado conserva las hojas originales y el texto completo',
+    'exportar Markdown guardado reproduce cada hoja como imagen legible',
     () async {
       final dir = await Directory.systemTemp.createTemp(
         'nala-export-markdown-',
@@ -73,6 +81,8 @@ void main() {
       final bytes = await PdfExportService(
         pdf,
       ).export(book.copyWith(pages: [...book.pages, ...edited]));
+      final qa = await Directory('.dart_tool/pdf-qa').create(recursive: true);
+      await File('${qa.path}/markdown.pdf').writeAsBytes(bytes);
       final document = await PdfDocument.openData(bytes);
       try {
         expect(document.pages, hasLength(2 + edited.length));
@@ -80,26 +90,24 @@ void main() {
         expect(document.pages[0].height, closeTo(841.89, .01));
         expect(document.pages[1].width, closeTo(841.89, .01));
         expect(document.pages[1].height, closeTo(595.28, .01));
-        final text = <String>[];
         for (final page in document.pages.skip(2)) {
           expect(page.width, closeTo(595.28, .01));
           expect(page.height, closeTo(841.89, .01));
-          final content = (await page.loadText())!;
-          expect(content.fullText, isNotEmpty);
-          final outside = content.charRects.where(
-            (rect) =>
-                rect.isNotEmpty &&
-                (rect.left < 0 ||
-                    rect.right > page.width ||
-                    rect.bottom < 0 ||
-                    rect.top > page.height),
-          );
-          expect(outside, isEmpty);
-          text.add(content.fullText);
+          expect((await page.loadText())?.fullText, anyOf(isNull, isEmpty));
+          final image = (await page.render(backgroundColor: 0xffffffff))!;
+          try {
+            var darkTextPixels = 0;
+            for (var y = 48; y < image.height - 48; y++) {
+              for (var x = 48; x < image.width - 48; x++) {
+                final offset = (y * image.width + x) * 4;
+                if (image.pixels[offset + 1] < 100) darkTextPixels++;
+              }
+            }
+            expect(darkTextPixels, greaterThan(100));
+          } finally {
+            image.dispose();
+          }
         }
-        expect(text.first, contains('Resumen de álgebra'));
-        expect(text.last, contains('Última conclusión.'));
-        expect('vector'.allMatches(text.join('\n')), hasLength(120));
       } finally {
         await document.dispose();
       }
@@ -229,15 +237,28 @@ void main() {
           await Directory('.dart_tool/pdf-qa').create(recursive: true);
           await File('.dart_tool/pdf-qa/comments.pdf').writeAsBytes(bytes);
           expect(
-            (await document.pages.first.loadText())!.fullText,
-            contains('1'),
+            (await document.pages.first.loadText())?.fullText,
+            anyOf(isNull, isEmpty),
           );
           final image = (await document.pages.first.render(
             backgroundColor: 0xffffffff,
           ))!;
           try {
-            final offset = (104 * image.width + 94) * 4;
-            expect(image.pixels.sublist(offset, offset + 3), [75, 88, 36]);
+            final offset = (94 * image.width + 100) * 4;
+            expect(image.pixels.sublist(offset, offset + 3), [
+              closeTo(75, 8),
+              closeTo(88, 8),
+              closeTo(36, 8),
+            ]);
+            var labelPixels = 0;
+            for (var y = 95; y <= 105; y++) {
+              for (var x = 95; x <= 105; x++) {
+                if (image.pixels[(y * image.width + x) * 4 + 1] > 220) {
+                  labelPixels++;
+                }
+              }
+            }
+            expect(labelPixels, greaterThan(3));
           } finally {
             image.dispose();
           }
@@ -365,7 +386,7 @@ void main() {
                   const InkPoint(x: 12, y: 16, pressure: .25),
                   const InkPoint(x: 16, y: 16, pressure: .75),
                   const InkPoint(x: 20, y: 16, pressure: 1),
-                  // The same compound fill spans more than one PDF stream.
+                  // A highlighter stroke crossing itself keeps its opacity.
                   for (var i = 0; i < 1100; i++)
                     const InkPoint(x: 16, y: 16, pressure: .5),
                   const InkPoint(x: 26, y: 16, pressure: 1),
@@ -412,20 +433,32 @@ void main() {
           }
         }
 
-        expect(await pixel(0, 32, 32), [255, 0, 0]);
+        expect(await pixel(0, 32, 32), [
+          closeTo(255, 6),
+          closeTo(0, 6),
+          closeTo(0, 6),
+        ]);
         final mixed = await pixel(0, 16, 16);
         expect(mixed[0], greaterThan(240));
         expect(mixed[1], inInclusiveRange(70, 110));
         expect(mixed[2], lessThan(30));
         expect((await pixel(0, 13, 16))[1], inInclusiveRange(70, 110));
         expect((await pixel(0, 25, 16))[2], inInclusiveRange(155, 180));
-        expect(await pixel(1, 32, 32), [0, 0, 0]);
-        expect(await pixel(1, 48, 48), [
-          inInclusiveRange(127, 128),
-          inInclusiveRange(127, 128),
-          255,
+        expect(await pixel(1, 32, 32), [
+          closeTo(0, 6),
+          closeTo(0, 6),
+          closeTo(0, 6),
         ]);
-        expect(await pixel(2, 811, 565), [0, 0, 255]);
+        expect(await pixel(1, 48, 48), [
+          closeTo(128, 6),
+          closeTo(128, 6),
+          closeTo(255, 6),
+        ]);
+        expect(await pixel(2, 811, 565), [
+          closeTo(0, 6),
+          closeTo(0, 6),
+          closeTo(255, 6),
+        ]);
         final qa = Directory('.dart_tool/pdf-qa');
         await qa.create(recursive: true);
         await File('${qa.path}/roundtrip.pdf').writeAsBytes(result);

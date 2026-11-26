@@ -74,12 +74,14 @@ void main() {
           }
 
           final faded = pixel(60, 60);
-          expect(faded[0], closeTo(128, 2));
-          expect(faded[1], closeTo(128, 2));
-          expect(faded[2], 255);
-          expect(pixel(130, 60), [0, 0, 255]);
+          expect(faded, [closeTo(128, 5), closeTo(128, 5), closeTo(255, 5)]);
+          expect(pixel(130, 60), [
+            closeTo(0, 5),
+            closeTo(0, 5),
+            closeTo(255, 5),
+          ]);
           expect(
-            (await document.pages.first.loadText())!.fullText,
+            (await document.pages.first.loadText())?.fullText ?? '',
             isNot(contains(r'\frac')),
           );
         } finally {

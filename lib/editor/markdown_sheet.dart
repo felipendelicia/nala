@@ -56,20 +56,65 @@ NotebookPage _blankSheet(String id) => NotebookPage(
 const _contentWidth = markdownSheetWidth - 2 * markdownSheetMargin;
 const _pageCapacity = markdownSheetHeight - 2 * markdownSheetMargin - 2;
 
+TextPainter _layoutSheetBlock(MarkdownBlock block, double width) => TextPainter(
+  text: _blockSpan(block, _sheetTextStyle),
+  textDirection: TextDirection.ltr,
+  textScaler: TextScaler.noScaling,
+  locale: _sheetLocale,
+)..layout(maxWidth: width - math.min(block.indent, width / 4));
+
 double _measureBlock(MarkdownBlock block) {
   if (block.divider) return block.gap + 1;
-  final painter =
-      TextPainter(
-        text: _blockSpan(block, _sheetTextStyle),
-        textDirection: TextDirection.ltr,
-        textScaler: TextScaler.noScaling,
-        locale: _sheetLocale,
-      )..layout(
-        maxWidth: _contentWidth - math.min(block.indent, _contentWidth / 4),
-      );
+  final painter = _layoutSheetBlock(block, _contentWidth);
   final height = painter.height + block.gap;
   painter.dispose();
   return height;
+}
+
+void paintMarkdownSheet(Canvas canvas, String markdown, Size size) {
+  final width = size.width - 2 * markdownSheetMargin;
+  final height = size.height - 2 * markdownSheetMargin;
+  if (width <= 0 || height <= 0) return;
+  final rows = <({double indent, double height, TextPainter? painter})>[];
+  var contentHeight = 0.0;
+  try {
+    for (final block in parseMarkdown(markdown)) {
+      final painter = block.divider ? null : _layoutSheetBlock(block, width);
+      final rowHeight = (painter?.height ?? 1) + block.gap;
+      rows.add((
+        indent: math.min(block.indent, width / 4),
+        height: rowHeight,
+        painter: painter,
+      ));
+      contentHeight += rowHeight;
+    }
+    if (contentHeight == 0) return;
+    final divider = Paint()..color = _sheetTextStyle.color!.withAlpha(46);
+    canvas.save();
+    try {
+      canvas.translate(markdownSheetMargin, markdownSheetMargin);
+      canvas.scale(math.min(1, height / contentHeight));
+      var y = 0.0;
+      for (final row in rows) {
+        final painter = row.painter;
+        if (painter == null) {
+          canvas.drawRect(
+            Rect.fromLTWH(row.indent, y, width - row.indent, 1),
+            divider,
+          );
+        } else {
+          painter.paint(canvas, Offset(row.indent, y));
+        }
+        y += row.height;
+      }
+    } finally {
+      canvas.restore();
+    }
+  } finally {
+    for (final row in rows) {
+      row.painter?.dispose();
+    }
+  }
 }
 
 double _measureMarkdown(String markdown) => parseMarkdown(

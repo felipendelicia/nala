@@ -19,24 +19,23 @@ abstract interface class AppUpdates {
 class NativeAppUpdates implements AppUpdates {
   static bool get isSupported => Platform.isAndroid || Platform.isLinux;
 
+  static const _android = AndroidUpdate();
+  static const _linux = LinuxUpdate();
+
+  static Future<String> installedVersion() => Platform.isAndroid
+      ? _android.installedVersion()
+      : _linux.installedVersion();
+
   final _github = GitHubUpdates();
-  final _android = const AndroidUpdate();
-  final _linux = const LinuxUpdate();
   File? _uninstalledApk;
 
   @override
-  Future<UpdateRelease?> check() async {
-    if (Platform.isAndroid) {
-      return _github.check(
-        installedVersion: await _android.installedVersion(),
-        target: UpdateTarget.androidArm64,
-      );
-    }
-    return _github.check(
-      installedVersion: await _linux.installedVersion(),
-      target: UpdateTarget.linuxX64,
-    );
-  }
+  Future<UpdateRelease?> check() async => _github.check(
+    installedVersion: await installedVersion(),
+    target: Platform.isAndroid
+        ? UpdateTarget.androidArm64
+        : UpdateTarget.linuxX64,
+  );
 
   @override
   Future<UpdateInstallResult> install(UpdateRelease release) async {

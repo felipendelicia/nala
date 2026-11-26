@@ -11,20 +11,29 @@ import '../ui/appearance.dart';
 import '../update/app_updates.dart';
 import '../update/update_dialog.dart';
 
-class LibrarySettingsScreen extends StatelessWidget {
+class LibrarySettingsScreen extends StatefulWidget {
   const LibrarySettingsScreen({
     super.key,
     required this.services,
     this.cloud,
     this.backupFiles,
+    this.readInstalledVersion = NativeAppUpdates.installedVersion,
   });
 
   final AppServices services;
   final CloudController? cloud;
   final BackupFiles? backupFiles;
+  final Future<String> Function() readInstalledVersion;
+
+  @override
+  State<LibrarySettingsScreen> createState() => _LibrarySettingsScreenState();
+}
+
+class _LibrarySettingsScreenState extends State<LibrarySettingsScreen> {
+  late final _installedVersion = widget.readInstalledVersion();
 
   Future<void> _openBackup(BuildContext context) async {
-    final active = cloud?.services ?? services;
+    final active = widget.cloud?.services ?? widget.services;
     final result = await showBackupDialog(
       context,
       service: BackupService(
@@ -34,7 +43,7 @@ class LibrarySettingsScreen extends StatelessWidget {
         deviceId: active.deviceId,
         appearanceFile: AppearanceScope.of(context)?.file,
       ),
-      files: backupFiles ?? NativeBackupFiles(),
+      files: widget.backupFiles ?? NativeBackupFiles(),
       onRestored: (result) async {
         await active.library.refresh();
         if (result.preferencesRestored) {
@@ -76,7 +85,7 @@ class LibrarySettingsScreen extends StatelessWidget {
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => _openBackup(context),
                     ),
-                    if (cloud case final controller?) ...[
+                    if (widget.cloud case final controller?) ...[
                       const Divider(indent: 56, endIndent: 16),
                       ServerSettingsTile(cloud: controller),
                     ],
@@ -87,13 +96,25 @@ class LibrarySettingsScreen extends StatelessWidget {
                       subtitle: const Text('Gestioná tu cuenta y tu plan.'),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () =>
-                          showChatGptSettings(context, services.chatGpt),
+                          showChatGptSettings(context, widget.services.chatGpt),
                     ),
                     if (NativeAppUpdates.isSupported) ...[
                       const Divider(indent: 56, endIndent: 16),
                       ListTile(
                         leading: const Icon(Icons.system_update_outlined),
                         title: const Text('Buscar actualizaciones'),
+                        subtitle: FutureBuilder<String>(
+                          future: _installedVersion,
+                          builder: (context, snapshot) => switch (snapshot) {
+                            AsyncSnapshot(data: final String version) => Text(
+                              'Versión instalada $version',
+                            ),
+                            AsyncSnapshot(hasError: true) => const Text(
+                              'Versión no disponible',
+                            ),
+                            _ => const SizedBox.shrink(),
+                          },
+                        ),
                         onTap: () {
                           final updates = NativeAppUpdates();
                           showDialog<void>(

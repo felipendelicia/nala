@@ -1,15 +1,23 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:apuntes/account/cloud_controller.dart';
+import 'package:apuntes/ai/chat_gpt_client.dart';
 import 'package:apuntes/backup/backup_dialog.dart';
 import 'package:apuntes/backup/backup_files.dart';
 import 'package:apuntes/backup/backup_service.dart';
+import 'package:apuntes/bootstrap.dart';
+import 'package:apuntes/document/asset_store.dart';
 import 'package:apuntes/document/notebook.dart';
+import 'package:apuntes/library/library_controller.dart';
 import 'package:apuntes/library/library_screen.dart';
+import 'package:apuntes/library/library_settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../support/memory_repository.dart';
 
 class _BackupFiles implements BackupFiles {
   const _BackupFiles(this.bytes);
@@ -35,6 +43,45 @@ Future<void> _waitFor(WidgetTester tester, Finder finder) async {
 }
 
 void main() {
+  testWidgets('Ajustes muestra la versión instalada junto a Actualizaciones', (
+    tester,
+  ) async {
+    final repository = MemoryRepository();
+    final chatGpt = ChatGptClient();
+    addTearDown(chatGpt.dispose);
+    final services = AppServices(
+      root: '/unused',
+      deviceId: 'pc',
+      repository: repository,
+      assets: MemoryAssets(),
+      library: LibraryController(repository: repository, deviceId: 'pc'),
+      chatGpt: chatGpt,
+    );
+    addTearDown(services.close);
+    final version = Completer<String>();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LibrarySettingsScreen(
+          services: services,
+          readInstalledVersion: () => version.future,
+        ),
+      ),
+    );
+    final tile = find.widgetWithText(ListTile, 'Buscar actualizaciones');
+    expect(tile, findsOneWidget);
+    version.complete('0.7.42');
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: tile,
+        matching: find.text('Versión instalada 0.7.42'),
+      ),
+      findsOneWidget,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('Ajustes abre el backup y el servidor desde la biblioteca', (
     tester,
   ) async {
