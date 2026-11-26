@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../account/cloud_controller.dart';
@@ -8,6 +10,7 @@ import '../backup/backup_files.dart';
 import '../backup/backup_service.dart';
 import '../bootstrap.dart';
 import '../ui/appearance.dart';
+import '../ui/fullscreen.dart';
 import '../update/app_updates.dart';
 import '../update/update_dialog.dart';
 
@@ -77,6 +80,19 @@ class _LibrarySettingsScreenState extends State<LibrarySettingsScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const AppearanceButton(asTile: true),
+                    if (FullscreenScope.of(context) case final mode?
+                        when mode.available) ...[
+                      const Divider(indent: 56, endIndent: 16),
+                      SwitchListTile(
+                        secondary: const Icon(Icons.fullscreen),
+                        title: const Text('Pantalla completa'),
+                        subtitle: Platform.isLinux ? const Text('F11') : null,
+                        value: mode.enabled,
+                        onChanged: mode.changing
+                            ? null
+                            : (_) => toggleFullscreen(context, mode),
+                      ),
+                    ],
                     const Divider(indent: 56, endIndent: 16),
                     ListTile(
                       leading: const Icon(Icons.backup_outlined),

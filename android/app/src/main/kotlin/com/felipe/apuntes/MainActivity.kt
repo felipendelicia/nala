@@ -17,6 +17,7 @@ import java.util.concurrent.Executors
 class MainActivity : FlutterActivity() {
     private lateinit var inkRecognition: InkRecognitionBridge
     private lateinit var audio: AudioBridge
+    private var fullscreen: FullscreenBridge? = null
     private var stylusChannel: MethodChannel? = null
     private var stylusListening = false
     private var stylusPressed = false
@@ -77,12 +78,21 @@ class MainActivity : FlutterActivity() {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (!hasFocus) resetStylus()
+        if (hasFocus) fullscreen?.restore() else resetStylus()
+    }
+
+    override fun onPostResume() {
+        super.onPostResume()
+        // Flutter reapplies its system UI flags during onPostResume.
+        fullscreen?.restore()
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         val messenger = flutterEngine.dartExecutor.binaryMessenger
+        val fullscreenBridge = FullscreenBridge(window)
+        fullscreen = fullscreenBridge
+        MethodChannel(messenger, "nala/fullscreen").setMethodCallHandler(fullscreenBridge)
         MethodChannel(messenger, "nala/update", StandardMethodCodec.INSTANCE, messenger.makeBackgroundTaskQueue())
             .setMethodCallHandler(UpdateBridge(this))
         stylusChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nala/stylus").also { channel ->

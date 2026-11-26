@@ -1,19 +1,19 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:apuntes/account/cloud_controller.dart';
 import 'package:apuntes/ai/chat_gpt_client.dart';
+import 'package:apuntes/app.dart';
 import 'package:apuntes/backup/backup_dialog.dart';
 import 'package:apuntes/backup/backup_files.dart';
 import 'package:apuntes/backup/backup_service.dart';
 import 'package:apuntes/bootstrap.dart';
-import 'package:apuntes/document/asset_store.dart';
 import 'package:apuntes/document/notebook.dart';
 import 'package:apuntes/library/library_controller.dart';
 import 'package:apuntes/library/library_screen.dart';
 import 'package:apuntes/library/library_settings_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -43,6 +43,86 @@ Future<void> _waitFor(WidgetTester tester, Finder finder) async {
 }
 
 void main() {
+  testWidgets('pantalla completa se controla desde Ajustes, F11 y el editor', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    const channel = MethodChannel('nala/fullscreen');
+    final messenger = tester.binding.defaultBinaryMessenger;
+    final requests = <bool>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      switch (call.method) {
+        case 'getFullscreen':
+          return false;
+        case 'setFullscreen':
+          requests.add(call.arguments as bool);
+          return null;
+        default:
+          throw MissingPluginException();
+      }
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    final repository = MemoryRepository();
+    final library = LibraryController(repository: repository, deviceId: 'pc');
+    final chatGpt = ChatGptClient();
+    addTearDown(chatGpt.dispose);
+    final root = (await tester.runAsync(
+      () => Directory.systemTemp.createTemp('nala-fullscreen-settings-'),
+    ))!;
+    addTearDown(() => root.delete(recursive: true));
+    final services = AppServices(
+      root: root.path,
+      deviceId: 'pc',
+      repository: repository,
+      assets: MemoryAssets(),
+      library: library,
+      chatGpt: chatGpt,
+    );
+    addTearDown(services.close);
+    await library.createNotebook(
+      title: 'Apunte de prueba',
+      pattern: PaperPattern.blank,
+    );
+
+    await tester.pumpWidget(NalaApp(services: services));
+    final settings = find.byTooltip('Ajustes');
+    await _waitFor(tester, settings);
+    await tester.tap(settings);
+    await tester.pumpAndSettle();
+
+    final toggle = find.widgetWithText(SwitchListTile, 'Pantalla completa');
+    expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(requests, [true]);
+    expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.f11);
+    await tester.pumpAndSettle();
+    expect(requests, [true, false]);
+    expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    final notebook = find.text('Apunte de prueba');
+    await tester.ensureVisible(notebook);
+    await tester.tap(notebook);
+    await tester.pumpAndSettle();
+    final notebookMenu = find.byTooltip('Opciones del cuaderno');
+    await tester.tap(notebookMenu);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pantalla completa'));
+    await tester.pumpAndSettle();
+    await tester.tap(notebookMenu);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Salir de pantalla completa'));
+    await tester.pumpAndSettle();
+    expect(requests, [true, false, true, false]);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('Ajustes muestra la versión instalada junto a Actualizaciones', (
     tester,
   ) async {

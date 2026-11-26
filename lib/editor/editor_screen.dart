@@ -42,6 +42,7 @@ import 'comment_dialog.dart';
 import 'comments_panel.dart';
 import '../ui/app_theme.dart';
 import '../ui/appearance.dart';
+import '../ui/fullscreen.dart';
 import 'editor_controller.dart';
 import 'editor_toolbar.dart';
 import 'draft_ink.dart';
@@ -2904,6 +2905,7 @@ class _EditorScreenState extends State<EditorScreen>
       }
       final currentPage = page;
       final sheetReady = pageReady(currentPage);
+      final fullscreen = FullscreenScope.of(context);
       return CallbackShortcuts(
         bindings: widget.active && !chatFocus.hasFocus
             ? {
@@ -3033,6 +3035,10 @@ class _EditorScreenState extends State<EditorScreen>
                           widget.onOpenNotebook?.call();
                         case 'split':
                           widget.onSplitView?.call();
+                        case 'fullscreen':
+                          if (fullscreen != null) {
+                            toggleFullscreen(context, fullscreen);
+                          }
                       }
                     },
                     itemBuilder: (_) => [
@@ -3072,6 +3078,16 @@ class _EditorScreenState extends State<EditorScreen>
                             widget.splitView
                                 ? 'Una sola vista'
                                 : 'Vista dividida',
+                          ),
+                        ),
+                      if (fullscreen case final mode? when mode.available)
+                        PopupMenuItem(
+                          value: 'fullscreen',
+                          enabled: !mode.changing,
+                          child: Text(
+                            mode.enabled
+                                ? 'Salir de pantalla completa'
+                                : 'Pantalla completa',
                           ),
                         ),
                     ],

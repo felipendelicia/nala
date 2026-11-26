@@ -58,6 +58,53 @@ static void share_call(FlMethodChannel*, FlMethodCall* call, gpointer) {
   fl_method_call_respond(call, response, nullptr);
 }
 
+static void fullscreen_call(FlMethodChannel*, FlMethodCall* call,
+                            gpointer data) {
+  GtkWindow* window = GTK_WINDOW(data);
+  const gchar* method = fl_method_call_get_name(call);
+  if (g_strcmp0(method, "getFullscreen") == 0) {
+    GdkWindow* surface = gtk_widget_get_window(GTK_WIDGET(window));
+    const bool fullscreen =
+        surface != nullptr &&
+        (gdk_window_get_state(surface) & GDK_WINDOW_STATE_FULLSCREEN) != 0;
+    g_autoptr(FlValue) result = fl_value_new_bool(fullscreen);
+    fl_method_call_respond_success(call, result, nullptr);
+  } else if (g_strcmp0(method, "setFullscreen") == 0) {
+    FlValue* args = fl_method_call_get_args(call);
+    if (args == nullptr || fl_value_get_type(args) != FL_VALUE_TYPE_BOOL) {
+      fl_method_call_respond_error(call, "INVALID_ARGUMENT", nullptr, nullptr,
+                                   nullptr);
+      return;
+    }
+
+    if (fl_value_get_bool(args)) {
+      gtk_window_fullscreen(window);
+    } else {
+      gtk_window_unfullscreen(window);
+    }
+    // The window manager completes the change asynchronously.
+    fl_method_call_respond_success(call, nullptr, nullptr);
+  } else {
+    fl_method_call_respond_not_implemented(call, nullptr);
+  }
+}
+
+static gboolean fullscreen_changed(GtkWidget*, GdkEventWindowState* event,
+                                   FlMethodChannel* channel) {
+  if ((event->changed_mask & GDK_WINDOW_STATE_FULLSCREEN) != 0) {
+    const bool fullscreen =
+        (event->new_window_state & GDK_WINDOW_STATE_FULLSCREEN) != 0;
+    g_autoptr(FlValue) state = fl_value_new_bool(fullscreen);
+    fl_method_channel_invoke_method(channel, "fullscreenChanged", state,
+                                    nullptr, nullptr, nullptr);
+  }
+  return FALSE;
+}
+
+static void fullscreen_window_destroyed(GtkWidget*, FlMethodChannel* channel) {
+  fl_method_channel_set_method_call_handler(channel, nullptr, nullptr, nullptr);
+}
+
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
@@ -119,9 +166,23 @@ static void my_application_activate(GApplication* application) {
   gtk_widget_realize(GTK_WIDGET(view));
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
-  g_autoptr(FlStandardMethodCodec) share_codec = fl_standard_method_codec_new();
-  self->share_channel = fl_method_channel_new(fl_engine_get_binary_messenger(fl_view_get_engine(view)), "nala/share", FL_METHOD_CODEC(share_codec));
+  FlBinaryMessenger* messenger =
+      fl_engine_get_binary_messenger(fl_view_get_engine(view));
+  g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
+  self->share_channel =
+      fl_method_channel_new(messenger, "nala/share", FL_METHOD_CODEC(codec));
   fl_method_channel_set_method_call_handler(self->share_channel, share_call, nullptr, nullptr);
+
+  g_autoptr(FlMethodChannel) fullscreen_channel = fl_method_channel_new(
+      messenger, "nala/fullscreen", FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(fullscreen_channel, fullscreen_call,
+                                          window, nullptr);
+  g_signal_connect_object(window, "window-state-event",
+                          G_CALLBACK(fullscreen_changed), fullscreen_channel,
+                          static_cast<GConnectFlags>(0));
+  g_signal_connect_object(window, "destroy",
+                          G_CALLBACK(fullscreen_window_destroyed),
+                          fullscreen_channel, static_cast<GConnectFlags>(0));
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }

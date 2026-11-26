@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'bootstrap.dart';
 import 'library/library_screen.dart';
 import 'ui/app_theme.dart';
 import 'ui/appearance.dart';
+import 'ui/fullscreen.dart';
 import 'account/cloud_controller.dart';
 
 class NalaApp extends StatefulWidget {
@@ -21,6 +23,9 @@ class _NalaAppState extends State<NalaApp> {
   AppServices? _catalogServices;
   AppearanceController? appearance;
   RandomAccessFile? _libraryLock;
+  final _fullscreen = (Platform.isLinux || Platform.isAndroid)
+      ? FullscreenController()
+      : null;
   Future<AppServices> loadAppearance(AppServices services) async {
     appearance = await AppearanceController.open(services.root);
     appearance!.addListener(themeChanged);
@@ -76,6 +81,7 @@ class _NalaAppState extends State<NalaApp> {
 
   @override
   void dispose() {
+    _fullscreen?.dispose();
     unawaited(
       services
           .then<void>((_) {}, onError: (Object _, StackTrace _) {})
@@ -104,6 +110,25 @@ class _NalaAppState extends State<NalaApp> {
     theme: nalaTheme(),
     darkTheme: nalaTheme(brightness: Brightness.dark),
     themeMode: appearance?.mode ?? ThemeMode.system,
+    builder: (context, child) {
+      final fullscreen = _fullscreen;
+      if (fullscreen == null) return child!;
+      return FullscreenScope(
+        controller: fullscreen,
+        child: Platform.isLinux
+            ? CallbackShortcuts(
+                bindings: {
+                  const SingleActivator(
+                    LogicalKeyboardKey.f11,
+                    includeRepeats: false,
+                  ): () =>
+                      toggleFullscreen(context, fullscreen),
+                },
+                child: Focus(autofocus: true, child: child!),
+              )
+            : child!,
+      );
+    },
     home: FutureBuilder<AppServices>(
       future: services,
       builder: (context, snapshot) {
