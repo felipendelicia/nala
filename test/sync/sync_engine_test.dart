@@ -196,6 +196,43 @@ void main() {
       expect(remote.revisions['local-edit']!.notebook.title, 'PC offline');
     },
   );
+  test('un adjunto local faltante no bloquea los otros apuntes', () async {
+    final pdfBytes = Uint8List.fromList('%PDF fixture'.codeUnits);
+    final pdfId = await tabletAssets.put(pdfBytes);
+    final blocked = fixtureNotebook(id: 'blocked');
+    final attached = blocked.copyWith(
+      pages: [
+        blocked.pages.single.copyWith(background: PageBackground.pdf(pdfId, 1)),
+      ],
+    );
+    await tablet.commit(revision('with-missing-file', null, attached));
+    expect((await tablet.pending()).single.id, 'with-missing-file');
+    await tablet.commit(
+      revision('blocked-child', 'with-missing-file', attached),
+    );
+    await tablet.commit(revision('other-note', null, fixtureNotebook()));
+    await File('${tabletAssets.directory}/$pdfId').delete();
+
+    await tabletSync.synchronize();
+    expect(remote.revisions.keys, ['other-note']);
+    expect((await tablet.pending()).map((item) => item.id), [
+      'with-missing-file',
+      'blocked-child',
+    ]);
+    expect(tabletSync.status.phase, SyncPhase.error);
+    expect(tabletSync.status.pendingCount, 2);
+
+    expect(await tabletAssets.put(pdfBytes), pdfId);
+    await tabletSync.synchronize();
+    expect(remote.revisions.keys.toSet(), {
+      'other-note',
+      'with-missing-file',
+      'blocked-child',
+    });
+    expect(await tablet.pending(), isEmpty);
+    expect(tabletSync.status.phase, SyncPhase.synced);
+  });
+
   test('hijo recibido antes del padre no genera un conflicto falso', () async {
     remote.revisions['child'] = revision(
       'child',

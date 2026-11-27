@@ -2,9 +2,11 @@ from contextlib import closing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import logging
+import os
 import re
 import shutil
 import sqlite3
+from time import monotonic
 from urllib.parse import parse_qs, urlsplit
 
 from .protocol import (
@@ -14,6 +16,11 @@ from .protocol import (
 from .storage import connect
 
 ASSET_ROUTE = re.compile(r'/v1/assets/(' + ASSET_ID.pattern + ')')
+ROUTE_NAMES = {
+    '/v1/identity': 'identity',
+    '/v1/revisions': 'revisions',
+    '/v1/folders': 'folders',
+}
 
 
 class Server(ThreadingHTTPServer):
@@ -48,19 +55,32 @@ class Handler(BaseHTTPRequestHandler):
         self.dispatch()
 
     def dispatch(self):
+        started = monotonic()
+        route_name = 'unknown'
         try:
+            parts = urlsplit(self.path)
+            route_name = ('assets' if ASSET_ROUTE.fullmatch(parts.path)
+                          else ROUTE_NAMES.get(parts.path, 'unknown'))
             with closing(connect(self.server.store.database)) as db:
-                parts = urlsplit(self.path)
                 self.route(db, parts.path, parts.query)
         except RequestError as error:
+            if error.status in (409, 413) and error.code != 'upload_offset':
+                self.log_sync_failure(route_name, started, error.status, error.code)
             self.respond_json(error.status, {'error': error.code}, error.headers)
         except (ValueError, OverflowError, RecursionError):
             self.respond_json(400, {'error': 'invalid_request'})
         except (BrokenPipeError, ConnectionResetError, TimeoutError):
             return
-        except (OSError, sqlite3.Error):
-            logging.exception('Nala could not complete an HTTP request')
+        except (OSError, sqlite3.Error) as error:
+            self.log_sync_failure(route_name, started, 500, type(error).__name__)
             self.respond_json(500, {'error': 'server_error'})
+
+    def log_sync_failure(self, route_name, started, status, reason):
+        # Route categories and controlled reason codes omit request data.
+        logging.warning(
+            'Nala sync %s %s: status=%d reason=%s duration_ms=%d',
+            self.command, route_name, status, reason, (monotonic() - started) * 1000,
+        )
 
     def route(self, db, path, query):
         store = self.server.store
@@ -173,7 +193,13 @@ class Handler(BaseHTTPRequestHandler):
             start = int(match[1])
             status = 206
             headers['Content-Range'] = f'bytes {start}-{size - 1}/{size}'
-        with (store.assets / identifier).open('rb') as file:
+        try:
+            file = (store.assets / identifier).open('rb')
+        except FileNotFoundError:
+            raise RequestError(404, 'asset_not_found') from None
+        with file:
+            if os.fstat(file.fileno()).st_size != size:
+                raise RequestError(404, 'asset_not_found')
             file.seek(start)
             self.begin_response(status, size - start, 'application/octet-stream', headers)
             shutil.copyfileobj(file, self.wfile, length=1024 * 1024)

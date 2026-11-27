@@ -105,6 +105,7 @@ class CloudController extends ChangeNotifier {
   bool get busy => _operation != null;
   bool get verifying => _probeClient != null;
   bool get connected => services.sync != null;
+  DateTime? get lastSuccessfulSync => services.sync?.lastSuccessfulSync;
   ServerDestination? get destination => _saved?.destination;
   ServerConnectionProbe? get pendingConnection => _pending;
   SyncStatus get status =>

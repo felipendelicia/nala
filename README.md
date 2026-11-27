@@ -6,12 +6,12 @@ Cuadernos digitales para tomar apuntes a mano, anotar archivos PDF y estudiar en
 
 ## Descargar e instalar
 
-La versión de prueba actual es la **0.7.14**. [Notas de la versión](https://github.com/felipendelicia/nala/releases/tag/v0.7.14) · [Todas las versiones](https://github.com/felipendelicia/nala/releases)
+La versión de prueba actual es la **0.7.15**. [Notas de la versión](https://github.com/felipendelicia/nala/releases/tag/v0.7.15) · [Todas las versiones](https://github.com/felipendelicia/nala/releases)
 
 | Plataforma | Descarga | Instalación |
 | --- | --- | --- |
-| Android ARM64 · Tab S10 | [Nala.apk](https://github.com/felipendelicia/nala/releases/download/v0.7.14/Nala.apk) | Abrí el APK y seguí los pasos del instalador de Android. Si el sistema lo pide, habilitá la instalación desde la app con la que abriste el archivo. |
-| Linux x64 | [Nala-Linux-x64.tar.gz](https://github.com/felipendelicia/nala/releases/download/v0.7.14/Nala-Linux-x64.tar.gz) | Descomprimí el paquete y ejecutá `Abrir-Nala.sh`. Dejá el lanzador junto a la carpeta `Nala-Linux/`. |
+| Android ARM64 · Tab S10 | [Nala.apk](https://github.com/felipendelicia/nala/releases/download/v0.7.15/Nala.apk) | Abrí el APK y seguí los pasos del instalador de Android. Si el sistema lo pide, habilitá la instalación desde la app con la que abriste el archivo. |
+| Linux x64 | [Nala-Linux-x64.tar.gz](https://github.com/felipendelicia/nala/releases/download/v0.7.15/Nala-Linux-x64.tar.gz) | Descomprimí el paquete y ejecutá `Abrir-Nala.sh`. Dejá el lanzador junto a la carpeta `Nala-Linux/`. |
 
 ### Actualizar desde Nala
 

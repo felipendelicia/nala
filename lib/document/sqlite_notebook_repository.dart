@@ -15,6 +15,7 @@ class SqliteNotebookRepository
         NotebookRepository,
         FolderRepository,
         RevisionLookupRepository,
+        PendingRevisionCountRepository,
         NotebookCatalogRepository,
         EditableNotebookRepository {
   SqliteNotebookRepository._(
@@ -192,6 +193,8 @@ class SqliteNotebookRepository
 
   @override
   Future<List<Revision>> pending() => _revisions('pending');
+  @override
+  Future<int> pendingCount() async => (await _call('pendingCount')) as int;
   @override
   Future<List<Revision>> history(String documentId) =>
       _revisions('history', {'documentId': documentId});
@@ -753,6 +756,10 @@ void _databaseWorker((SendPort, String) config) {
             );
             db.execute('INSERT INTO upload_queue VALUES (?)', [revision.id]);
           });
+        case 'pendingCount':
+          result = db
+              .select('SELECT count(*) AS total FROM upload_queue')
+              .single['total'];
         case 'pending':
           result = _transaction(db, () {
             db.execute(

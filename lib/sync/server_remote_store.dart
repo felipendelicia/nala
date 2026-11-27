@@ -19,6 +19,8 @@ import 'remote_store.dart';
 
 const _timeout = Duration(seconds: 30);
 const _chunkSize = 4 * 1024 * 1024;
+const _revisionPageLimit = 50;
+const _revisionPageBudget = 16 * 1024 * 1024;
 final _assetId = RegExp(r'^[a-f0-9]{64}$');
 final _contentRange = RegExp(r'^bytes (\d+)-(\d+)/(\d+)$');
 
@@ -97,17 +99,33 @@ class ServerRemoteStore
   }
 
   Stream<_RevisionPage> _pages(int after) async* {
+    var limit = _revisionPageLimit;
     while (true) {
       final response = await _transport.send(
         'GET',
         ['revisions'],
         serverId: _serverId,
-        query: {'after': '$after', 'limit': '50'},
+        query: {'after': '$after', 'limit': '$limit'},
       );
-      final page = await compute(_decodePage, (await _body(response), after));
+      final bytes = await _readPageBody(response, limit);
+      if (bytes == null) {
+        // Retry the same cursor until the page fits. One revision may exceed
+        // the budget by itself and must still be accepted in full.
+        final length = response.contentLength;
+        final estimate = length != null && length > _revisionPageBudget
+            ? _revisionPageBudget * limit ~/ length
+            : limit ~/ 2;
+        limit = max(1, min(limit ~/ 2, estimate));
+        continue;
+      }
+      final page = await compute(_decodePage, (bytes, after));
       yield page;
       if (!page.more) return;
       after = page.next;
+      if (page.items.length == limit &&
+          bytes.length < _revisionPageBudget ~/ 4) {
+        limit = min(_revisionPageLimit, limit * 2);
+      }
     }
   }
 
@@ -457,6 +475,23 @@ String _sha(Uint8List bytes) => sha256.convert(bytes).toString();
 
 Future<Uint8List> _body(http.StreamedResponse response) =>
     http.ByteStream(response.stream.timeout(_timeout)).toBytes();
+
+Future<Uint8List?> _readPageBody(
+  http.StreamedResponse response,
+  int limit,
+) async {
+  if (limit == 1) return _body(response);
+  if ((response.contentLength ?? 0) > _revisionPageBudget) {
+    await response.stream.listen(null).cancel();
+    return null;
+  }
+  final bytes = BytesBuilder(copy: false);
+  await for (final block in response.stream.timeout(_timeout)) {
+    if (bytes.length + block.length > _revisionPageBudget) return null;
+    bytes.add(block);
+  }
+  return bytes.takeBytes();
+}
 
 Map<String, dynamic> _jsonObject(String text) {
   final value = jsonDecode(text);

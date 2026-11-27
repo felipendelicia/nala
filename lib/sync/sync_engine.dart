@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../document/asset_store.dart';
 import '../document/document_worker.dart';
@@ -30,6 +31,8 @@ class _RemoteChanges {
   bool foldersChanged = false;
 }
 
+class _LocalAttachmentUnavailable implements Exception {}
+
 class SyncEngine extends ChangeNotifier {
   SyncEngine({
     required this.repository,
@@ -47,6 +50,8 @@ class SyncEngine extends ChangeNotifier {
   Future<void>? _running;
   bool _closed = false;
   int _failures = 0;
+  DateTime? _lastSuccessfulSync;
+  DateTime? get lastSuccessfulSync => _lastSuccessfulSync;
   Future<void> get idle => _running ?? Future.value();
   void _emit(SyncStatus value) {
     if (_closed) return;
@@ -56,8 +61,8 @@ class SyncEngine extends ChangeNotifier {
   }
 
   void notifyPending() {
-    if (status.phase != SyncPhase.syncing &&
-        status.phase != SyncPhase.needsSignIn) {
+    if (status.phase == SyncPhase.localOnly ||
+        status.phase == SyncPhase.synced) {
       _emit(SyncStatus(SyncPhase.pending, pendingCount: status.pendingCount));
     }
   }
@@ -68,12 +73,23 @@ class SyncEngine extends ChangeNotifier {
   }
 
   Future<void> _synchronize() async {
-    _emit(const SyncStatus(SyncPhase.syncing));
     final changes = _RemoteChanges();
+    var stage = SyncStage.receiving;
+    var pendingCount = status.pendingCount;
+    void working(SyncStage nextStage) {
+      stage = nextStage;
+      _emit(
+        SyncStatus(SyncPhase.syncing, pendingCount: pendingCount, stage: stage),
+      );
+    }
+
+    working(SyncStage.receiving);
     try {
       final verified = <String>{};
       await _pull(verified, changes);
       if (_closed) return;
+      _publishChanges(changes);
+      working(SyncStage.sending);
       if (repository is FolderRepository) {
         final folders = await (repository as FolderRepository).listFolders(
           includeDeleted: true,
@@ -88,27 +104,49 @@ class SyncEngine extends ChangeNotifier {
           }
         }
       }
-      for (final revision in await repository.pending()) {
+      final pending = await repository.pending();
+      pendingCount = pending.length;
+      if (pendingCount != 0) working(SyncStage.sending);
+      final availableOnServer = <String>{};
+      final blockedDocuments = <String>{};
+      for (final revision in pending) {
         if (_closed) return;
-        for (final id in notebookAssets(revision.notebook)) {
-          if (_closed) return;
-          if (!await remote.hasAsset(id)) {
-            await _uploadAsset(id);
+        final notebook = revision.notebook;
+        if (blockedDocuments.contains(notebook.id)) continue;
+        try {
+          for (final id in notebookAssets(notebook)) {
+            if (_closed) return;
+            if (availableOnServer.contains(id)) continue;
+            if (!await remote.hasAsset(id)) await _uploadAsset(id);
+            availableOnServer.add(id);
           }
+        } on _LocalAttachmentUnavailable {
+          blockedDocuments.add(notebook.id);
+          continue;
         }
         if (_closed) return;
         await remote.putRevision(revision);
         if (_closed) return;
         await repository.markUploaded(revision.id);
+        pendingCount--;
       }
+      working(SyncStage.receiving);
       await _pull(verified, changes);
       if (_closed) return;
-      final pending = await repository.pending();
+      pendingCount = await _countPending();
+      if (blockedDocuments.isNotEmpty) {
+        _reportRetry(
+          pendingCount,
+          'Quedaron apuntes pendientes porque falta un adjunto local o está dañado. Nala seguirá sincronizando los demás cambios.',
+        );
+        return;
+      }
       _failures = 0;
+      if (pendingCount == 0) _lastSuccessfulSync = DateTime.now();
       _emit(
         SyncStatus(
-          pending.isEmpty ? SyncPhase.synced : SyncPhase.pending,
-          pendingCount: pending.length,
+          pendingCount == 0 ? SyncPhase.synced : SyncPhase.pending,
+          pendingCount: pendingCount,
         ),
       );
     } on RemoteServerChanged {
@@ -129,27 +167,60 @@ class SyncEngine extends ChangeNotifier {
       );
     } catch (e) {
       if (_closed) return;
-      _failures++;
-      final delay = e is RemoteRetryLater
-          ? e.delay
-          : Duration(seconds: (2 << (_failures - 1).clamp(0, 5)).clamp(2, 60));
-      _emit(
-        SyncStatus(
-          SyncPhase.error,
-          message:
-              'No se pudo completar la sincronización. Se reintentará automáticamente.',
-          retryAfter: delay,
-        ),
+      try {
+        pendingCount = await _countPending();
+      } catch (_) {
+        // A local repository failure must not hide the original sync error.
+      }
+      final issue = switch (e) {
+        TimeoutException() => 'La conexión tardó demasiado.',
+        SocketException() => 'No se pudo conectar con el servidor.',
+        RemoteRetryLater() => 'El servidor no pudo completar la operación.',
+        _ =>
+          stage == SyncStage.receiving
+              ? 'Se interrumpió la recepción de cambios.'
+              : 'Se interrumpió el envío de cambios.',
+      };
+      _reportRetry(
+        pendingCount,
+        '$issue Nala volverá a intentar automáticamente.',
+        retryAfter: e is RemoteRetryLater ? e.delay : null,
       );
     } finally {
-      if (!_closed &&
-          (changes.notebookIds.isNotEmpty || changes.foldersChanged)) {
-        _remoteChanges.add((
-          notebookIds: Set.unmodifiable(changes.notebookIds),
-          foldersChanged: changes.foldersChanged,
-        ));
-      }
+      _publishChanges(changes);
     }
+  }
+
+  Future<int> _countPending() async => switch (repository) {
+    final PendingRevisionCountRepository counted =>
+      await counted.pendingCount(),
+    _ => (await repository.pending()).length,
+  };
+
+  void _reportRetry(int pendingCount, String message, {Duration? retryAfter}) {
+    _failures++;
+    _emit(
+      SyncStatus(
+        SyncPhase.error,
+        pendingCount: pendingCount,
+        message: message,
+        retryAfter:
+            retryAfter ??
+            Duration(seconds: (2 << (_failures - 1).clamp(0, 5)).clamp(2, 60)),
+      ),
+    );
+  }
+
+  void _publishChanges(_RemoteChanges changes) {
+    if (_closed || (changes.notebookIds.isEmpty && !changes.foldersChanged)) {
+      return;
+    }
+    _remoteChanges.add((
+      notebookIds: Set.unmodifiable(changes.notebookIds),
+      foldersChanged: changes.foldersChanged,
+    ));
+    changes.notebookIds.clear();
+    changes.foldersChanged = false;
   }
 
   Future<void> _pull(Set<String> verified, _RemoteChanges changes) async {
@@ -211,11 +282,24 @@ class SyncEngine extends ChangeNotifier {
       final FileAssetStore files,
       final FileTransferRemoteStore transfer,
     )) {
-      final file = await files.verifiedFile(id);
+      final file = await _readLocalAttachment(() => files.verifiedFile(id));
       _checkOpen();
       await transfer.putVerifiedAssetFile(id, file);
     } else {
-      await remote.putAsset(id, await assets.read(id));
+      await remote.putAsset(
+        id,
+        await _readLocalAttachment(() => local.read(id)),
+      );
+    }
+  }
+
+  Future<T> _readLocalAttachment<T>(Future<T> Function() read) async {
+    try {
+      return await read();
+    } on FileSystemException {
+      throw _LocalAttachmentUnavailable();
+    } on FormatException {
+      throw _LocalAttachmentUnavailable();
     }
   }
 

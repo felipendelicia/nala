@@ -36,10 +36,27 @@ void main() {
       {'x': 30, 'y': 40.5, 'pressure': .75},
     ]);
   });
+  test('el codec recupera una coordenada de tinta guardada como U+008A', () {
+    final book = fixtureNotebook();
+    final payload = jsonDecode(NotebookCodec.encode(book));
+    final points = payload['pages'][0]['strokes'][0]['points'];
+    points[0] = {'x': 10, '\u008a': 20.25, 'pressure': .25};
+
+    final decoded = NotebookCodec.decode(jsonEncode(payload));
+    final encoded = jsonDecode(NotebookCodec.encode(decoded));
+    expect(encoded['pages'][0]['strokes'][0]['points'][0], {
+      'x': 10,
+      'y': 20.25,
+      'pressure': .25,
+    });
+  });
   test('la variante antigua no admite puntos inválidos ni claves extra', () {
     final invalid = <Map<String, Object?>>[
       {'-': 10, 'pressure': .25},
       {'-': 10, 'other': 20, 'pressure': .25},
+      {'x': 10, 'q': 20, 'pressure': .25},
+      {'x': 10, '\u008a': '20', 'pressure': .25},
+      {'x': 10, '\u008a': 20, 'pressure': .25, 'extra': true},
       {'x': null, '-': 20, 'pressure': .25},
       {'x': 10, 'y': null, '-': 20, 'pressure': .25},
       {'x': 10, '-': double.nan, 'pressure': .25},

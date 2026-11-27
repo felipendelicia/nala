@@ -103,6 +103,7 @@ class _CloudDialogState extends State<_CloudDialog> {
     builder: (context, _) {
       final pending = cloud.pendingConnection;
       final status = cloud.status;
+      final lastSuccessfulSync = cloud.lastSuccessfulSync;
       final needsReconnect = status.phase == SyncPhase.needsSignIn;
       final showForm = _editing || !cloud.connected || needsReconnect;
       final reconnectMessage = needsReconnect ? status.message : null;
@@ -145,6 +146,20 @@ class _CloudDialogState extends State<_CloudDialog> {
                   const SizedBox(height: 16),
                 ],
                 CloudStatus(cloud: cloud),
+                if (status.pendingCount > 0) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    status.pendingCount == 1
+                        ? '1 cambio local pendiente'
+                        : '${status.pendingCount} cambios locales pendientes',
+                  ),
+                ],
+                if (lastSuccessfulSync != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Última sincronización completa: ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(lastSuccessfulSync.toLocal()), alwaysUse24HourFormat: true)}',
+                  ),
+                ],
                 if (pending != null) ...[
                   const SizedBox(height: 12),
                   Text(
@@ -225,7 +240,11 @@ class _CloudDialogState extends State<_CloudDialog> {
                           onPressed: status.phase == SyncPhase.syncing
                               ? null
                               : () => unawaited(cloud.synchronize()),
-                          child: const Text('Sincronizar ahora'),
+                          child: Text(
+                            status.phase == SyncPhase.error
+                                ? 'Reintentar sincronización'
+                                : 'Sincronizar ahora',
+                          ),
                         ),
                       TextButton(
                         onPressed: () => unawaited(cloud.disconnect()),

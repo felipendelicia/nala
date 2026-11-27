@@ -218,6 +218,134 @@ void main() {
     },
   );
 
+  test('large revision pages are retried from the same cursor', () async {
+    final requests = <(int, int)>[];
+    final store = connect(
+      MockClient.streaming((request, _) async {
+        final query = request.url.queryParameters;
+        final after = int.parse(query['after']!);
+        final limit = int.parse(query['limit']!);
+        requests.add((after, limit));
+        if (after == 0 && limit == 50) {
+          return http.StreamedResponse(
+            const Stream.empty(),
+            200,
+            contentLength: 62 * 1024 * 1024,
+          );
+        }
+        final response = switch (after) {
+          0 => _json({
+            'items': [_encodedRevision('first')],
+            'next': 1,
+            'more': true,
+          }),
+          1 => _json({
+            'items': [_encodedRevision('second', 'first')],
+            'next': 2,
+            'more': false,
+          }),
+          2 => _json({'items': [], 'next': 2, 'more': false}),
+          _ => throw StateError('Unexpected cursor $after'),
+        };
+        return http.StreamedResponse(
+          Stream.value(response.bodyBytes),
+          200,
+          contentLength: response.bodyBytes.length,
+        );
+      }),
+    );
+
+    final accepted = <String>[];
+    await store.pullRevisions((revision) async => accepted.add(revision.id));
+    await store.pullRevisions((_) async => fail('Unexpected revision'));
+    expect(accepted, ['first', 'second']);
+    expect(requests.map((request) => request.$1), [0, 0, 1, 2]);
+    expect(requests[1].$2, lessThan(50));
+    expect(requests[2].$2, requests[1].$2);
+  });
+
+  test('large revision page without a length stops reading early', () async {
+    const mebibyte = 1024 * 1024;
+    var completed = false;
+    var readBlocks = 0;
+    Stream<List<int>> oversized() async* {
+      final block = Uint8List(mebibyte);
+      try {
+        for (var i = 0; i < 24; i++) {
+          readBlocks++;
+          yield block;
+        }
+      } finally {
+        completed = true;
+      }
+    }
+
+    final store = connect(
+      MockClient.streaming((request, _) async {
+        final query = request.url.queryParameters;
+        expect(query['after'], '0');
+        if (query['limit'] == '50') {
+          return http.StreamedResponse(oversized(), 200);
+        }
+        return http.StreamedResponse(
+          Stream.value(
+            _json({
+              'items': [_encodedRevision('first')],
+              'next': 1,
+              'more': false,
+            }).bodyBytes,
+          ),
+          200,
+        );
+      }),
+    );
+
+    final received = <String>[];
+    await store.pullRevisions((revision) async => received.add(revision.id));
+    expect(completed, isTrue);
+    expect(readBlocks, lessThan(24));
+    expect(received, ['first']);
+  });
+
+  test('a single large revision can exceed the page budget', () async {
+    const mebibyte = 1024 * 1024;
+    final text = 'a' * (17 * mebibyte);
+    final revision = _revision('large');
+    final original = revision.notebook;
+    final body = utf8.encode(
+      '{"items":[${NotebookCodec.encodeRevision(Revision(
+        id: revision.id,
+        deviceId: revision.deviceId,
+        parentId: revision.parentId,
+        createdAt: revision.createdAt,
+        notebook: original.copyWith(pages: [original.pages.single.copyWith(recognizedText: text)]),
+      ))}],"next":1,"more":false}',
+    );
+    final limits = <int>[];
+    final store = connect(
+      MockClient.streaming((request, _) async {
+        final query = request.url.queryParameters;
+        expect(query['after'], '0');
+        final limit = int.parse(query['limit']!);
+        limits.add(limit);
+        return http.StreamedResponse(
+          limit > 1 ? const Stream.empty() : Stream.value(body),
+          200,
+          contentLength: body.length,
+        );
+      }),
+    );
+
+    final received = <String>[];
+    await store.pullRevisions((revision) async {
+      received.add(revision.id);
+      expect(revision.notebook.pages.single.recognizedText.length, text.length);
+    });
+    expect(limits.first, 50);
+    expect(limits.last, 1);
+    expect(received, ['large']);
+  });
+
   test(
     'pull rejects a non-advancing page without accepting its revisions',
     () async {

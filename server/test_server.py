@@ -1,3 +1,4 @@
+from contextlib import closing
 import hashlib
 import http.client
 import io
@@ -5,12 +6,17 @@ import json
 import os
 from pathlib import Path
 import socket
+import sqlite3
 import subprocess
 import sys
 import tarfile
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
+
+from nala_server.protocol import MAX_JSON
+from nala_server.storage import SCHEMA, Store
 
 SERVER = Path(__file__).resolve().parent
 CHUNK = 4 * 1024 * 1024
@@ -32,6 +38,31 @@ def revision(revision_id, *, title='Álgebra', book_fields=None, page_fields=Non
             **(book_fields or {}),
         },
     }
+
+
+class RevisionPageTest(unittest.TestCase):
+    def test_page_budget_preserves_order_and_allows_a_large_revision(self):
+        payloads = [b'a' * 12, b'b' * 17, b'c' * 25, b'd' * 52, b'e' * 6]
+        db = sqlite3.connect(':memory:')
+        self.addCleanup(db.close)
+        db.executescript(SCHEMA)
+        db.executemany('INSERT INTO revisions (id, payload) VALUES (?, ?)',
+                       [(str(index), payload) for index, payload in enumerate(payloads)])
+        store = Store(Path('.'))
+
+        with patch('nala_server.storage.REVISION_PAGE_BUDGET', 30):
+            after = 0
+            for expected, size, cursor, more in [
+                (payloads[:2], 30, 2, True),
+                (payloads[2:3], 25, 3, True),
+                (payloads[3:4], 52, 4, True),
+                (payloads[4:], 6, 5, False),
+                ([], 0, 5, False),
+            ]:
+                rows, actual_size, next_cursor, has_more = store.revision_page(db, after, 50)
+                self.assertEqual([row[0] for row in rows], expected)
+                self.assertEqual((actual_size, next_cursor, has_more), (size, cursor, more))
+                after = cursor
 
 
 class ServerTest(unittest.TestCase):
@@ -166,6 +197,22 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(self.read_json('/revisions?after=2'), {'items': [], 'next': 2, 'more': False})
         self.assertEqual(self.request('GET', '/revisions?after=-1')[0], 400)
 
+    def test_sync_failure_log_omits_credentials_and_note_content(self):
+        record = revision('private-revision-id', title='Private title')
+        self.assertEqual(self.request('PUT', '/revisions', body=record)[0], 204)
+        different = {**record, 'notebook': {**record['notebook'], 'title': 'Private update'}}
+        self.assertEqual(self.request('PUT', '/revisions', body=different)[0], 409)
+        status, _, _ = self.request('PUT', '/revisions', headers={
+            'Content-Length': str(MAX_JSON + 1),
+        })
+        self.assertEqual(status, 413)
+
+        log = (self.scratch / 'server.log').read_text()
+        self.assertIn('PUT revisions: status=409 reason=revision_conflict', log)
+        self.assertIn('PUT revisions: status=413 reason=request_too_large', log)
+        for secret in (self.token, self.identity, 'private-revision-id', 'Private title', 'Private update'):
+            self.assertNotIn(secret, log)
+
     def test_revision_requires_all_published_attachment_types(self):
         image = {'id': 'imagen', 'kind': 'image', 'x': 0, 'y': 0, 'width': 10, 'height': 10}
         preview = hashlib.sha256(b'preview').hexdigest()
@@ -223,6 +270,47 @@ class ServerTest(unittest.TestCase):
         status, headers, _ = self.request('GET', path, headers={'Range': f'bytes={total}-'})
         self.assertEqual((status, headers['Content-Range']), (416, f'bytes */{total}'))
         self.assertEqual(self.request('GET', path)[2], data)
+
+    def test_a_registered_missing_or_truncated_asset_can_be_repaired(self):
+        for problem in ('missing', 'truncated'):
+            with self.subTest(problem=problem):
+                data = f'original bytes for {problem}'.encode()
+                identifier = hashlib.sha256(data).hexdigest()
+                path = '/assets/' + identifier
+                stored = self.data / 'library' / 'assets' / identifier
+                book = revision(problem, book_fields={'coverAssetId': identifier})
+                self.assertEqual(self.patch(path, 0, len(data), data)[0], 204)
+                self.assertEqual(self.request('PUT', '/revisions', body=book)[0], 204)
+                if problem == 'missing':
+                    stored.unlink()
+                else:
+                    stored.write_bytes(data[:1])
+
+                status, headers, _ = self.request('HEAD', path)
+                self.assertEqual((status, headers['Upload-Offset']), (404, '0'))
+                self.assertEqual(self.request('GET', path)[0], 404)
+                next_book = {**book, 'id': problem + '-next', 'parentId': problem}
+                self.assertEqual(self.request('PUT', '/revisions', body=next_book)[0], 409)
+                self.assertIn(book, self.read_json('/revisions')['items'])
+                with closing(sqlite3.connect(self.data / 'library' / 'nala.sqlite3')) as db:
+                    self.assertEqual(db.execute('SELECT size FROM assets WHERE id=?',
+                                                (identifier,)).fetchone(), (len(data),))
+
+                invalid = b'?' * len(data)
+                self.assertEqual(self.patch(path, 0, len(data), invalid)[0], 400)
+                self.assertEqual(self.request('GET', path)[0], 404)
+                if problem == 'truncated':
+                    self.assertEqual(stored.read_bytes(), data[:1])
+
+                self.assertEqual(self.patch(path, 0, len(data), data[:4])[0], 204)
+                self.stop()
+                self.start()
+                status, headers, _ = self.request('HEAD', path)
+                self.assertEqual((status, headers['Upload-Offset']), (404, '4'))
+                self.assertEqual(self.patch(path, 4, len(data), data[4:])[0], 204)
+                self.assertEqual(self.request('GET', path)[2], data)
+                self.assertEqual(self.request('HEAD', path)[0], 200)
+                self.assertEqual(self.request('PUT', '/revisions', body=next_book)[0], 204)
 
     def test_hash_mismatch_never_publishes_and_allows_retry(self):
         path = '/assets/' + hashlib.sha256(b'correct').hexdigest()

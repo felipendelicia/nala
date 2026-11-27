@@ -17,6 +17,10 @@ abstract interface class RevisionLookupRepository {
   Future<Revision?> lookupRevision(String documentId, String revisionId);
 }
 
+abstract interface class PendingRevisionCountRepository {
+  Future<int> pendingCount();
+}
+
 abstract interface class NotebookCatalogRepository {
   Future<List<CatalogEntry>> listCatalog();
   Future<NotebookPage?> loadPreview(

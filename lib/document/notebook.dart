@@ -19,17 +19,17 @@ class InkPoint {
   factory InkPoint.fromJson(Map<String, dynamic> json) {
     var x = json['x'];
     var y = json['y'];
-    // Some stored points used '-' in place of one coordinate key.
+    // Recover the observed legacy keys only when the missing axis is clear.
     if ((x == null || y == null) &&
         json.length == 3 &&
-        json.containsKey('-') &&
         json.containsKey('pressure')) {
+      final replacement = json['-'] ?? json['\u008a'];
       final hasX = json.containsKey('x');
       final hasY = json.containsKey('y');
       if (!hasX && hasY) {
-        x = json['-'];
+        x = replacement;
       } else if (hasX && !hasY) {
-        y = json['-'];
+        y = replacement;
       }
     }
     return InkPoint(

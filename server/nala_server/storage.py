@@ -6,9 +6,10 @@ import os
 from pathlib import Path
 import secrets
 import sqlite3
+import stat
 from threading import Lock
 
-from .protocol import MAX_JSON, RequestError, folder_order, json_bytes, repair_folders
+from .protocol import RequestError, folder_order, json_bytes, repair_folders
 
 LIBRARY = 'library'
 DATABASE = 'nala.sqlite3'
@@ -16,6 +17,7 @@ ASSETS = 'assets'
 UPLOADS = 'uploads'
 RESTORE_PENDING = '.restore-pending'
 LOCKS = {'.operation.lock', '.serve.lock'}
+REVISION_PAGE_BUDGET = 12 * 1024 * 1024
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS metadata (
@@ -139,7 +141,7 @@ class Store:
             'SELECT seq, length(payload) FROM revisions WHERE seq>? ORDER BY seq LIMIT ?',
             (after, limit + 1),
         ):
-            if count == limit or (count and size + payload_size + 1 > MAX_JSON):
+            if count == limit or (count and size + payload_size + 1 > REVISION_PAGE_BUDGET):
                 more = True
                 break
             size += payload_size + (1 if count else 0)
@@ -172,8 +174,22 @@ class Store:
                     )
 
     def asset_size(self, db, asset):
+        return self._published_size(asset, self._registered_size(db, asset))
+
+    def _registered_size(self, db, asset):
         record = db.execute('SELECT size FROM assets WHERE id=?', (asset,)).fetchone()
         return None if record is None else record[0]
+
+    def _published_size(self, asset, registered_size):
+        if registered_size is None:
+            return None
+        try:
+            info = (self.assets / asset).stat()
+        except FileNotFoundError:
+            return None
+        if stat.S_ISREG(info.st_mode) and info.st_size == registered_size:
+            return registered_size
+        return None
 
     def asset_status(self, db, asset):
         with self.writes:
@@ -227,13 +243,14 @@ class Store:
             return current
 
     def recover_upload(self, db, asset):
-        size = self.asset_size(db, asset)
+        registered_size = self._registered_size(db, asset)
+        size = self._published_size(asset, registered_size)
         if size is not None:
             return True, size
 
         # The last chunk and rename are durable before SQLite records publication.
         target = self.assets / asset
-        if target.exists():
+        if registered_size is None and target.exists():
             with target.open('rb') as file:
                 if file_hash(file) != asset:
                     raise OSError('asset on disk has an invalid digest')
@@ -274,7 +291,11 @@ class Store:
 
     def register_asset(self, db, asset, size):
         with db:
-            db.execute('INSERT INTO assets VALUES (?, ?)', (asset, size))
+            db.execute(
+                'INSERT INTO assets VALUES (?, ?) '
+                'ON CONFLICT(id) DO UPDATE SET size=excluded.size',
+                (asset, size),
+            )
             db.execute('DELETE FROM uploads WHERE id=?', (asset,))
 
 
